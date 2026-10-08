@@ -16,7 +16,3 @@ PhotoManager 是一款基于 Kotlin + Jetpack Compose 的 Android 本地图片�
 - Coil 缩略图加载
 - Paging 3 分页
 - WorkManager 后台同步
-
-## 编码约定
-
-数据默认值、空值归一化和外部数据转换统一放在 Data 层；UI 和 ViewModel 保持简洁。详细约定以全局和项目级 `AGENTS.md` 为准。
