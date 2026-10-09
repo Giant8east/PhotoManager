@@ -15,11 +15,17 @@ interface AlbumDao {
     @RawQuery(observedEntities = [AlbumEntity::class])
     fun observeAlbumQuery(query: SupportSQLiteQuery): Flow<List<AlbumEntity>>
 
+    @Query("SELECT * FROM albums")
+    suspend fun queryAllAlbums(): List<AlbumEntity>
+
     @Query("SELECT * FROM albums WHERE albumPath = :path LIMIT 1")
     suspend fun queryAlbumByPath(path: String): AlbumEntity?
 
     @Insert
     suspend fun insertAlbum(album: AlbumEntity): Long
+
+    @Insert
+    suspend fun insertAlbums(albums: List<AlbumEntity>)
 
     @Query("DELETE FROM albums WHERE id = :id")
     suspend fun deleteAlbum(id: Long)
