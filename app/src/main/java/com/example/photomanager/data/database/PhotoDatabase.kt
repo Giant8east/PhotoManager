@@ -12,4 +12,7 @@ import androidx.room.RoomDatabase
     version = 2,
     exportSchema = false
 )
-abstract class PhotoDatabase : RoomDatabase()
+abstract class PhotoDatabase : RoomDatabase() {
+    abstract fun albumDao(): AlbumDao
+    abstract fun groupDao(): GroupDao
+}
