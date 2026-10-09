@@ -3,6 +3,8 @@ package com.example.photomanager.data.database
 
 import androidx.room.Dao
 import androidx.room.Query
+import androidx.room.RawQuery
+import androidx.sqlite.db.SupportSQLiteQuery
 import androidx.room.Update
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
@@ -10,8 +12,8 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface AlbumDao {
-    @Query("SELECT * FROM albums ORDER BY sortOrder ASC, albumPath ASC")
-    fun observeAlbums(): Flow<List<AlbumEntity>>
+    @RawQuery(observedEntities = [AlbumEntity::class])
+    fun observeAlbums(query: SupportSQLiteQuery): Flow<List<AlbumEntity>>
 
     @Query("SELECT * FROM albums WHERE albumPath = :path LIMIT 1")
     suspend fun findByPath(path: String): AlbumEntity?
