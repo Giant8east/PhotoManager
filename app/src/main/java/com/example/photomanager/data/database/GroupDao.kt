@@ -9,8 +9,8 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface GroupDao {
     @Insert
-    suspend fun insert(group: GroupEntity): Long
+    suspend fun insertGroup(group: GroupEntity): Long
 
     @Query("SELECT * FROM groups ORDER BY name ASC")
-    fun observeGroups(): Flow<List<GroupEntity>>
+    fun observeGroupQuery(): Flow<List<GroupEntity>>
 }
