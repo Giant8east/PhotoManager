@@ -22,8 +22,8 @@ data class AlbumEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
     val name: String,
-    /** 真实目录创建时间，使用 UTC ISO 8601 字符串；无法读取时为空。 */
-    val createdAt: String? = null,
+    /** 真实目录修改时间，使用 UTC ISO 8601 字符串；无法读取时为空。 */
+    val modifiedAt: String? = null,
     val photoCount: Int = 0,
     val coverPath: String? = null,
     val albumPath: String,
