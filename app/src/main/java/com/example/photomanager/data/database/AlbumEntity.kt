@@ -27,6 +27,8 @@ data class AlbumEntity(
     val photoCount: Int = 0,
     val coverPath: String? = null,
     val albumPath: String,
+    /** 自定义排序值，数值越小越靠前。 */
+    val sortOrder: Long = 0,
     /** 相册所属分组；为空表示尚未分组。 */
     val groupId: Long? = null
 )
