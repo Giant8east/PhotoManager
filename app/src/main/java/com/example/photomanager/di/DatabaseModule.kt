@@ -15,6 +15,12 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
     @Provides
+    fun provideAlbumDao(database: PhotoDatabase) = database.albumDao()
+
+    @Provides
+    fun provideGroupDao(database: PhotoDatabase) = database.groupDao()
+
+    @Provides
     @Singleton
     fun providePhotoDatabase(
         @ApplicationContext context: Context
