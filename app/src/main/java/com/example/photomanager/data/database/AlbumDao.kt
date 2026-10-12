@@ -9,11 +9,15 @@ import androidx.room.Update
 import androidx.room.Insert
 
 import kotlinx.coroutines.flow.Flow
+import androidx.paging.PagingSource
 
 @Dao
 interface AlbumDao {
     @RawQuery(observedEntities = [AlbumEntity::class])
     fun observeAlbumQuery(query: SupportSQLiteQuery): Flow<List<AlbumEntity>>
+
+    @RawQuery(observedEntities = [AlbumEntity::class])
+    fun queryAlbumPage(query: SupportSQLiteQuery): PagingSource<Int, AlbumEntity>
 
     @Query("SELECT * FROM albums")
     suspend fun queryAllAlbums(): List<AlbumEntity>

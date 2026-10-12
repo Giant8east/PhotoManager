@@ -10,6 +10,9 @@ import com.example.photomanager.data.database.*
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
+import androidx.paging.Pager
+import androidx.paging.PagingConfig
+import androidx.paging.PagingData
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.Instant
@@ -40,6 +43,33 @@ class AlbumData @Inject constructor(
         """.trimIndent()
         val query = SimpleSQLiteQuery(sql, arrayOf(groupId, groupId, searchPattern(keyword)))
         return database.albumDao().observeAlbumQuery(query)
+    }
+
+    /** 创建分页相册数据流，分页规则与普通查询保持一致。 */
+    fun pageAlbums(
+        groupId: Long?,
+        keyword: String,
+        sortField: AlbumSortField,
+        isDescending: Boolean
+    ): Flow<PagingData<AlbumEntity>> {
+        val direction = if (isDescending) "DESC" else "ASC"
+        val nullOrder = if (sortField == AlbumSortField.MODIFIED_AT) {
+            "julianday(modifiedAt) IS NULL ASC, "
+        } else ""
+        val sql = """
+            SELECT * FROM albums
+            WHERE (? IS NULL OR groupId = ?)
+              AND name LIKE ? ESCAPE '\' COLLATE NOCASE
+            ORDER BY $nullOrder${sortField.sqlExpression} $direction, albumPath ASC
+        """.trimIndent()
+        return Pager(
+            config = PagingConfig(pageSize = 30, prefetchDistance = 10, enablePlaceholders = false),
+            pagingSourceFactory = {
+                database.albumDao().queryAlbumPage(
+                    SimpleSQLiteQuery(sql, arrayOf(groupId, groupId, searchPattern(keyword)))
+                )
+            }
+        ).flow
     }
 
     /** 将关键词转换为 LIKE 的包含匹配模式。 */
@@ -261,3 +291,4 @@ class AlbumData @Inject constructor(
         }
     }
 }
+
