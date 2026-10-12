@@ -5,14 +5,11 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.runtime.remember
 import com.example.photomanager.ui.theme.PhotoManagerTheme
 import dagger.hilt.android.AndroidEntryPoint
+import com.example.photomanager.navigation.AppNavigator
+import com.example.photomanager.pages.album.AlbumPage
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -21,29 +18,10 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             PhotoManagerTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(
-                        name = "Android",
-                        modifier = Modifier.padding(innerPadding)
-                    )
-                }
+                val navigator = remember { AppNavigator() }
+                if (navigator.pagesEmpty()) navigator.pushTo { AlbumPage(navigator) }
+                navigator.render()
             }
         }
-    }
-}
-
-@Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
-}
-
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    PhotoManagerTheme {
-        Greeting("Android")
     }
 }
