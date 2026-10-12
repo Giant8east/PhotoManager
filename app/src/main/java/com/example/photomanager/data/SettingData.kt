@@ -26,7 +26,20 @@ class SettingData @Inject constructor(
         preferences[directoryKey].orEmpty().sorted().map(::SettingDirectory)
     }
     val validAlbumCount: Flow<Int> = database.albumDao().observeValidAlbumCount()
-    suspend fun addDirectory(uri: Uri) { context.settingStore.edit { it[directoryKey] = it[directoryKey].orEmpty() + uri.toString() } }
+    suspend fun addDirectory(uri: Uri) {
+        val newPath = uri.toString()
+        context.settingStore.edit { preferences ->
+            val currentPaths = preferences[directoryKey].orEmpty()
+            if (currentPaths.any { isParentPath(it, newPath) }) return@edit
+            preferences[directoryKey] = currentPaths
+                .filterNot { isParentPath(newPath, it) }
+                .toSet() + newPath
+        }
+    }
     suspend fun removeDirectory(uri: String) { context.settingStore.edit { it[directoryKey] = it[directoryKey].orEmpty() - uri } }
     suspend fun contains(uri: Uri): Boolean = directories.first().any { it.uri == uri.toString() }
+
+    /** 判断两个 SAF 路径是否存在父子目录关系。 */
+    private fun isParentPath(parent: String, child: String): Boolean =
+        child == parent || child.startsWith("$parent/") || child.startsWith("$parent%2F", ignoreCase = true)
 }
