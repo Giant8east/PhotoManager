@@ -32,7 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.photomanager.data.database.AlbumEntity
 import com.example.photomanager.navigation.AppNavigator
-import com.example.photomanager.pages.import_directory.ImportDirectoryPage
+import com.example.photomanager.pages.setting.SettingPage
 import androidx.compose.foundation.layout.Spacer
 
 /** 相册库主页，提供搜索、分组筛选、排序入口和相册列表。 */
@@ -69,7 +69,7 @@ fun AlbumPage(
                             }
                         } else null
                     )
-                    IconButton(onClick = { navigator.pushTo { ImportDirectoryPage(navigator) } }) {
+                    IconButton(onClick = { navigator.pushTo { SettingPage(navigator) } }) {
                         Icon(Icons.Default.Settings, contentDescription = "目录导入管理")
                     }
                 }
