@@ -92,6 +92,13 @@ class AlbumData @Inject constructor(
     suspend fun reorder(albums: List<AlbumEntity>) = database.albumDao()
         .updateAlbums(albums.mapIndexed { index, album -> album.copy(sortOrder = index.toLong()) })
 
+    /** 保存相册最近一次浏览到的图片位置。 */
+    suspend fun updateReadingProgress(albumId: Long, photoIndex: Int) {
+        val album = database.albumDao().queryAllAlbums().firstOrNull { it.id == albumId } ?: return
+        val safeIndex = photoIndex.coerceIn(0, (album.photoCount - 1).coerceAtLeast(0))
+        database.albumDao().updateAlbumReadingProgress(albumId, safeIndex)
+    }
+
     /** 递归同步根目录及子目录；空目录跳过，数据库只写入新增或变化的相册。 */
     suspend fun syncDirectory(rootUri: Uri) = withContext(Dispatchers.IO) {
         val scannedAlbums = scanDirectories(rootUri)

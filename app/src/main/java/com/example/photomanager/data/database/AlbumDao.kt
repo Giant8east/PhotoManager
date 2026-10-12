@@ -22,6 +22,9 @@ interface AlbumDao {
     @Query("SELECT * FROM albums")
     suspend fun queryAllAlbums(): List<AlbumEntity>
 
+    @Query("SELECT COUNT(*) FROM albums WHERE photoCount > 0")
+    fun observeValidAlbumCount(): Flow<Int>
+
     @Query("SELECT * FROM albums WHERE albumPath = :path LIMIT 1")
     suspend fun queryAlbumByPath(path: String): AlbumEntity?
 
@@ -36,4 +39,7 @@ interface AlbumDao {
 
     @Update
     suspend fun updateAlbums(albums: List<AlbumEntity>)
+
+    @Query("UPDATE albums SET lastViewedPhotoIndex = :photoIndex WHERE id = :albumId")
+    suspend fun updateAlbumReadingProgress(albumId: Long, photoIndex: Int)
 }
