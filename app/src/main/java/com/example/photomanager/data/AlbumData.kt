@@ -99,6 +99,13 @@ class AlbumData @Inject constructor(
         database.albumDao().updateAlbumReadingProgress(albumId, safeIndex)
     }
 
+    /** 删除指定扫描目录及其子目录对应的相册记录。 */
+    suspend fun deleteAlbumsUnderPath(path: String) {
+        database.withTransaction {
+            database.albumDao().deleteAlbumsUnderPath("$path%")
+        }
+    }
+
     /** 递归同步根目录及子目录；空目录跳过，数据库只写入新增或变化的相册。 */
     suspend fun syncDirectory(rootUri: Uri) = withContext(Dispatchers.IO) {
         val scannedAlbums = scanDirectories(rootUri)

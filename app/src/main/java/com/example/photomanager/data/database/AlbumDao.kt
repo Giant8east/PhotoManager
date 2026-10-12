@@ -37,6 +37,9 @@ interface AlbumDao {
     @Query("DELETE FROM albums WHERE id = :id")
     suspend fun deleteAlbum(id: Long)
 
+    @Query("DELETE FROM albums WHERE albumPath LIKE :pathPrefix")
+    suspend fun deleteAlbumsUnderPath(pathPrefix: String)
+
     @Update
     suspend fun updateAlbums(albums: List<AlbumEntity>)
 
