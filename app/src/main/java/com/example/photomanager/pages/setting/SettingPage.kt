@@ -48,6 +48,23 @@ fun SettingPage(navigator: AppNavigator, viewModel: SettingViewModel = hiltViewM
                     }
                 }
             )
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { if (!viewModel.isSyncing) viewModel.syncAllDirectories() },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            ) {
+                if (viewModel.isSyncing) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                } else {
+                    Icon(Icons.Default.Refresh, contentDescription = "同步全部目录")
+                }
+            }
         }
     ) { padding ->
         Column(
