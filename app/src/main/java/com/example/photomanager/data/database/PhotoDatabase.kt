@@ -15,4 +15,5 @@ import androidx.room.RoomDatabase
 abstract class PhotoDatabase : RoomDatabase() {
     abstract fun albumDao(): AlbumDao
     abstract fun groupDao(): GroupDao
+    abstract fun photoDao(): PhotoDao
 }
