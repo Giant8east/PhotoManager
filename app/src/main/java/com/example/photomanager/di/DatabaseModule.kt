@@ -21,6 +21,9 @@ object DatabaseModule {
     fun provideGroupDao(database: PhotoDatabase) = database.groupDao()
 
     @Provides
+    fun providePhotoDao(database: PhotoDatabase) = database.photoDao()
+
+    @Provides
     @Singleton
     fun providePhotoDatabase(
         @ApplicationContext context: Context
