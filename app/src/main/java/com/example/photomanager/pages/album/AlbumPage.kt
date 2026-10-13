@@ -1,5 +1,6 @@
 package com.example.photomanager.pages.album
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -21,6 +22,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 
 
 import coil.compose.AsyncImage
@@ -33,6 +38,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.photomanager.data.database.AlbumEntity
 import com.example.photomanager.navigation.AppNavigator
 import com.example.photomanager.pages.setting.SettingPage
+import com.example.photomanager.pages.albumdetail.AlbumDetailPage
 import androidx.compose.foundation.layout.Spacer
 
 /** 相册库主页，提供搜索、分组筛选、排序入口和相册列表。 */
@@ -41,10 +47,20 @@ fun AlbumPage(
     navigator: AppNavigator,
     viewModel: AlbumViewModel = hiltViewModel()
 ) {
+    var isActionFabExpanded by remember { mutableStateOf(false) }
+    BackHandler {
+        if (isActionFabExpanded) {
+            isActionFabExpanded = false
+            viewModel.clearSelection()
+        } else {
+            navigator.pop()
+        }
+    }
     AlbumGroupDrawer(
         groups = viewModel.groups,
         selectedGroupId = viewModel.selectedGroupId,
-        onGroupSelected = viewModel::selectGroup
+        onGroupSelected = viewModel::selectGroup,
+//        gesturesEnabled = !isActionFabExpanded
     ) {
         Box(Modifier.fillMaxSize()) {
             Column {
@@ -92,7 +108,10 @@ fun AlbumPage(
                 }
                 LazyColumn(Modifier.fillMaxSize()) {
                     items(viewModel.albums, key = { it.id }) { album ->
-                        AlbumCard(album, viewModel::toggleAlbumSelection)
+                        AlbumCard(album, navigator, onLongClick = {
+                            viewModel.toggleAlbumSelection(it)
+                            isActionFabExpanded = true
+                        })
                     }
                 }
             }
@@ -103,6 +122,11 @@ fun AlbumPage(
                 onSelectAll = viewModel::selectAllVisible,
                 onDelete = viewModel::deleteSelected,
                 onMoveToGroup = viewModel::moveSelectedToGroup,
+                isExpanded = isActionFabExpanded,
+                onExpandedChange = { expanded ->
+                    isActionFabExpanded = expanded
+                    if (!expanded) viewModel.clearSelection()
+                },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(20.dp)
@@ -113,11 +137,19 @@ fun AlbumPage(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun AlbumCard(album: AlbumEntity, onLongClick: (Long) -> Unit) {
+private fun AlbumCard(
+    album: AlbumEntity,
+    navigator: AppNavigator,
+    onLongClick: (Long) -> Unit,
+    onClick: (() -> Unit)? = null
+) {
+    val clickAction = onClick ?: {
+        navigator.pushTo { AlbumDetailPage(navigator, album) }
+    }
     Row(
         Modifier
             .fillMaxWidth()
-            .combinedClickable(onClick = { }, onLongClick = { onLongClick(album.id) })
+            .combinedClickable(onClick = clickAction, onLongClick = { onLongClick(album.id) })
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

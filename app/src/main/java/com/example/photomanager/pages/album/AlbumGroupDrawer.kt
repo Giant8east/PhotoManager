@@ -18,6 +18,7 @@ fun AlbumGroupDrawer(
     groups: List<GroupEntity>,
     selectedGroupId: Long?,
     onGroupSelected: (Long?) -> Unit,
+//    gesturesEnabled: Boolean = true,
     content: @Composable () -> Unit
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -50,6 +51,7 @@ fun AlbumGroupDrawer(
                 }
             }
         },
+//        gesturesEnabled = gesturesEnabled,
         content = content
     )
 }
