@@ -106,44 +106,56 @@ class AlbumData @Inject constructor(
         }
     }
 
+    /** 分页读取指定相册的图片元数据。 */
+    fun pagePhotos(albumId: Long): Flow<PagingData<PhotoEntity>> = Pager(
+        config = PagingConfig(pageSize = 60, prefetchDistance = 15, enablePlaceholders = false),
+        pagingSourceFactory = { database.photoDao().queryPhotoPage(albumId) }
+    ).flow
+
     /** 递归同步根目录及子目录；空目录跳过，数据库只写入新增或变化的相册。 */
     suspend fun syncDirectory(rootUri: Uri) = withContext(Dispatchers.IO) {
         val scannedAlbums = scanDirectories(rootUri)
         database.withTransaction {
             val albumDao = database.albumDao()
             val existingAlbums = albumDao.queryAllAlbums().associateBy { it.albumPath }
-            val newAlbums = scannedAlbums.mapNotNull { scanned ->
+            scannedAlbums.forEach { scanned ->
                 val existing = existingAlbums[scanned.path]
                 if (existing == null) {
-                    AlbumEntity(
+                    val albumId = albumDao.insertAlbum(AlbumEntity(
                         name = scanned.name,
                         modifiedAt = scanned.modifiedAt,
                         photoCount = scanned.imageUris.size,
                         coverPath = scanned.imageUris.firstOrNull(),
                         albumPath = scanned.path,
                         sortOrder = System.currentTimeMillis()
-                    )
+                    ))
+                    syncPhotos(albumId, scanned.imageUris)
                 } else if (
                     existing.name != scanned.name ||
                     existing.modifiedAt != scanned.modifiedAt ||
                     existing.photoCount != scanned.imageUris.size ||
                     existing.coverPath != scanned.imageUris.firstOrNull()
                 ) {
-                    albumDao.updateAlbums(
-                        listOf(
-                            existing.copy(
+                    albumDao.updateAlbums(listOf(existing.copy(
                                 name = scanned.name,
                                 modifiedAt = scanned.modifiedAt,
                                 photoCount = scanned.imageUris.size,
                                 coverPath = scanned.imageUris.firstOrNull()
-                            )
-                        )
-                    )
-                    null
-                } else null
+                            )))
+                    syncPhotos(existing.id, scanned.imageUris)
+                } else {
+                    syncPhotos(existing.id, scanned.imageUris)
+                }
             }
-            if (newAlbums.isNotEmpty()) albumDao.insertAlbums(newAlbums)
         }
+    }
+
+    private suspend fun syncPhotos(albumId: Long, imageUris: List<String>) {
+        val photoDao = database.photoDao()
+        photoDao.deletePhotosByAlbumId(albumId)
+        photoDao.insertPhotos(imageUris.map { uri ->
+            PhotoEntity(albumId = albumId, name = uri.substringAfterLast('/'), contentUri = uri)
+        })
     }
 
     /** 表示一次目录扫描得到的相册信息。 */
