@@ -2,6 +2,7 @@
 package com.example.photomanager.data
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringSetPreferencesKey
@@ -22,6 +23,10 @@ class SettingData @Inject constructor(
     private val database: PhotoDatabase
 ) {
     private val directoryKey = stringSetPreferencesKey("scan_directories")
+    fun persistDirectoryPermission(uri: Uri) {
+        val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        context.contentResolver.takePersistableUriPermission(uri, flags)
+    }
     val directories: Flow<List<SettingDirectory>> = context.settingStore.data.map { preferences ->
         preferences[directoryKey].orEmpty().sorted().map(::SettingDirectory)
     }
