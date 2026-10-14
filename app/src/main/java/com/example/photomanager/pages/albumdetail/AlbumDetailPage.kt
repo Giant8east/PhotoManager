@@ -3,6 +3,7 @@ package com.example.photomanager.pages.albumdetail
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -11,6 +12,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -18,6 +20,7 @@ import androidx.paging.compose.collectAsLazyPagingItems
 import coil.compose.AsyncImage
 import com.example.photomanager.data.database.AlbumEntity
 import com.example.photomanager.navigation.AppNavigator
+import com.example.photomanager.pages.photoviewer.PhotoViewerPage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,12 +62,24 @@ fun AlbumDetailPage(
                 items(photos.itemCount) { index ->
                     val photo = photos[index]
                     if (photo != null) {
-                        AsyncImage(
-                            model = photo.contentUri,
-                            contentDescription = photo.name,
-                            modifier = Modifier.aspectRatio(1f),
-                            contentScale = ContentScale.Crop
-                        )
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.clickable {
+                                navigator.pushTo { PhotoViewerPage(navigator, album.id, index) }
+                            }
+                        ) {
+                            AsyncImage(
+                                model = photo.contentUri,
+                                contentDescription = photo.name,
+                                modifier = Modifier.fillMaxWidth().aspectRatio(3f / 4f),
+                                contentScale = ContentScale.Fit
+                            )
+                            Text(
+                                text = "${index + 1}",
+                                style = MaterialTheme.typography.labelMedium,
+                                modifier = Modifier.padding(vertical = 4.dp)
+                            )
+                        }
                     }
                 }
             }
