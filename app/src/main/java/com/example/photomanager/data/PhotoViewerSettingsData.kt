@@ -50,6 +50,8 @@ private object PhotoViewerSettingsSerializer : Serializer<PhotoViewerSettings> {
     }
 }
 
+// 扩展属性context.viewerSettingsStore是当前文件声明的扩展
+// by表示属性如何创建、如何获取，交给 dataStore() 提供的委托对象管理
 private val Context.viewerSettingsStore by dataStore(
     fileName = "photo_viewer_settings.json",
     serializer = PhotoViewerSettingsSerializer
