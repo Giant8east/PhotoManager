@@ -298,22 +298,26 @@ class AlbumData @Inject constructor(
         }
     }
 
-    /** 删除真实目录并清理相册记录。 */
+    /** 先删除 SAF 授权目录及其文件，再清理 Room 相册记录。 */
     suspend fun delete(albums: List<AlbumEntity>) = withContext(Dispatchers.IO) {
-        for (album in albums) {
+        val documents = albums.map { album ->
             val tree = Uri.parse(album.albumPath)
             require(DocumentsContract.isTreeUri(tree)) { "此相册尚未获得目录删除授权" }
-            val document = DocumentsContract.buildDocumentUriUsingTree(
+            tree to DocumentsContract.buildDocumentUriUsingTree(
                 tree,
                 DocumentsContract.getTreeDocumentId(tree)
             )
+        }
+        documents.forEach { (tree, document) ->
             check(
                 DocumentsContract.deleteDocument(
                     context.contentResolver,
                     document
                 )
-            ) { "目录删除失败：${album.name}" }
-            database.albumDao().deleteAlbum(album.id)
+            ) { "目录删除失败：${tree}" }
+        }
+        database.withTransaction {
+            albums.forEach { database.albumDao().deleteAlbum(it.id) }
         }
     }
 }
