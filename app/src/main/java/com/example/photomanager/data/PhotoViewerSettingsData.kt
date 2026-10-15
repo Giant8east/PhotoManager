@@ -21,6 +21,7 @@ data class PhotoViewerSettings(
     val screenOrientation: ScreenOrientation = ScreenOrientation.SYSTEM,
     val readingDirection: ReadingDirection = ReadingDirection.RIGHT_TO_LEFT,
     val pageScale: PageScale = PageScale.FIT_SCREEN,
+    val autoPageEnabled: Boolean = false,
     val autoPageSeconds: Int = 3,
     val keepScreenOn: Boolean = false,
     val showClock: Boolean = true,
@@ -58,7 +59,7 @@ private val Context.viewerSettingsStore by dataStore(
 )
 
 class PhotoViewerSettingsData @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context // 使用应用级 Context
 ) {
     val settings = context.viewerSettingsStore.data
 
