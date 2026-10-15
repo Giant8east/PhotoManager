@@ -15,9 +15,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.ui.res.painterResource
+import com.example.photomanager.R
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.photomanager.navigation.AppNavigator
@@ -35,10 +39,18 @@ fun SettingPage(navigator: AppNavigator, viewModel: SettingViewModel = hiltViewM
             viewModel.onDirectoryPicked(uri)
         }
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
+            CenterAlignedTopAppBar(
                 title = { Text("设置") },
-                navigationIcon = { TextButton(onClick = navigator::pop) { Text("返回") } },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                ),
+                navigationIcon = {
+                    IconButton(onClick = navigator::pop) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    }
+                },
                 actions = {
                     IconButton(onClick = { launcher.launch(null) }) {
                         Icon(
@@ -51,16 +63,14 @@ fun SettingPage(navigator: AppNavigator, viewModel: SettingViewModel = hiltViewM
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { if (!viewModel.isSyncing) viewModel.syncAllDirectories() },
+                onClick = {
+                    if (viewModel.isSyncing) viewModel.stopSync() else viewModel.syncAllDirectories()
+                },
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary
             ) {
                 if (viewModel.isSyncing) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
+                    Icon(painterResource(R.drawable.ic_stop), contentDescription = "停止同步")
                 } else {
                     Icon(Icons.Default.Refresh, contentDescription = "同步全部目录")
                 }
@@ -73,16 +83,16 @@ fun SettingPage(navigator: AppNavigator, viewModel: SettingViewModel = hiltViewM
                 .padding(padding)
                 .padding(horizontal = 16.dp)
         ) {
-            if (viewModel.isSyncing) {
-                Row(
+            Row(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(vertical = 16.dp)
                 ) {
+                Text("已同步相册：${viewModel.validAlbumCount}", style = MaterialTheme.typography.titleMedium)
+                if (viewModel.isSyncing) {
                     CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
                     Text("同步中…", style = MaterialTheme.typography.titleMedium)
                 }
-            } else {
-                Text("有效相册：${viewModel.validAlbumCount}", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(vertical = 16.dp))
             }
             viewModel.errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -96,7 +106,7 @@ fun SettingPage(navigator: AppNavigator, viewModel: SettingViewModel = hiltViewM
                             Column(Modifier.weight(1f)) {
                                 Text(directory.name, style = MaterialTheme.typography.titleMedium)
                                 Text(
-                                    if (viewModel.syncingUri == "all") "同步中…" else directory.uri,
+                                    directory.uri,
                                     modifier = Modifier.basicMarquee(),
                                     maxLines = 1,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
