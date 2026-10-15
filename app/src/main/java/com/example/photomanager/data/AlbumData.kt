@@ -14,6 +14,8 @@ import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.ZoneId
@@ -114,12 +116,10 @@ class AlbumData @Inject constructor(
 
     /** 递归同步根目录及子目录；空目录跳过，数据库只写入新增或变化的相册。 */
     suspend fun syncDirectory(rootUri: Uri) = withContext(Dispatchers.IO) {
-        val scannedAlbums = scanDirectories(rootUri)
-        database.withTransaction {
-            val albumDao = database.albumDao()
-            val existingAlbums = albumDao.queryAllAlbums().associateBy { it.albumPath }
-            scannedAlbums.forEach { scanned ->
-                val existing = existingAlbums[scanned.path]
+        scanDirectories(rootUri) { scanned ->
+            database.withTransaction {
+                val albumDao = database.albumDao()
+                val existing = albumDao.queryAlbumByPath(scanned.path)
                 if (existing == null) {
                     val albumId = albumDao.insertAlbum(AlbumEntity(
                         name = scanned.name,
@@ -166,15 +166,19 @@ class AlbumData @Inject constructor(
         val imageUris: List<String>
     )
 
-    /** 递归扫描目录并收集含图片的目录。 */
-    private fun scanDirectories(rootUri: Uri): List<ScannedAlbum> {
-        val result = mutableListOf<ScannedAlbum>()
+    /** 每扫描完一个含图片的目录就提交，避免等待整棵目录树扫描完成。 */
+    private suspend fun scanDirectories(rootUri: Uri, onAlbumScanned: suspend (ScannedAlbum) -> Unit) {
         val pending = ArrayDeque<Uri>()
         pending.add(rootUri)
         val resolver = context.contentResolver
         while (pending.isNotEmpty()) {
+            currentCoroutineContext().ensureActive()
             val directoryUri = pending.removeFirst()
-            val documentId = DocumentsContract.getTreeDocumentId(directoryUri)
+            val documentId = if (DocumentsContract.isDocumentUri(context, directoryUri)) {
+                DocumentsContract.getDocumentId(directoryUri)
+            } else {
+                DocumentsContract.getTreeDocumentId(directoryUri)
+            }
             val documentUri = DocumentsContract.buildDocumentUriUsingTree(directoryUri, documentId)
             val metadata = resolver.query(
                 documentUri,
@@ -200,6 +204,7 @@ class AlbumData @Inject constructor(
                 ), null, null, null
             )?.use { cursor ->
                 while (cursor.moveToNext()) {
+                    currentCoroutineContext().ensureActive()
                     val childId = cursor.getString(0)
                     val childUri =
                         DocumentsContract.buildDocumentUriUsingTree(directoryUri, childId)
@@ -210,14 +215,13 @@ class AlbumData @Inject constructor(
                     }
                 }
             }
-            if (images.isNotEmpty()) result += ScannedAlbum(
+            if (images.isNotEmpty()) onAlbumScanned(ScannedAlbum(
                 directoryUri.toString(), metadata.first, metadata.second, images.sorted()
-            )
+            ))
             childDirectories.forEach { childId ->
                 pending.add(DocumentsContract.buildDocumentUriUsingTree(directoryUri, childId))
             }
         }
-        return result
     }
 
     /** 导入单个目录并写入相册记录。 */
