@@ -13,6 +13,8 @@ import com.example.photomanager.data.SettingDirectory
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -38,39 +40,38 @@ class SettingViewModel @Inject constructor(
         viewModelScope.launch { settingData.validAlbumCount.collect { _validAlbumCount = it } }
     }
 
-    fun onDirectoryPicked(uri: Uri) = viewModelScope.launch {
-        try {
-            settingData.persistDirectoryPermission(uri)
-            if (!settingData.contains(uri)) {
-                settingData.addDirectory(uri)
-                syncAllDirectoriesNow()
-            }
-        } catch (error: Exception) {
-            _errorMessage = error.message ?: "目录导入失败"
+    fun onDirectoryPicked(uri: Uri) = runSync {
+        settingData.persistDirectoryPermission(uri)
+        if (!settingData.contains(uri)) {
+            settingData.addDirectory(uri)
+            syncAllDirectoriesNow()
         }
     }
 
     fun syncDirectory(uri: Uri) {
-        syncJob?.cancel()
-        syncJob = viewModelScope.launch {
-            _syncingUri = uri.toString(); _errorMessage = null
-            try {
-                albumData.syncDirectory(uri)
-            } catch (error: Exception) {
-                _errorMessage = error.message ?: "目录同步失败"
-            } finally {
-                _syncingUri = null
-            }
-        }
+        runSync(uri.toString()) { albumData.syncDirectory(uri) }
     }
 
     /** 重新同步当前所有已保存的扫描目录。 */
     fun syncAllDirectories() {
+        runSync { syncAllDirectoriesNow() }
+    }
+
+    /** 取消当前扫描，已提交的相册保留，由任务结束时复位同步状态。 */
+    fun stopSync() {
         syncJob?.cancel()
+    }
+
+    /** 导入、移除和手动同步共用任务入口，等待旧任务退出后再操作目录。 */
+    private fun runSync(uri: String = "all", operation: suspend () -> Unit) {
+        val previousJob = syncJob
         syncJob = viewModelScope.launch {
-            _syncingUri = "all"; _errorMessage = null
+            previousJob?.cancelAndJoin()
+            _syncingUri = uri; _errorMessage = null
             try {
-                syncAllDirectoriesNow()
+                operation()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (error: Exception) {
                 _errorMessage = error.message ?: "目录同步失败"
             } finally { _syncingUri = null }
@@ -81,7 +82,7 @@ class SettingViewModel @Inject constructor(
         settingData.directories.first().forEach { albumData.syncDirectory(Uri.parse(it.uri)) }
     }
 
-    fun removeDirectory(directory: SettingDirectory) = viewModelScope.launch {
+    fun removeDirectory(directory: SettingDirectory) = runSync {
         settingData.removeDirectory(directory.uri)
         albumData.deleteAlbumsUnderPath(directory.uri)
         syncAllDirectoriesNow()
