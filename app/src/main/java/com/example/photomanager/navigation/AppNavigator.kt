@@ -4,48 +4,56 @@ package com.example.photomanager.navigation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedContentTransitionScope
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 
-class AppNavigator {
-    private class PageEntry(val id: Long, val content: @Composable () -> Unit)
+class AppNavigator(
+    // 构造函数接收一个起始页面
+    private val initialPage: @Composable (AppNavigator) -> Unit
+) {
+    // 一个页面栈条目
+    private class PageEntry(
+        val id: Long,   // 导航条目的唯一身份
+        val useSafeArea: Boolean,   // 为false时绘制到完整窗口，不使用普通页面的安全区 padding
+        val transition: PageTransition,
+        val content: @Composable () -> Unit
+    )
 
-    private val pages = mutableStateListOf<PageEntry>()
+    private val pages = mutableStateListOf<PageEntry>() // 页面栈,类型是 Compose 能观察到变化的可变列表
     private var nextPageId = 0L
 
-    fun pushTo(page: @Composable () -> Unit) {
-        pages += PageEntry(nextPageId++, page)
+    init {
+        pages += PageEntry(nextPageId++, true, HorizontalPageTransition) { initialPage(this) }
+    }
+
+    fun pushTo(
+        useSafeArea: Boolean = true,
+        transition: PageTransition = HorizontalPageTransition,
+        page: @Composable () -> Unit
+    ) {
+        pages += PageEntry(nextPageId++, useSafeArea, transition, page)
     }
 
     fun pop() {
         if (pages.size > 1) pages.removeLast()
     }
 
-    fun pagesEmpty(): Boolean = pages.isEmpty()
-
+    @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
     @Composable
     fun render() {
-        val currentPage = pages.lastOrNull() ?: return
+        val currentPage = pages.last()
         AnimatedContent(
             targetState = currentPage,
             modifier = Modifier.fillMaxSize(),
             contentKey = { it.id },
             transitionSpec = {
-                // 使用页面身份判断方向，返回后再次入栈也能正确识别。
-                val direction = if (targetState.id > initialState.id) {
-                    AnimatedContentTransitionScope.SlideDirection.Left
-                } else {
-                    AnimatedContentTransitionScope.SlideDirection.Right
-                }
-                slideIntoContainer(direction, tween(300)) togetherWith
-                    slideOutOfContainer(direction, tween(300))
+                val isPush = targetState.id > initialState.id
+                val transition = if (isPush) targetState.transition else initialState.transition
+                transition.create(this, isPush)
             },
             label = "页面转场"
         ) { page ->
-            page.content()
+            PageContainer(useSafeArea = page.useSafeArea) { page.content() }
         }
     }
 }
