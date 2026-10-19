@@ -12,11 +12,11 @@ import com.example.photomanager.ui.theme.LocalStatusBarColor
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun PageContainer(useSafeArea: Boolean, content: @Composable () -> Unit) {
-    // 计算避让范围
+    // 获取不随系统栏临时显隐而消失的系统栏 Insets，合并刘海缺口避让范围，计算避让范围
     val safeInsets = WindowInsets.systemBarsIgnoringVisibility.union(WindowInsets.displayCutout)
     // 所有页面始终占满导航窗口
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        // 顶部安全区背景色
+        // 普通页面顶部安全区单独绘制主题次要色
         if (useSafeArea) {
             Box(
                 Modifier.align(Alignment.TopCenter).fillMaxWidth()
