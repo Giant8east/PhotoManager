@@ -1,6 +1,7 @@
 /** 应用轻量导航器，维护 Composable 页面栈并提供统一跳转入口。 */
 package com.example.photomanager.navigation
 
+import android.annotation.SuppressLint
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.animation.AnimatedContent
@@ -41,6 +42,7 @@ class AppNavigator(
         if (pages.size > 1) pages.removeLast()
     }
 
+    @SuppressLint("ReturnFromAwaitPointerEventScope")
     @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
     @Composable
     fun render() {
