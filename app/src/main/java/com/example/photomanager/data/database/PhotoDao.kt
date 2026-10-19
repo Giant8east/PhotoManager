@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface PhotoDao {
     @Query("SELECT * FROM photos WHERE albumId = :albumId ORDER BY name ASC")
-    fun observePhotos(albumId: Long): Flow<List<PhotoEntity>>
+    fun observePhotosQuery(albumId: Long): Flow<List<PhotoEntity>>
 
     @Query("SELECT * FROM photos WHERE albumId = :albumId ORDER BY name ASC")
     fun queryPhotoPage(albumId: Long): PagingSource<Int, PhotoEntity>
