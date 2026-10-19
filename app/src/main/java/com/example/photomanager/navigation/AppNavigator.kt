@@ -5,8 +5,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.Modifier
 
+@OptIn(androidx.compose.animation.ExperimentalAnimationApi::class)
 class AppNavigator(
     // 构造函数接收一个起始页面
     private val initialPage: @Composable (AppNavigator) -> Unit
@@ -53,7 +56,19 @@ class AppNavigator(
             },
             label = "页面转场"
         ) { page ->
-            PageContainer(useSafeArea = page.useSafeArea) { page.content() }
+            Box(Modifier.fillMaxSize()) {
+                PageContainer(useSafeArea = page.useSafeArea) { page.content() }
+                if (transition.currentState != transition.targetState) {
+                    // 只消费指针事件，不使用 clickable，避免转场期间出现水波纹。
+                    Box(Modifier.fillMaxSize().pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                awaitPointerEvent().changes.forEach { it.consume() }
+                            }
+                        }
+                    })
+                }
+            }
         }
     }
 }
