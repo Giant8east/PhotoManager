@@ -10,6 +10,7 @@ import com.example.photomanager.data.database.*
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
@@ -95,11 +96,9 @@ class AlbumData @Inject constructor(
         .updateAlbums(albums.mapIndexed { index, album -> album.copy(sortOrder = index.toLong()) })
 
     /** 保存相册最近一次浏览到的图片位置。 */
-    suspend fun updateReadingProgress(albumId: Long, photoIndex: Int) {
-        val album = database.albumDao().queryAllAlbums().firstOrNull { it.id == albumId } ?: return
-        val safeIndex = photoIndex.coerceIn(0, (album.photoCount - 1).coerceAtLeast(0))
-        database.albumDao().updateAlbumReadingProgress(albumId, safeIndex)
-    }
+    suspend fun updateReadingProgress(albumId: Long, photoIndex: Int) =
+        database.albumDao().updateAlbumReadingProgress(albumId, photoIndex)
+
 
     /** 删除指定扫描目录及其子目录对应的相册记录。 */
     suspend fun deleteAlbumsUnderPath(path: String) {
@@ -108,9 +107,13 @@ class AlbumData @Inject constructor(
         }
     }
 
-    /** 分页读取指定相册的图片元数据。 */
+    /** 持续观察相册的完整图片索引，仅列表实际变化时通知上层。 */
+    fun observePhotos(albumId: Long): Flow<List<PhotoEntity>> =
+        database.photoDao().observePhotosQuery(albumId)
+
+    /** 为相册详情网格分页读取图片元数据。 */
     fun pagePhotos(albumId: Long): Flow<PagingData<PhotoEntity>> = Pager(
-        config = PagingConfig(pageSize = 60, prefetchDistance = 15, enablePlaceholders = false),
+        config = PagingConfig(pageSize = 60, prefetchDistance = 15, enablePlaceholders = true),
         pagingSourceFactory = { database.photoDao().queryPhotoPage(albumId) }
     ).flow
 
@@ -121,14 +124,16 @@ class AlbumData @Inject constructor(
                 val albumDao = database.albumDao()
                 val existing = albumDao.queryAlbumByPath(scanned.path)
                 if (existing == null) {
-                    val albumId = albumDao.insertAlbum(AlbumEntity(
-                        name = scanned.name,
-                        modifiedAt = scanned.modifiedAt,
-                        photoCount = scanned.imageUris.size,
-                        coverPath = scanned.imageUris.firstOrNull(),
-                        albumPath = scanned.path,
-                        sortOrder = System.currentTimeMillis()
-                    ))
+                    val albumId = albumDao.insertAlbum(
+                        AlbumEntity(
+                            name = scanned.name,
+                            modifiedAt = scanned.modifiedAt,
+                            photoCount = scanned.imageUris.size,
+                            coverPath = scanned.imageUris.firstOrNull(),
+                            albumPath = scanned.path,
+                            sortOrder = System.currentTimeMillis()
+                        )
+                    )
                     syncPhotos(albumId, scanned.imageUris)
                 } else if (
                     existing.name != scanned.name ||
@@ -136,12 +141,16 @@ class AlbumData @Inject constructor(
                     existing.photoCount != scanned.imageUris.size ||
                     existing.coverPath != scanned.imageUris.firstOrNull()
                 ) {
-                    albumDao.updateAlbums(listOf(existing.copy(
+                    albumDao.updateAlbums(
+                        listOf(
+                            existing.copy(
                                 name = scanned.name,
                                 modifiedAt = scanned.modifiedAt,
                                 photoCount = scanned.imageUris.size,
                                 coverPath = scanned.imageUris.firstOrNull()
-                            )))
+                            )
+                        )
+                    )
                     syncPhotos(existing.id, scanned.imageUris)
                 } else {
                     syncPhotos(existing.id, scanned.imageUris)
@@ -167,7 +176,10 @@ class AlbumData @Inject constructor(
     )
 
     /** 每扫描完一个含图片的目录就提交，避免等待整棵目录树扫描完成。 */
-    private suspend fun scanDirectories(rootUri: Uri, onAlbumScanned: suspend (ScannedAlbum) -> Unit) {
+    private suspend fun scanDirectories(
+        rootUri: Uri,
+        onAlbumScanned: suspend (ScannedAlbum) -> Unit
+    ) {
         val pending = ArrayDeque<Uri>()
         pending.add(rootUri)
         val resolver = context.contentResolver
@@ -215,9 +227,11 @@ class AlbumData @Inject constructor(
                     }
                 }
             }
-            if (images.isNotEmpty()) onAlbumScanned(ScannedAlbum(
-                directoryUri.toString(), metadata.first, metadata.second, images.sorted()
-            ))
+            if (images.isNotEmpty()) onAlbumScanned(
+                ScannedAlbum(
+                    directoryUri.toString(), metadata.first, metadata.second, images.sorted()
+                )
+            )
             childDirectories.forEach { childId ->
                 pending.add(DocumentsContract.buildDocumentUriUsingTree(directoryUri, childId))
             }
