@@ -35,7 +35,7 @@ class PhotoViewerSystemController(private val activity: Activity) {
 
         // 获取系统栏控制器
         val controller = WindowCompat.getInsetsController(window, window.decorView)
-        // 设置全屏后的系统栏行为
+        // 设置全屏后的系统栏行为: 临时显示系统栏，一段时间后自动隐藏
         controller.systemBarsBehavior =
             WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         // 刘海屏区域
