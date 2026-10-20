@@ -6,7 +6,12 @@ import androidx.datastore.core.CorruptionException
 import androidx.datastore.core.Serializer
 import androidx.datastore.dataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
@@ -15,6 +20,7 @@ import kotlinx.serialization.json.Json
 import java.io.InputStream
 import java.io.OutputStream
 import javax.inject.Inject
+import javax.inject.Singleton
 
 @Serializable
 data class PhotoViewerSettings(
@@ -58,10 +64,17 @@ private val Context.viewerSettingsStore by dataStore(
     serializer = PhotoViewerSettingsSerializer
 )
 
+@Singleton
 class PhotoViewerSettingsData @Inject constructor(
     @ApplicationContext private val context: Context // 使用应用级 Context
 ) {
-    val settings = context.viewerSettingsStore.data
+    /** 应用启动后持续持有阅读配置，页面进入时直接读取当前值。 */
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    val settings: StateFlow<PhotoViewerSettings> = context.viewerSettingsStore.data.stateIn(
+        scope = applicationScope,
+        started = SharingStarted.Eagerly,
+        initialValue = PhotoViewerSettings()
+    )
 
     suspend fun save(settings: PhotoViewerSettings) {
         context.viewerSettingsStore.updateData { settings }
