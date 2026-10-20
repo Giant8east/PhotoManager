@@ -2,7 +2,6 @@
 package com.example.photomanager.pages.photoviewer
 
 import android.app.Activity
-import android.annotation.SuppressLint
 import android.view.KeyEvent
 import android.view.WindowManager
 import android.content.pm.ActivityInfo
