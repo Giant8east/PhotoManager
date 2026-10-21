@@ -27,7 +27,6 @@ data class PhotoViewerSettings(
     val screenOrientation: ScreenOrientation = ScreenOrientation.SYSTEM,
     val readingDirection: ReadingDirection = ReadingDirection.RIGHT_TO_LEFT,
     val pageScale: PageScale = PageScale.FIT_SCREEN,
-    val autoPageEnabled: Boolean = false,
     val autoPageSeconds: Int = 3,
     val keepScreenOn: Boolean = false,
     val showClock: Boolean = true,
