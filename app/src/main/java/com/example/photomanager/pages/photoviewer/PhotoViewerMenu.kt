@@ -41,9 +41,6 @@ fun PhotoViewerMenu(
                     editingSettings.pageScale,
                     PageScale.entries
                 ) { editingSettings = editingSettings.copy(pageScale = it) }
-                SettingSwitch("自动翻页", editingSettings.autoPageEnabled) {
-                    editingSettings = editingSettings.copy(autoPageEnabled = it)
-                }
                 Text("自动翻页间隔（秒）：${editingSettings.autoPageSeconds}")
                 Slider(
                     value = editingSettings.autoPageSeconds.toFloat(),
