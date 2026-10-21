@@ -1,41 +1,43 @@
-/** 图片浏览页面，支持分页滑动、缩放、拖拽和长按菜单入口。 */
+/** 图片浏览页面，组装阅读内容、悬浮信息与系统能力，并集中处理主动翻页。 */
 package com.example.photomanager.pages.photoviewer
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.VerticalPager
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsIgnoringVisibility
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.platform.LocalContext
-import android.app.Activity
-import android.content.Intent
-import android.content.IntentFilter
-import android.os.BatteryManager
-import java.time.LocalTime
-import java.time.format.DateTimeFormatter
-import com.example.photomanager.MainActivity
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.paging.compose.collectAsLazyPagingItems
-import coil.compose.AsyncImage
+import com.example.photomanager.data.database.PhotoEntity
+import com.example.photomanager.data.PhotoViewerSettings
 import com.example.photomanager.navigation.AppNavigator
-import com.example.photomanager.data.*
-import kotlinx.coroutines.flow.collectLatest
+import com.example.photomanager.ui.theme.PhotoViewerBackground
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun PhotoViewerPage(
     navigator: AppNavigator,
@@ -44,98 +46,111 @@ fun PhotoViewerPage(
     viewModel: PhotoViewerViewModel = hiltViewModel()
 ) {
     BackHandler { navigator.pop() }
-    LaunchedEffect(albumId) { viewModel.load(albumId, initialIndex) }
-    val photos = viewModel.photos.collectAsLazyPagingItems()
-    val pagerState = rememberPagerState(initialPage = initialIndex) { photos.itemCount }
-    val pagerScope = rememberCoroutineScope()
-    var scale by remember { mutableFloatStateOf(1f) }
-    var offsetX by remember { mutableFloatStateOf(0f) }
-    var offsetY by remember { mutableFloatStateOf(0f) }
-    var isMenuVisible by remember { mutableStateOf(false) }
-    var currentTime by remember { mutableStateOf(LocalTime.now()) }
-    var batteryLevel by remember { mutableIntStateOf(-1) }
-    val settings by viewModel.settings.collectAsState(initial = PhotoViewerSettings())
-    val activity = LocalContext.current as Activity
-    val systemController = remember { PhotoViewerSystemController(activity) }
-    (activity as? MainActivity)?.photoViewerSystemController = systemController
-    DisposableEffect(settings, pagerState) {
-        systemController.apply(settings, {
-            if (pagerState.currentPage < photos.itemCount - 1) {
-                pagerScope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
-            }
-        }, {
-            if (pagerState.currentPage > 0) {
-                pagerScope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }
-            }
-        })
-        onDispose {
-            systemController.restore()
-            (activity as? MainActivity)?.photoViewerSystemController = null
-        }
-    }
-    LaunchedEffect(pagerState) {
-        snapshotFlow { pagerState.currentPage }.collectLatest { viewModel.moveTo(it) }
-    }
-    LaunchedEffect(settings.autoPageEnabled, settings.autoPageSeconds, isMenuVisible, pagerState.currentPage, photos.itemCount) {
-        if (settings.autoPageEnabled && settings.autoPageSeconds > 0 && !isMenuVisible) {
-            kotlinx.coroutines.delay(settings.autoPageSeconds * 1000L)
-            if (pagerState.currentPage < photos.itemCount - 1) {
-                pagerScope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
-            }
-        }
-    }
-    LaunchedEffect(settings.showClock) {
-        while (settings.showClock) {
-            currentTime = LocalTime.now()
-            kotlinx.coroutines.delay(30_000)
-        }
-    }
-    DisposableEffect(settings.showBattery) {
-        val receiver = object : android.content.BroadcastReceiver() {
-            override fun onReceive(context: android.content.Context, intent: Intent) {
-                batteryLevel = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
-            }
-        }
-        if (settings.showBattery) {
-            val filter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
-            activity.registerReceiver(receiver, filter)
-        }
-        onDispose { runCatching { activity.unregisterReceiver(receiver) } }
-    }
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.scrim,
-        topBar = {
-            TopAppBar(
-                title = { if (settings.showProgress) Text("${pagerState.currentPage + 1} / ${photos.itemCount}") },
-                navigationIcon = { TextButton(onClick = navigator::pop) { Text("返回") } },
-                actions = { IconButton(onClick = { isMenuVisible = true }) { Icon(Icons.Default.MoreVert, "菜单") } }
-            )
-        }
-    ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-            if (settings.readingDirection == ReadingDirection.TOP_TO_BOTTOM) {
-                VerticalPager(state = pagerState, reverseLayout = false, modifier = Modifier.fillMaxSize()) { index ->
-                    ViewerPhoto(photos[index], settings.pageScale, scale, offsetX, offsetY) { zoom, panX, panY ->
-                        scale = zoom; offsetX += panX; offsetY += panY
-                    }
-                }
+    LaunchedEffect(albumId) { viewModel.load(albumId) }
+    val settings by viewModel.settings.collectAsState()
+    // 根容器始终占满窗口并绘制阅读底色；配置未到达前不按默认值猜测窗口状态。
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(PhotoViewerBackground),
+        contentAlignment = Alignment.Center
+    ) {
+        settings?.let { loadedSettings ->
+            val photos = viewModel.photos
+            if (photos == null) {
+                CircularProgressIndicator()
             } else {
-                HorizontalPager(
-                    state = pagerState,
-                    reverseLayout = settings.readingDirection == ReadingDirection.RIGHT_TO_LEFT,
-                    pageSpacing = if (settings.showPageGap) 12.dp else 0.dp,
-                    modifier = Modifier.fillMaxSize()
-                ) { index ->
-                    ViewerPhoto(photos[index], settings.pageScale, scale, offsetX, offsetY) { zoom, panX, panY ->
-                        scale = zoom; offsetX += panX; offsetY += panY
-                    }
-                }
-            }
-            Column(Modifier.align(Alignment.TopCenter).padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                if (settings.showClock) Text(currentTime.format(DateTimeFormatter.ofPattern("HH:mm:ss")), color = MaterialTheme.colorScheme.onSurface)
-                if (settings.showBattery && batteryLevel >= 0) Text("电量 $batteryLevel%", color = MaterialTheme.colorScheme.onSurface)
+                PhotoViewerReader(viewModel, photos, initialIndex, loadedSettings)
             }
         }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
+@Composable
+private fun PhotoViewerReader(
+    viewModel: PhotoViewerViewModel,
+    photos: List<PhotoEntity>,
+    initialIndex: Int,
+    settings: PhotoViewerSettings
+) {
+    val pagerState = rememberPagerState(
+        initialPage = initialIndex,
+        pageCount = { photos.size }
+    )
+    val pagerScope = rememberCoroutineScope()
+    var isMenuVisible by remember { mutableStateOf(false) }
+
+    // 所有主动翻页入口共用这里的边界判断；Pager 的单指滑动也由同一页数范围约束。
+    suspend fun goToPage(index: Int) {
+        pagerState.scrollToPage(index.coerceIn(0, pagerState.pageCount - 1))
+    }
+
+    suspend fun goToNextPage() = goToPage(pagerState.currentPage + 1)
+    suspend fun goToPreviousPage() = goToPage(pagerState.currentPage - 1)
+
+    val systemController = rememberPhotoViewerSystem(
+        settings = settings,
+        onNextPage = { pagerScope.launch { goToNextPage() } },
+        onPreviousPage = { pagerScope.launch { goToPreviousPage() } }
+    )
+
+    // 翻页落定后才记录阅读进度，拖动过程中经过的中间页不写入。
+    LaunchedEffect(pagerState, viewModel) {
+        snapshotFlow { pagerState.settledPage }.collect(viewModel::moveTo)
+    }
+    // 阅读器创建时图片记录已经就绪，按配置和当前页重新计时。
+    LaunchedEffect(
+        settings.autoPageEnabled,
+        settings.autoPageSeconds,
+        isMenuVisible,
+        pagerState.currentPage,
+        pagerState.pageCount
+    ) {
+        if (!settings.autoPageEnabled || isMenuVisible) {
+            return@LaunchedEffect
+        }
+        if (pagerState.currentPage >= pagerState.pageCount - 1) {
+            // 自动翻页到达末页后关闭开关，并保存到阅读配置。
+            viewModel.saveSettings(settings.copy(autoPageEnabled = false))
+            return@LaunchedEffect
+        }
+        delay(settings.autoPageSeconds * 1000L)
+        goToNextPage()
+    }
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .pointerInput(settings.fullScreen, systemController) {
+                detectTapGestures(
+                    onTap = { if (settings.fullScreen) systemController.showSystemBars() },
+                    onLongPress = { isMenuVisible = true }
+                )
+            }
+    ) {
+        // 仅图片视口避让，页面背景和参与转场的根容器始终占满窗口。
+        val imageInsets = if (settings.fullScreen) WindowInsets(0, 0, 0, 0)
+        else WindowInsets.systemBarsIgnoringVisibility.union(WindowInsets.displayCutout)
+        PhotoViewerContent(
+            photos = photos,
+            pagerState = pagerState,
+            settings = settings,
+            modifier = Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(imageInsets)
+                .clipToBounds()
+        )
+        PhotoViewerOverlay(
+            settings = settings,
+            batteryLevel = viewModel.batteryLevel,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .windowInsetsPadding(
+                    WindowInsets.systemBarsIgnoringVisibility.union(WindowInsets.displayCutout)
+                )
+                .padding(12.dp)
+        )
     }
     if (isMenuVisible) {
         PhotoViewerMenu(
@@ -144,35 +159,4 @@ fun PhotoViewerPage(
             onDismiss = { isMenuVisible = false }
         )
     }
-}
-
-@Composable
-private fun ViewerPhoto(
-    photo: com.example.photomanager.data.database.PhotoEntity?,
-    pageScale: PageScale,
-    scale: Float,
-    offsetX: Float,
-    offsetY: Float,
-    onTransform: (Float, Float, Float) -> Unit
-) {
-    if (photo == null) return
-    val contentScale = when (pageScale) {
-        PageScale.ORIGINAL -> ContentScale.None
-        PageScale.FIT_WIDTH -> ContentScale.FillWidth
-        PageScale.FIT_HEIGHT -> ContentScale.FillHeight
-        else -> ContentScale.Fit
-    }
-    AsyncImage(
-        model = photo.contentUri,
-        contentDescription = photo.name,
-        modifier = Modifier.fillMaxSize().pointerInput(photo.id) {
-            detectTransformGestures { _, pan, zoom, _ ->
-                onTransform((scale * zoom).coerceIn(1f, 4f), pan.x, pan.y)
-            }
-        }.graphicsLayer {
-            scaleX = scale; scaleY = scale
-            translationX = offsetX; translationY = offsetY
-        },
-        contentScale = contentScale
-    )
 }
