@@ -29,13 +29,13 @@ class MainActivity : ComponentActivity() {
 
     // 按下物理按键时执行
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
-        if (photoViewerSystemController?.dispatchKeyEvent(event) == true) return true
+        if (photoViewerSystemController?.handleVolumeKey(event) == true) return true
         return super.onKeyDown(keyCode, event)
     }
 
     // 松开物理按键时执行
     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
-        if (photoViewerSystemController?.dispatchKeyEvent(event) == true) return true
+        if (photoViewerSystemController?.handleVolumeKey(event) == true) return true
         return super.onKeyUp(keyCode, event)
     }
 
