@@ -6,6 +6,14 @@ import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.VerticalPager
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.systemBarsIgnoringVisibility
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
@@ -17,14 +25,16 @@ import com.example.photomanager.data.database.PhotoEntity
 /** 开启页面间隔时相邻图片之间的距离。 */
 private val PageGap = 12.dp
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
 fun PhotoViewerContent(
     photos: List<PhotoEntity>,
     pagerState: PagerState,
-    settings: PhotoViewerSettings,
-    modifier: Modifier = Modifier
+    settings: PhotoViewerSettings
 ) {
+    val imageInsets = if (settings.fullScreen) WindowInsets(0, 0, 0, 0)
+    else WindowInsets.systemBarsIgnoringVisibility.union(WindowInsets.displayCutout)
+    val modifier = Modifier.fillMaxSize().windowInsetsPadding(imageInsets).clipToBounds()
     val pageSpacing = if (settings.showPageGap) PageGap else 0.dp
     val photoAt: @Composable (Int) -> Unit = { index ->
         PhotoViewerImage(photos[index], settings.pageScale)

@@ -2,6 +2,15 @@
 package com.example.photomanager.pages.photoviewer
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsIgnoringVisibility
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -13,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import com.example.photomanager.data.PhotoViewerSettings
 import com.example.photomanager.data.UNKNOWN_BATTERY_LEVEL
 import kotlinx.coroutines.delay
@@ -23,15 +33,23 @@ import java.time.format.DateTimeFormatter
 /** 时钟只显示到分钟，刷新周期与显示精度保持一致。 */
 private val ClockFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PhotoViewerOverlay(
     settings: PhotoViewerSettings,
-    batteryLevel: Flow<Int>,
-    modifier: Modifier = Modifier
+    batteryLevel: Flow<Int>
 ) {
-    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        if (settings.showClock) ViewerClock()
-        if (settings.showBattery) ViewerBattery(batteryLevel)
+    Box(Modifier.fillMaxWidth()) {
+        Column(
+            Modifier
+                .align(Alignment.TopCenter)
+                .windowInsetsPadding(WindowInsets.systemBarsIgnoringVisibility.union(WindowInsets.displayCutout))
+                .padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            if (settings.showClock) ViewerClock()
+            if (settings.showBattery) ViewerBattery(batteryLevel)
+        }
     }
 }
 
