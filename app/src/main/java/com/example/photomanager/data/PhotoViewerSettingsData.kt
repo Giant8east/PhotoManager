@@ -70,10 +70,12 @@ class PhotoViewerSettingsData @Inject constructor(
 ) {
     /** 应用启动后持续持有阅读配置，页面进入时直接读取当前值。 */
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    val settings: StateFlow<PhotoViewerSettings> = context.viewerSettingsStore.data.stateIn(
+
+    /** 首个磁盘值到达前为 null，调用方据此区分未就绪和用户真实配置，不按默认值先应用窗口。 */
+    val settings: StateFlow<PhotoViewerSettings?> = context.viewerSettingsStore.data.stateIn(
         scope = applicationScope,
         started = SharingStarted.Eagerly,
-        initialValue = PhotoViewerSettings()
+        initialValue = null
     )
 
     suspend fun save(settings: PhotoViewerSettings) {
