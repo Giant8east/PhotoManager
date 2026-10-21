@@ -7,7 +7,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import com.example.photomanager.data.AlbumData
-import com.example.photomanager.data.BatteryData
 import com.example.photomanager.data.database.PhotoEntity
 import com.example.photomanager.data.PhotoViewerSettings
 import com.example.photomanager.data.PhotoViewerSettingsData
@@ -22,8 +21,7 @@ import kotlinx.coroutines.flow.filterNotNull
 @HiltViewModel
 class PhotoViewerViewModel @Inject constructor(
     private val albumData: AlbumData,
-    private val settingsData: PhotoViewerSettingsData,
-    batteryData: BatteryData
+    private val settingsData: PhotoViewerSettingsData
 ) : ViewModel() {
     /** 一次待写入的阅读进度，带上相册 ID 避免切换相册后写错目标。 */
     private data class ReadingProgress(val albumId: Long, val photoIndex: Int)
@@ -35,7 +33,6 @@ class PhotoViewerViewModel @Inject constructor(
     var photos by mutableStateOf<List<PhotoEntity>?>(null)
         private set
     val settings = settingsData.settings
-    val batteryLevel = batteryData.observeBatteryLevel()
 
     init {
         // 进度写入串行执行，连续翻页只保留最新位置，不为每一页启动一个写入协程。

@@ -111,10 +111,7 @@ private fun PhotoViewerReader(
             isMenuVisible = isMenuVisible,
             onNextPage = { goToNextPage() }
         )
-        PhotoViewerOverlay(
-            settings = settings,
-            batteryLevel = viewModel.batteryLevel
-        )
+        PhotoViewerOverlay(settings = settings)
     }
     if (isMenuVisible) {
         PhotoViewerMenu(
