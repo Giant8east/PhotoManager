@@ -1,99 +1,146 @@
-/** 图片浏览页系统能力控制器，统一管理窗口状态和音量键翻页。 */
+/** 图片浏览页系统能力控制器，按窗口能力拆分方法，并提供与 Composition 的绑定入口。 */
 package com.example.photomanager.pages.photoviewer
 
-import android.app.Activity
+import android.content.pm.ActivityInfo
 import android.view.KeyEvent
 import android.view.WindowManager
-import android.content.pm.ActivityInfo
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.platform.LocalContext
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import com.example.photomanager.data.*
+import com.example.photomanager.MainActivity
+import com.example.photomanager.data.PhotoViewerSettings
+import com.example.photomanager.data.ScreenOrientation
 
-// 构造函数接收Activity
-class PhotoViewerSystemController(private val activity: Activity) {
+/**
+ * 创建并绑定阅读页的系统能力控制器：配置变化时统一应用窗口设置，离开页面时恢复窗口。
+ * 翻页回调只在进入页面时绑定一次，不随每次配置变化重复注册。
+ */
+@Composable
+fun rememberPhotoViewerSystem(
+    settings: PhotoViewerSettings,
+    onNextPage: () -> Unit,
+    onPreviousPage: () -> Unit
+): PhotoViewerSystemController {
+    val activity = LocalContext.current as MainActivity
+    val controller = remember(activity) { PhotoViewerSystemController(activity) }
+    val latestOnNextPage by rememberUpdatedState(onNextPage)
+    val latestOnPreviousPage by rememberUpdatedState(onPreviousPage)
+    DisposableEffect(controller) {
+        controller.bindPaging({ latestOnNextPage() }, { latestOnPreviousPage() })
+        activity.photoViewerSystemController = controller
+        onDispose {
+            controller.restore()
+            activity.photoViewerSystemController = null
+        }
+    }
+    LaunchedEffect(controller, settings) { controller.apply(settings) }
+    return controller
+}
+
+class PhotoViewerSystemController(private val activity: MainActivity) {
     private val window = activity.window
     private val originalBrightness = window.attributes.screenBrightness // 原始系统亮度
     private val originalOrientation = activity.requestedOrientation // 原始屏幕方向
     private val originalCutoutMode = window.attributes.layoutInDisplayCutoutMode  // 原始布局
-    private var onNext: (() -> Unit)? = null
-    private var onPrevious: (() -> Unit)? = null
+    private var onNextPage: (() -> Unit)? = null
+    private var onPreviousPage: (() -> Unit)? = null
     private var volumeKeyPagingEnabled = false  // 是否启用音量键翻页
 
-    /** 应用阅读页的屏幕常亮、亮度、全屏、方向和音量键配置。 */
-    // 恢复值直接来自系统窗口属性，属于合法枚举
-    fun apply(settings: PhotoViewerSettings, next: () -> Unit, previous: () -> Unit) {
+    /** 绑定页面提供的翻页动作，控制器只负责把按键映射成这两个动作。 */
+    fun bindPaging(onNextPage: () -> Unit, onPreviousPage: () -> Unit) {
+        this.onNextPage = onNextPage
+        this.onPreviousPage = onPreviousPage
+    }
+
+    /** 统一应用阅读页的窗口和按键设置。 */
+    fun apply(settings: PhotoViewerSettings) {
         volumeKeyPagingEnabled = settings.volumeKeyPaging
-        onNext = next
-        onPrevious = previous
-        if (settings.keepScreenOn) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        applyKeepScreenOn(settings.keepScreenOn)
+        applyBrightness(settings.customBrightnessEnabled, settings.customBrightness)
+        applyCutoutMode(settings.fullScreen)
+        applySystemBars(settings.fullScreen)
+        applyOrientation(settings.screenOrientation)
+    }
+
+    /** 保持屏幕常量 */
+    private fun applyKeepScreenOn(enabled: Boolean) {
+        if (enabled) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
+
+    /** 关闭自定义亮度后交回系统控制。 */
+    private fun applyBrightness(customEnabled: Boolean, brightness: Float) {
         window.attributes = window.attributes.apply {
-            screenBrightness = if (settings.customBrightnessEnabled) settings.customBrightness
+            screenBrightness = if (customEnabled) brightness
             else WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
         }
+    }
 
-        // 获取系统栏控制器
-        val controller = WindowCompat.getInsetsController(window, window.decorView)
-        // 设置全屏后的系统栏行为: 临时显示系统栏，一段时间后自动隐藏
-        controller.systemBarsBehavior =
-            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        // 刘海屏区域
+    /** 全屏时允许内容绘制到刘海区域，非全屏恢复进入页面前的模式。 */
+    private fun applyCutoutMode(fullScreen: Boolean) {
         window.attributes = window.attributes.apply {
             layoutInDisplayCutoutMode =
-                if (settings.fullScreen)
-                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                if (fullScreen) WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
                 else originalCutoutMode
         }
-        // 显示或隐藏系统栏
-        if (settings.fullScreen) controller.hide(WindowInsetsCompat.Type.systemBars())
+    }
+
+    /** 全屏隐藏系统栏，并保留下拉临时显示的行为。 */
+    private fun applySystemBars(fullScreen: Boolean) {
+        val controller = WindowCompat.getInsetsController(window, window.decorView)
+        controller.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        if (fullScreen) controller.hide(WindowInsetsCompat.Type.systemBars())
         else controller.show(WindowInsetsCompat.Type.systemBars())
-        // 设置屏幕方向
-        val orientation = when (settings.screenOrientation) {
+    }
+
+    /** 将屏幕方向配置映射为窗口请求的朝向。 */
+    private fun applyOrientation(screenOrientation: ScreenOrientation) {
+        val orientation = when (screenOrientation) {
             ScreenOrientation.PORTRAIT -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
             ScreenOrientation.LANDSCAPE -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
             ScreenOrientation.AUTO -> ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
-            else -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            ScreenOrientation.SYSTEM -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
-        // 只有当前方向不一致时才修改
-        if (activity.requestedOrientation != orientation)
+        // 只有当前方向不一致时才修改，避免重复触发方向变更。
+        if (activity.requestedOrientation != orientation) {
             activity.requestedOrientation = orientation
+        }
     }
 
-    /** 将启用状态下的音量键转换为上一张或下一张。
-     *  接收 MainActivity 转交过来的按键事件
-     */
-    fun dispatchKeyEvent(event: KeyEvent): Boolean {
+    /** 将启用状态下的音量键转换为上一张或下一张，接收 MainActivity 转交的按键事件。 */
+    fun handleVolumeKey(event: KeyEvent): Boolean {
         if (!volumeKeyPagingEnabled) return false
-        if (event.keyCode != KeyEvent.KEYCODE_VOLUME_DOWN && event.keyCode != KeyEvent.KEYCODE_VOLUME_UP) return false
+        if (event.keyCode != KeyEvent.KEYCODE_VOLUME_DOWN &&
+            event.keyCode != KeyEvent.KEYCODE_VOLUME_UP
+        ) return false
         // 长按由系统重复发送 ACTION_DOWN，每次均翻页；松开只消费事件。
         if (event.action != KeyEvent.ACTION_DOWN) return true
-        return when (event.keyCode) {
-            KeyEvent.KEYCODE_VOLUME_DOWN -> {
-                onNext?.invoke()
-                true
-            }
-
-            KeyEvent.KEYCODE_VOLUME_UP -> {
-                onPrevious?.invoke()
-                true
-            }
-
-            else -> false
+        when (event.keyCode) {
+            KeyEvent.KEYCODE_VOLUME_DOWN -> onNextPage?.invoke()
+            KeyEvent.KEYCODE_VOLUME_UP -> onPreviousPage?.invoke()
         }
+        return true
     }
 
     /** 离开阅读页时关闭常亮，并恢复进入前的其他窗口配置。 */
     fun restore() {
         volumeKeyPagingEnabled = false
-        onNext = null
-        onPrevious = null
+        onNextPage = null
+        onPreviousPage = null
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        window.attributes = window.attributes.apply { screenBrightness = originalBrightness }
-        WindowCompat.getInsetsController(window, window.decorView).show(WindowInsetsCompat.Type.systemBars())
         window.attributes = window.attributes.apply {
+            screenBrightness = originalBrightness
             layoutInDisplayCutoutMode = originalCutoutMode
         }
+        showSystemBars()
         activity.requestedOrientation = originalOrientation
     }
 
