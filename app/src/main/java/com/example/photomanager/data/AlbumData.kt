@@ -10,7 +10,6 @@ import com.example.photomanager.data.database.*
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
