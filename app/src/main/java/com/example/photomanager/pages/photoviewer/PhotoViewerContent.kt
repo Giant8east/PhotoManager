@@ -43,12 +43,14 @@ fun PhotoViewerContent(
         if (settings.readingDirection == ReadingDirection.TOP_TO_BOTTOM) {
             VerticalPager(
                 state = pagerState,
+                beyondBoundsPageCount = 1,
                 pageSpacing = pageSpacing,
                 modifier = modifier
             ) { index -> photoAt(index) }
         } else {
             HorizontalPager(
                 state = pagerState,
+                beyondBoundsPageCount = 1,
                 reverseLayout = settings.readingDirection == ReadingDirection.RIGHT_TO_LEFT,
                 pageSpacing = pageSpacing,
                 modifier = modifier
