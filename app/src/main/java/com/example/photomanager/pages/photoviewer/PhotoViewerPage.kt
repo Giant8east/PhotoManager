@@ -70,6 +70,8 @@ private fun PhotoViewerReader(
     )
     val pagerScope = rememberCoroutineScope()
     var isMenuVisible by remember { mutableStateOf(false) }
+    var areControlsVisible by remember { mutableStateOf(false) }
+    var isPlaying by remember { mutableStateOf(false) }
 
     // 所有主动翻页入口共用这里的边界判断；Pager 的单指滑动也由同一页数范围约束。
     suspend fun goToPage(index: Int) {
@@ -85,16 +87,27 @@ private fun PhotoViewerReader(
         onPreviousPage = { pagerScope.launch { goToPreviousPage() } }
     )
 
+    LaunchedEffect(areControlsVisible, settings.fullScreen, isMenuVisible) {
+        if (settings.fullScreen) {
+            if (areControlsVisible || isMenuVisible) systemController.showSystemBars()
+            else systemController.hideSystemBars()
+        }
+    }
+
     // 翻页落定后才记录阅读进度，拖动过程中经过的中间页不写入。
     LaunchedEffect(pagerState, viewModel) {
-        snapshotFlow { pagerState.settledPage }.collect(viewModel::moveTo)
+        snapshotFlow { pagerState.settledPage }.collect { index ->
+            viewModel.moveTo(index)
+            // 所有翻页方式到达末页后，都由页面统一停止自动播放。
+            if (index == pagerState.pageCount - 1) isPlaying = false
+        }
     }
     Box(
         Modifier
             .fillMaxSize()
             .pointerInput(settings.fullScreen, systemController) {
                 detectTapGestures(
-                    onTap = { if (settings.fullScreen) systemController.showSystemBars() },
+                    onTap = { areControlsVisible = !areControlsVisible },
                     onLongPress = { isMenuVisible = true }
                 )
             }
@@ -104,12 +117,18 @@ private fun PhotoViewerReader(
             pagerState = pagerState,
             settings = settings
         )
-        PhotoViewerAutoPlayButton(
+        PhotoViewerControls(
             currentPage = pagerState.currentPage,
             pageCount = pagerState.pageCount,
             intervalSeconds = settings.autoPageSeconds,
+            readingDirection = settings.readingDirection,
+            isVisible = areControlsVisible,
+            isPlaying = isPlaying,
+            onPlayClick = { isPlaying = !isPlaying },
+            onVisibilityChanged = { areControlsVisible = it },
             isMenuVisible = isMenuVisible,
-            onNextPage = { goToNextPage() }
+            onNextPage = { goToNextPage() },
+            onPageSelected = { index -> pagerScope.launch { goToPage(index) } }
         )
         PhotoViewerOverlay(settings = settings)
     }
