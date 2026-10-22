@@ -130,7 +130,11 @@ private fun PhotoViewerReader(
             onNextPage = { goToNextPage() },
             onPageSelected = { index -> pagerScope.launch { goToPage(index) } }
         )
-        PhotoViewerOverlay(settings = settings)
+        PhotoViewerOverlay(
+            settings = settings,
+            currentPage = pagerState.currentPage,
+            pageCount = pagerState.pageCount
+        )
     }
     if (isMenuVisible) {
         PhotoViewerMenu(
