@@ -144,6 +144,12 @@ class PhotoViewerSystemController(private val activity: MainActivity) {
         activity.requestedOrientation = originalOrientation
     }
 
+    /** 控制栏收起时恢复全屏，不改变持久化配置。 */
+    fun hideSystemBars() {
+        WindowCompat.getInsetsController(window, window.decorView)
+            .hide(WindowInsetsCompat.Type.systemBars())
+    }
+
     /** 单击阅读页面时同时显示顶部状态栏和底部导航栏。 */
     fun showSystemBars() {
         WindowCompat.getInsetsController(window, window.decorView)
