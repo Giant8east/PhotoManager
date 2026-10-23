@@ -44,6 +44,8 @@ internal class PhotoViewerPager(
     val settledPage get() = pagerState.settledPage
     val pageCount get() = pagerState.pageCount
 
+    /** 根据阅读方向选择横向或纵向 Pager，配置朝向、页面间隔、相邻页预加载、
+     * 处理图片区域的安全区避让、连接手势越界状态、叠加边缘反馈绘制 */
     @OptIn(ExperimentalLayoutApi::class)
     @Composable
     fun Content(settings: PhotoViewerSettings, pageContent: @Composable (Int) -> Unit) {
