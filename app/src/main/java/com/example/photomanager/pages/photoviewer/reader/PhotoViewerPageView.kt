@@ -74,9 +74,9 @@ internal fun PhotoViewerPageView(
     val isVisible by remember(viewerPager, index) {
         derivedStateOf { viewerPager.isPageVisible(index) }
     }
-    // 只有从完全不可见重新进入时恢复；局部可见和翻页中的重组不重置图片。
-    LaunchedEffect(transform, isVisible) {
-        if (isVisible) transform.reset()
+    // 在屏幕外准备好初始状态，避免重入首帧先画旧缩放再跳回；部分可见时不重置。
+    SideEffect {
+        if (!isVisible) transform.reset()
     }
 
     Box(

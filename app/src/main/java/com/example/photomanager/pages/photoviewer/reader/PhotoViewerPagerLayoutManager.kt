@@ -171,6 +171,15 @@ internal class PhotoViewerPagerLayoutManager(
     val settledPage get() = pagerState.settledPage
     val pageCount get() = pagerState.pageCount
 
+    /** 组合中的相邻页未必可见，只有页面矩形与视口相交才算进入。 */
+    fun isPageVisible(index: Int): Boolean {
+        val layout = pagerState.layoutInfo
+        return layout.visiblePagesInfo.any {
+            it.index == index && it.offset < layout.viewportEndOffset &&
+                it.offset + layout.pageSize > layout.viewportStartOffset
+        }
+    }
+
     @Composable
     fun Content(settings: PhotoViewerSettings, pageContent: @Composable (Int) -> Unit) {
         val pageSpacing = if (settings.showPageGap) 12.dp else 0.dp

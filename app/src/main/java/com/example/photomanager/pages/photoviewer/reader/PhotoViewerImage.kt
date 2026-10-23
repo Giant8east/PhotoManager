@@ -1,9 +1,10 @@
-/** 保存单张图片的变换并显示图片；手势统一由固定阅读视口接收。 */
+/** 图片几何计算与可见区域绘制，不管理请求或加载状态。 */
 package com.example.photomanager.pages.photoviewer.reader
 
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.*
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -11,17 +12,6 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import coil.compose.AsyncImagePainter
-import coil.compose.rememberAsyncImagePainter
-import coil.request.ImageRequest
-import coil.size.SizeResolver
-import kotlinx.coroutines.flow.first
-import com.example.photomanager.data.PageScale
-import com.example.photomanager.data.database.PhotoEntity
 
 /** 与 EhViewer 一致，限制相对于图片尺寸的实际比例。 */
 private const val MinScale = 0.1f
@@ -62,6 +52,12 @@ internal class PhotoTransform(private val contentScale: ContentScale) {
     fun resizeImage(size: Size) {
         imageSize = size
         offset = constrain(offset, scale)
+    }
+
+    /** 页面完全离开视口后恢复初始显示，保留解码尺寸供再次进入使用。 */
+    fun reset() {
+        scale = 1f
+        offset = Offset.Zero
     }
 
     private fun constrain(position: Offset, zoom: Float): Offset {
@@ -116,46 +112,10 @@ internal class PhotoTransform(private val contentScale: ContentScale) {
 internal data class PhotoDrawRegion(val image: Rect, val source: Rect, val destination: Rect)
 
 @Composable
-internal fun PhotoViewerImage(
-    photo: PhotoEntity,
-    pageScale: PageScale,
-    viewerPager: PhotoViewerPager,
-    index: Int
-) {
-    val contentScale = when (pageScale) {
-        PageScale.ORIGINAL -> ContentScale.None
-        PageScale.FIT_WIDTH -> ContentScale.FillWidth
-        PageScale.FIT_HEIGHT -> ContentScale.FillHeight
-        PageScale.FIT_SCREEN -> ContentScale.Fit
-    }
-    val transform = remember(photo.id, pageScale) { PhotoTransform(contentScale) }
-    val context = LocalContext.current
-    val request = remember(photo.contentUri, transform, context) {
-        ImageRequest.Builder(context).data(photo.contentUri)
-            .size(SizeResolver {
-                val viewport = snapshotFlow { transform.viewport }
-                    .first { it.width > 0f && it.height > 0f }
-                coil.size.Size(viewport.width.toInt(), viewport.height.toInt())
-            }).build()
-    }
-    val painter = rememberAsyncImagePainter(
-        model = request,
-        contentScale = contentScale,
-        onSuccess = { transform.resizeImage(it.painter.intrinsicSize) }
-    )
-    // 缓存命中也从成功状态同步几何；状态在组合阶段读取，不等待额外用户操作。
-    val loadedPainter = (painter.state as? AsyncImagePainter.State.Success)?.painter
-    SideEffect { loadedPainter?.let { transform.resizeImage(it.intrinsicSize) } }
-    DisposableEffect(viewerPager, index, transform) {
-        viewerPager.attachImage(index, transform)
-        onDispose { viewerPager.detachImage(index, transform) }
-    }
-
+internal fun PhotoViewerImage(painter: Painter, transform: PhotoTransform) {
     Canvas(
         modifier = Modifier
             .fillMaxSize()
-            .semantics { contentDescription = photo.name }
-            .onSizeChanged { transform.resizeViewport(Size(it.width.toFloat(), it.height.toFloat())) }
     ) {
         val region = transform.drawRegion() ?: return@Canvas
         val visible = region.destination

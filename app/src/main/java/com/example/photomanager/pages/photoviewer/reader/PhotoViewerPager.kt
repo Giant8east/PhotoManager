@@ -43,6 +43,7 @@ internal class PhotoViewerPager(
     val currentPage get() = layout.currentPage
     val settledPage get() = layout.settledPage
     val pageCount get() = layout.pageCount
+    fun isPageVisible(index: Int) = layout.isPageVisible(index)
     fun attachImage(index: Int, transform: PhotoTransform) = layout.attachImage(index, transform)
     fun detachImage(index: Int, transform: PhotoTransform) = layout.detachImage(index, transform)
     suspend fun goToPage(index: Int) = layout.goToPage(index)
