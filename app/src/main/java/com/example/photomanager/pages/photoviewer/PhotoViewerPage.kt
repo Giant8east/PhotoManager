@@ -1,9 +1,15 @@
 /** 图片浏览页面，组装阅读内容、悬浮信息与系统能力，并集中处理主动翻页。 */
 package com.example.photomanager.pages.photoviewer
 
+import com.example.photomanager.pages.photoviewer.components.PhotoViewerControls
+import com.example.photomanager.pages.photoviewer.components.PhotoViewerMenu
+import com.example.photomanager.pages.photoviewer.components.PhotoViewerOverlay
+import com.example.photomanager.pages.photoviewer.reader.PhotoViewerImage
+import com.example.photomanager.pages.photoviewer.reader.rememberPhotoViewerPager
+import com.example.photomanager.pages.photoviewer.system.rememberPhotoViewerSystem
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
@@ -18,7 +24,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.photomanager.data.database.PhotoEntity
 import com.example.photomanager.data.PhotoViewerSettings
@@ -88,18 +93,17 @@ private fun PhotoViewerReader(
             viewModel.moveTo(index)
         }
     }
-    Box(
-        Modifier
-            .fillMaxSize()
-            .pointerInput(settings.fullScreen, systemController) {
-                detectTapGestures(
-                    onTap = { areControlsVisible = !areControlsVisible },
-                    onLongPress = { isMenuVisible = true }
-                )
-            }
-    ) {
-        viewerPager.Content(settings) { index ->
-            PhotoViewerImage(photos[index], settings.pageScale)
+    Box(Modifier.fillMaxSize()) {
+        viewerPager.Content(
+            settings,
+            onTap = { areControlsVisible = !areControlsVisible },
+            onLongPress = { isMenuVisible = true }
+        ) { index ->
+            PhotoViewerImage(
+                photos[index], settings.pageScale,
+                viewerPager = viewerPager,
+                index = index
+            )
         }
         PhotoViewerControls(
             currentPage = viewerPager.currentPage,
