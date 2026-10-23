@@ -31,6 +31,7 @@ import com.example.photomanager.R
 import com.example.photomanager.data.ReadingDirection
 import com.example.photomanager.ui.theme.Teal
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -55,8 +56,10 @@ fun PhotoViewerControls(
     // 自动播放
     LaunchedEffect(isPlaying, intervalSeconds, isMenuVisible, isDragging) {
         if (!isPlaying || isMenuVisible || isDragging) return@LaunchedEffect
-        delay(intervalSeconds * 1000L)
-        nextPage()
+        while (isActive) {
+            delay(intervalSeconds * 1000L)
+            nextPage()
+        }
     }
     // 自动隐藏控制组件
     LaunchedEffect(isVisible, isDragging) {
