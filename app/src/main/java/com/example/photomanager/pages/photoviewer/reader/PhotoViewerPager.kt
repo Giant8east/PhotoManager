@@ -23,6 +23,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
+import android.view.ViewConfiguration
 import com.example.photomanager.data.PhotoViewerSettings
 import com.example.photomanager.data.ReadingDirection
 import kotlinx.coroutines.CoroutineScope
@@ -32,9 +34,14 @@ internal class PhotoViewerPager(
     pagerState: PagerState,
     readingDirection: ReadingDirection,
     animationScope: CoroutineScope,
-    onEndReached: () -> Unit
+    onEndReached: () -> Unit,
+    minimumFlingVelocity: Float,
+    maximumFlingVelocity: Float
 ) {
-    private val layout = PhotoViewerPagerLayoutManager(pagerState, readingDirection, animationScope, onEndReached)
+    private val layout = PhotoViewerPagerLayoutManager(pagerState, readingDirection, animationScope, onEndReached).apply {
+        this.minimumFlingVelocity = minimumFlingVelocity
+        this.maximumFlingVelocity = maximumFlingVelocity
+    }
     private val gestures = PhotoViewerGestureRecognizer(
         layout::onDown, layout::onPosition, layout::onDrag,
         layout::onScale, layout::onUp, layout::onDoubleTap
@@ -85,9 +92,11 @@ internal fun rememberPhotoViewerPager(
 ): PhotoViewerPager {
     val pagerState = rememberPagerState(initialPage = initialIndex, pageCount = { pageCount })
     val animationScope = rememberCoroutineScope()
+    val configuration = ViewConfiguration.get(LocalContext.current)
     val currentOnEndReached by rememberUpdatedState(onEndReached)
     val viewerPager = remember(pagerState, readingDirection) {
-        PhotoViewerPager(pagerState, readingDirection, animationScope) { currentOnEndReached() }
+        PhotoViewerPager(pagerState, readingDirection, animationScope, { currentOnEndReached() },
+            configuration.scaledMinimumFlingVelocity.toFloat(), configuration.scaledMaximumFlingVelocity.toFloat())
     }
     DisposableEffect(viewerPager) {
         onDispose { viewerPager.dispose() }

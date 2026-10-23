@@ -5,6 +5,9 @@ import com.example.photomanager.pages.photoviewer.edge.PhotoViewerEdgeEffect
 import com.example.photomanager.pages.photoviewer.edge.PhotoViewerEdge
 
 import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.AnimationState
+import androidx.compose.animation.core.animateDecay
+import androidx.compose.animation.core.exponentialDecay
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -21,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Velocity
 import com.example.photomanager.data.PhotoViewerSettings
 import com.example.photomanager.data.ReadingDirection
 import kotlin.math.abs
@@ -29,6 +33,7 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.coroutineScope
 
 /** 只有对应方向确实不能继续滚动时，剩余距离才属于相册越界。 */
 internal fun isReaderBoundary(
@@ -70,12 +75,17 @@ internal class PhotoViewerPagerLayoutManager(
     private val images = mutableMapOf<Int, PhotoTransform>()
     private var gestureJob: Job? = null
     private var zoomAnimation: Job? = null
+    private var flingJob: Job? = null
+    private var releaseVelocity = Velocity.Zero
+    var minimumFlingVelocity = 50f
+    var maximumFlingVelocity = 8000f
 
     fun attachImage(index: Int, transform: PhotoTransform) {
         images[index] = transform
     }
 
     fun detachImage(index: Int, transform: PhotoTransform) {
+        if (index == pagerState.currentPage) flingJob?.cancel()
         if (images[index] === transform) images.remove(index)
     }
 
@@ -137,6 +147,7 @@ internal class PhotoViewerPagerLayoutManager(
     }
 
     fun onDoubleTap(focus: Offset) {
+        flingJob?.cancel()
         val image = images[pagerState.currentPage] ?: return
         zoomAnimation?.cancel()
         val startScale = image.scale
@@ -237,10 +248,18 @@ internal class PhotoViewerPagerLayoutManager(
         }
     }
 
-    fun resizeViewport(size: IntSize) { viewportSize = size }
+    fun resizeViewport(size: IntSize) {
+        if (viewportSize != size) flingJob?.cancel()
+        viewportSize = size
+    }
 
     /** 主动越界时反馈但不移动页码；播放状态由页面通过回调处理。 */
     suspend fun goToPage(index: Int) {
+        flingJob?.cancel()
+        dragDeltas?.close()
+        dragDeltas = null
+        gestureJob?.cancel()
+        releaseEdge()
         if (index !in 0 until pagerState.pageCount) {
             val isEnd = index >= pagerState.pageCount
             pullBoundary(isEnd)
@@ -260,6 +279,8 @@ internal class PhotoViewerPagerLayoutManager(
 
     /** 整段手势共用一个滚动会话，避免逐帧抢占 Pager 导致抖动。 */
     fun onDown(position: Offset, touchSlop: Float) {
+        flingJob?.cancel()
+        releaseVelocity = Velocity.Zero
         gestureJob?.cancel()
         zoomAnimation?.cancel()
         beginDrag()
@@ -271,7 +292,10 @@ internal class PhotoViewerPagerLayoutManager(
             pagerState.scroll(MutatePriority.UserInput) {
                 for (delta in deltas) dragImageAndPage(this, delta)
                 releaseEdge()
+                val canFling = pagerState.currentPage == startPage &&
+                    abs(pagerState.currentPageOffsetFraction) < 0.0001f
                 settlePage(this, startPage, touchSlop)
+                if (canFling) startImageFling(releaseVelocity)
             }
             resetInactiveImages()
         }
@@ -280,19 +304,64 @@ internal class PhotoViewerPagerLayoutManager(
     fun onDrag(delta: Offset) { dragDeltas?.trySend(delta) }
 
     fun onScale(focus: Offset, zoom: Float, pan: Offset) {
+        flingJob?.cancel()
         images[pagerState.currentPage]?.let { it.zoomTo(it.scale * zoom, focus, pan) }
     }
 
-    fun onUp() {
+    fun onUp(velocity: Velocity) {
+        releaseVelocity = velocity
         dragDeltas?.close()
         dragDeltas = null
     }
 
     fun dispose() {
+        flingJob?.cancel()
         dragDeltas?.close()
         gestureJob?.cancel()
         zoomAnimation?.cancel()
         edgeAnimation?.cancel()
         edges.values.forEach { it.dispose() }
+    }
+
+    /** 图片惯性不分发给 Pager；一轴撞边后停止，另一轴继续减速。 */
+    private fun startImageFling(velocity: Velocity) {
+        val image = images[pagerState.currentPage] ?: return
+        flingJob = animationScope.launch {
+            coroutineScope {
+                if (image.canPanHorizontally) launch { flingAxis(image, velocity.x, false) }
+                if (image.canPanVertically) launch { flingAxis(image, velocity.y, true) }
+            }
+        }
+    }
+
+    private suspend fun flingAxis(image: PhotoTransform, speed: Float, isVerticalAxis: Boolean) {
+        if (abs(speed) < minimumFlingVelocity) return
+        val initialVelocity = speed.coerceIn(-maximumFlingVelocity, maximumFlingVelocity)
+        var previous = 0f
+        AnimationState(initialValue = 0f, initialVelocity = initialVelocity).animateDecay(
+            exponentialDecay()
+        ) {
+            val delta = value - previous
+            previous = value
+            val consumed = image.pan(if (isVerticalAxis) Offset(0f, delta) else Offset(delta, 0f))
+            val actual = if (isVerticalAxis) consumed.y else consumed.x
+            if (abs(delta - actual) > 0.01f) {
+                // 参考 PageFling：阅读轴有相邻页时不播放撞边反馈，也不惯性翻页。
+                val isReadingAxis = isVerticalAxis == isVertical
+                val logicalDirection = initialVelocity * scrollDirection
+                if (!isReadingAxis || isReaderBoundary(
+                        logicalDirection, pagerState.canScrollForward, pagerState.canScrollBackward
+                    )) {
+                    val edge = if (isVerticalAxis) {
+                        if (initialVelocity > 0) PhotoViewerEdge.TOP else PhotoViewerEdge.BOTTOM
+                    } else {
+                        if (initialVelocity > 0) PhotoViewerEdge.LEFT else PhotoViewerEdge.RIGHT
+                    }
+                    val depth = if (isVerticalAxis) viewportSize.height else viewportSize.width
+                    edges.getValue(edge).absorb(abs(initialVelocity), depth.toFloat())
+                }
+                cancelAnimation()
+            }
+        }
     }
 }

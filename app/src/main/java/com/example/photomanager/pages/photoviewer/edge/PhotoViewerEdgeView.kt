@@ -38,7 +38,7 @@ internal fun PhotoViewerEdgeView(
             if (glowScale == 0f) return@forEach
             val ellipseDepth = radius * glowScale
             val visibleDepth = arcHeight * glowScale
-            val color = Color(0x339E9E9E)
+            val color = Color(0x339E9E9E).copy(alpha = (0.2f * effect.alpha).coerceIn(0f, 1f))
             // 大圆的大部分位于视口外，只裁出中间宽、两端窄的圆弧。
             clipRect {
                 if (isVertical) {
