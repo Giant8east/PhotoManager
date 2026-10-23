@@ -4,6 +4,7 @@ package com.example.photomanager.pages.photoviewer.reader
 import com.example.photomanager.pages.photoviewer.edge.PhotoViewerEdgeEffect
 
 import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalOverscrollConfiguration
@@ -126,12 +127,10 @@ internal class PhotoViewerPagerLayoutManager(
         val image = images[pagerState.currentPage] ?: return
         zoomAnimation?.cancel()
         val startScale = image.scale
-        val startOffset = image.offset
-        val restore = startScale > 1.01f
+        val targetScale = image.nextDoubleTapScale()
         zoomAnimation = animationScope.launch {
-            animate(0f, 1f, animationSpec = tween(300)) { progress, _ ->
-                if (restore) image.restore(progress, startScale, startOffset)
-                else image.zoomTo(startScale + (2f - startScale) * progress, focus)
+            animate(startScale, targetScale, animationSpec = tween(300, easing = LinearOutSlowInEasing)) { scale, _ ->
+                image.zoomTo(scale, focus)
             }
         }
     }
@@ -203,6 +202,7 @@ internal class PhotoViewerPagerLayoutManager(
             if (isEnd) onEndReached()
             return
         }
+        zoomAnimation?.cancel()
         pagerState.scrollToPage(index)
     }
 

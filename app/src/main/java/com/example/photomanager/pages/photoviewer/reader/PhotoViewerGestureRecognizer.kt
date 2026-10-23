@@ -22,7 +22,11 @@ internal class PhotoViewerGestureRecognizer(
 ) {
     fun Modifier.recognize(onTap: () -> Unit, onLongPress: () -> Unit): Modifier =
         pointerInput(this@PhotoViewerGestureRecognizer, onTap, onLongPress) {
-            detectTapGestures(onTap = { onTap() }, onLongPress = { onLongPress() }, onDoubleTap = onDoubleTap)
+            detectTapGestures(
+                onTap = { onTap() },
+                onLongPress = { onLongPress() },
+                onDoubleTap = onDoubleTap
+            )
         }.pointerInput(this@PhotoViewerGestureRecognizer) {
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
@@ -41,7 +45,11 @@ internal class PhotoViewerGestureRecognizer(
                         val pan = event.calculatePan()
                         if (hasMultiplePointers) {
                             if (pressed.size > 1) {
-                                onScale(event.calculateCentroid(useCurrent = false), event.calculateZoom(), pan)
+                                onScale(
+                                    event.calculateCentroid(useCurrent = false),
+                                    event.calculateZoom(),
+                                    pan
+                                )
                             }
                             event.changes.forEach { it.consume() }
                         } else {
@@ -54,7 +62,8 @@ internal class PhotoViewerGestureRecognizer(
                             }
                             if (isDragging) {
                                 onDrag(drag)
-                                event.changes.filter { it.positionChanged() }.forEach { it.consume() }
+                                event.changes.filter { it.positionChanged() }
+                                    .forEach { it.consume() }
                             }
                         }
                     } while (event.changes.any { it.pressed })
