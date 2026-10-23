@@ -2,6 +2,7 @@
 package com.example.photomanager.pages.photoviewer.reader
 
 import com.example.photomanager.pages.photoviewer.edge.PhotoViewerEdgeEffect
+import com.example.photomanager.pages.photoviewer.edge.PhotoViewerEdge
 
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.LinearOutSlowInEasing
@@ -62,7 +63,7 @@ internal class PhotoViewerPagerLayoutManager(
 ) {
     private val isVertical = readingDirection == ReadingDirection.TOP_TO_BOTTOM
     private var viewportSize = IntSize.Zero
-    val edge = PhotoViewerEdgeEffect(animationScope)
+    val edges = PhotoViewerEdge.entries.associateWith { PhotoViewerEdgeEffect(animationScope) }
     private var isPulling = false
     private var edgeAnimation: Job? = null
 
@@ -78,20 +79,26 @@ internal class PhotoViewerPagerLayoutManager(
         if (images[index] === transform) images.remove(index)
     }
 
+    /** 落页完成后旧页已离屏，直接复原，避免依赖布局可见性通知的时序。 */
+    private fun resetInactiveImages() {
+        images.forEach { (index, image) ->
+            if (index != pagerState.currentPage) image.reset()
+        }
+    }
+
     private fun axisDelta(delta: Offset) = if (isVertical) delta.y else delta.x
     private val scrollDirection get() = if (readingDirection == ReadingDirection.RIGHT_TO_LEFT) 1f else -1f
 
     /** 同一段距离按边缘收回、图片平移、页面滚动的顺序消费，不重复分发。 */
     private fun dragImageAndPage(scrollScope: ScrollScope, delta: Offset) {
-        var available = delta
-        val axis = axisDelta(available)
-        if (edge.distance != 0f && axis * edge.distance < 0f) {
-            val consumed = if (abs(axis) <= abs(edge.distance)) axis else -edge.distance
-            pullEdge(consumed)
-            available -= if (isVertical) Offset(0f, consumed) else Offset(consumed, 0f)
-        }
-        if (abs(pagerState.currentPageOffsetFraction) < 0.0001f) {
-            available -= images[pagerState.currentPage]?.pan(available) ?: Offset.Zero
+        var available = Offset(
+            retractAxis(delta.x, PhotoViewerEdge.LEFT, PhotoViewerEdge.RIGHT),
+            retractAxis(delta.y, PhotoViewerEdge.TOP, PhotoViewerEdge.BOTTOM)
+        )
+        val image = images[pagerState.currentPage]
+        val isPageAligned = abs(pagerState.currentPageOffsetFraction) < 0.0001f
+        if (isPageAligned) {
+            available -= image?.pan(available) ?: Offset.Zero
         }
         val requested = axisDelta(available) * scrollDirection
         val consumed = scrollScope.scrollBy(requested)
@@ -102,7 +109,13 @@ internal class PhotoViewerPagerLayoutManager(
                 pagerState.canScrollBackward
             )
         ) {
-            pullEdge(remaining * scrollDirection)
+            val physicalRemaining = remaining * scrollDirection
+            pullEdges(if (isVertical) Offset(0f, physicalRemaining) else Offset(physicalRemaining, 0f))
+        }
+        // 非阅读轴只反馈确实能平移的图片边界，不让适配后留白区域产生虚假越界。
+        if (isPageAligned && abs(pagerState.currentPageOffsetFraction) < 0.0001f) {
+            if (isVertical && image?.canPanHorizontally == true) pullEdges(Offset(available.x, 0f))
+            if (!isVertical && image?.canPanVertically == true) pullEdges(Offset(0f, available.y))
         }
     }
 
@@ -135,19 +148,36 @@ internal class PhotoViewerPagerLayoutManager(
         }
     }
 
-    private fun pullEdge(delta: Float) = edge.pull(delta)
+    private fun retractAxis(delta: Float, leading: PhotoViewerEdge, trailing: PhotoViewerEdge): Float =
+        when {
+            delta < 0f -> delta + edges.getValue(leading).retract(-delta)
+            delta > 0f -> delta - edges.getValue(trailing).retract(delta)
+            else -> delta
+        }
+
+    /** 正向手指位移拉出左/上边缘，负向拉出右/下边缘，两个轴可同时生效。 */
+    private fun pullEdges(delta: Offset) {
+        if (delta.x > 0.01f) edges.getValue(PhotoViewerEdge.LEFT).pull(delta.x)
+        if (delta.x < -0.01f) edges.getValue(PhotoViewerEdge.RIGHT).pull(-delta.x)
+        if (delta.y > 0.01f) edges.getValue(PhotoViewerEdge.TOP).pull(delta.y)
+        if (delta.y < -0.01f) edges.getValue(PhotoViewerEdge.BOTTOM).pull(-delta.y)
+    }
+
+    fun onPosition(position: Offset) {
+        edges.values.forEach { it.touchPosition = position }
+    }
 
     /** 手指接管时取消模拟拉动或回缩，避免多个任务争用反馈状态。 */
     private fun beginDrag() {
         edgeAnimation?.cancel()
-        edge.begin()
+        edges.values.forEach { it.begin() }
         isPulling = true
     }
 
     private fun releaseEdge() {
         if (!isPulling) return
         isPulling = false
-        edge.release()
+        edges.values.forEach { it.release() }
     }
 
     /** 模拟 300ms 拉动后释放，与手势使用相同的距离和回缩机制。 */
@@ -156,12 +186,18 @@ internal class PhotoViewerPagerLayoutManager(
         edgeAnimation?.cancel()
         val isTrailingEdge = isEnd != (readingDirection == ReadingDirection.RIGHT_TO_LEFT)
         val depth = if (isVertical) viewportSize.height else viewportSize.width
-        val targetDistance = depth / 7f * if (isTrailingEdge) -1f else 1f
+        val direction = if (isVertical) {
+            if (isTrailingEdge) PhotoViewerEdge.BOTTOM else PhotoViewerEdge.TOP
+        } else {
+            if (isTrailingEdge) PhotoViewerEdge.RIGHT else PhotoViewerEdge.LEFT
+        }
+        val edge = edges.getValue(direction)
+        val targetDistance = depth / 7f
         edge.touchPosition = Offset(viewportSize.width / 2f, viewportSize.height / 2f)
         edge.begin()
         edgeAnimation = animationScope.launch {
             animate(0f, targetDistance, animationSpec = tween(300)) { value, _ ->
-                pullEdge(value - edge.distance)
+                edge.pull(value - edge.distance)
             }
             edge.release()
         }
@@ -213,6 +249,7 @@ internal class PhotoViewerPagerLayoutManager(
         }
         zoomAnimation?.cancel()
         pagerState.scrollToPage(index)
+        resetInactiveImages()
     }
 
     suspend fun nextPage() = goToPage(pagerState.currentPage + 1)
@@ -226,7 +263,7 @@ internal class PhotoViewerPagerLayoutManager(
         gestureJob?.cancel()
         zoomAnimation?.cancel()
         beginDrag()
-        edge.touchPosition = position
+        onPosition(position)
         val deltas = Channel<Offset>(Channel.UNLIMITED)
         dragDeltas = deltas
         val startPage = pagerState.currentPage
@@ -236,6 +273,7 @@ internal class PhotoViewerPagerLayoutManager(
                 releaseEdge()
                 settlePage(this, startPage, touchSlop)
             }
+            resetInactiveImages()
         }
     }
 
@@ -255,6 +293,6 @@ internal class PhotoViewerPagerLayoutManager(
         gestureJob?.cancel()
         zoomAnimation?.cancel()
         edgeAnimation?.cancel()
-        edge.dispose()
+        edges.values.forEach { it.dispose() }
     }
 }

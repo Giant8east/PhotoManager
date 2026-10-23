@@ -12,6 +12,14 @@ import androidx.compose.ui.geometry.Offset
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlin.math.min
+
+internal enum class PhotoViewerEdge {
+    LEFT, RIGHT, TOP, BOTTOM;
+
+    val isVertical get() = this == TOP || this == BOTTOM
+    val isTrailing get() = this == RIGHT || this == BOTTOM
+}
 
 internal class PhotoViewerEdgeEffect(private val scope: CoroutineScope) {
     var distance by mutableFloatStateOf(0f)
@@ -29,12 +37,21 @@ internal class PhotoViewerEdgeEffect(private val scope: CoroutineScope) {
     }
 
     fun pull(delta: Float) {
-        distance += delta
+        releaseAnimation?.cancel()
+        distance = (distance + delta).coerceAtLeast(0f)
         shrink = 1f
+    }
+
+    /** 反向距离先抵消当前边缘拉动，返回实际消费量，不影响另一个轴。 */
+    fun retract(amount: Float): Float {
+        val consumed = min(amount, distance)
+        if (consumed > 0f) pull(-consumed)
+        return consumed
     }
 
     /** 从当前显示比例连续回缩，松手时不重置圆弧。 */
     fun release() {
+        if (distance == 0f) return
         releaseAnimation?.cancel()
         releaseAnimation = scope.launch {
             animate(shrink, 0f, animationSpec = tween(600, easing = EdgeDecelerate)) { value, _ ->

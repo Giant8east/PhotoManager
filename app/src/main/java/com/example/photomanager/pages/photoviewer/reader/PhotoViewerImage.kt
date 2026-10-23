@@ -32,6 +32,11 @@ internal class PhotoTransform(private val contentScale: ContentScale) {
     private val initialScale get() =
         if (hasImageGeometry) contentScale.computeScaleFactor(imageSize, viewport).scaleX else 1f
 
+    val canPanHorizontally get() = hasImageGeometry &&
+        imageSize.width * initialScale * scale > viewport.width + 0.01f
+    val canPanVertically get() = hasImageGeometry &&
+        imageSize.height * initialScale * scale > viewport.height + 0.01f
+
     /** 档位按实际比例排序，返回值换算为绘制使用的相对倍数。 */
     fun nextDoubleTapScale(): Float {
         if (!hasImageGeometry) return scale
