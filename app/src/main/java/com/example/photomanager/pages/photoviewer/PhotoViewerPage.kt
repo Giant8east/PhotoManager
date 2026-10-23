@@ -4,7 +4,7 @@ package com.example.photomanager.pages.photoviewer
 import com.example.photomanager.pages.photoviewer.components.PhotoViewerControls
 import com.example.photomanager.pages.photoviewer.components.PhotoViewerMenu
 import com.example.photomanager.pages.photoviewer.components.PhotoViewerOverlay
-import com.example.photomanager.pages.photoviewer.reader.PhotoViewerImage
+import com.example.photomanager.pages.photoviewer.reader.PhotoViewerPageView
 import com.example.photomanager.pages.photoviewer.reader.rememberPhotoViewerPager
 import com.example.photomanager.pages.photoviewer.system.rememberPhotoViewerSystem
 
@@ -99,7 +99,7 @@ private fun PhotoViewerReader(
             onTap = { areControlsVisible = !areControlsVisible },
             onLongPress = { isMenuVisible = true }
         ) { index ->
-            PhotoViewerImage(
+            PhotoViewerPageView(
                 photos[index], settings.pageScale,
                 viewerPager = viewerPager,
                 index = index
