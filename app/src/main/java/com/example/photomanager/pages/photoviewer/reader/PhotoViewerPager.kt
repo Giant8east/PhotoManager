@@ -35,9 +35,8 @@ internal class PhotoViewerPager(
     onEndReached: () -> Unit
 ) {
     private val layout = PhotoViewerPagerLayoutManager(pagerState, readingDirection, animationScope, onEndReached)
-    private val isVertical = readingDirection == ReadingDirection.TOP_TO_BOTTOM
     private val gestures = PhotoViewerGestureRecognizer(
-        layout::onDown, { layout.edge.touchPosition = it }, layout::onDrag,
+        layout::onDown, layout::onPosition, layout::onDrag,
         layout::onScale, layout::onUp, layout::onDoubleTap
     )
     val currentPage get() = layout.currentPage
@@ -71,7 +70,7 @@ internal class PhotoViewerPager(
         }
         Box(viewport) {
             layout.Content(settings, pageContent)
-            PhotoViewerEdgeView(Modifier.fillMaxSize(), isVertical, layout.edge)
+            PhotoViewerEdgeView(Modifier.fillMaxSize(), layout.edges)
         }
     }
 }
