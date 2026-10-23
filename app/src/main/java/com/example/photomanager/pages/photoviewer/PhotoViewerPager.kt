@@ -51,9 +51,8 @@ internal class PhotoViewerPager(
     fun Content(settings: PhotoViewerSettings, pageContent: @Composable (Int) -> Unit) {
         val imageInsets = if (settings.fullScreen) WindowInsets(0, 0, 0, 0)
         else WindowInsets.systemBarsIgnoringVisibility.union(WindowInsets.displayCutout)
-        val modifier = bindGestures(
-            Modifier.fillMaxSize().windowInsetsPadding(imageInsets).clipToBounds()
-        )
+        val modifier = Modifier.fillMaxSize().windowInsetsPadding(imageInsets).clipToBounds().bindGestures()
+
         val pageSpacing = if (settings.showPageGap) 12.dp else 0.dp
         Box(Modifier.fillMaxSize()) {
             CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
@@ -94,7 +93,7 @@ internal class PhotoViewerPager(
     suspend fun previousPage() = goToPage(pagerState.currentPage - 1)
 
     /** 未消费的拖动交给边缘状态；触点观察不消费 Pager 的手势事件。 */
-    private fun bindGestures(modifier: Modifier): Modifier = modifier
+    private fun Modifier.bindGestures(): Modifier = this // Modifier 的扩展函数
         .nestedScroll(edgeState)
         .pointerInput(edgeState) {
             awaitEachGesture {
