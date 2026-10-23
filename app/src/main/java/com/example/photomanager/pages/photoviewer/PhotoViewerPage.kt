@@ -2,12 +2,10 @@
 package com.example.photomanager.pages.photoviewer
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -56,7 +54,6 @@ fun PhotoViewerPage(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun PhotoViewerReader(
     viewModel: PhotoViewerViewModel,
@@ -64,27 +61,18 @@ private fun PhotoViewerReader(
     initialIndex: Int,
     settings: PhotoViewerSettings
 ) {
-    val pagerState = rememberPagerState(
-        initialPage = initialIndex,
-        pageCount = { photos.size }
-    )
     val pagerScope = rememberCoroutineScope()
     var isMenuVisible by remember { mutableStateOf(false) }
     var areControlsVisible by remember { mutableStateOf(false) }
     var isPlaying by remember { mutableStateOf(false) }
-
-    // 所有主动翻页入口共用这里的边界判断；Pager 的单指滑动也由同一页数范围约束。
-    suspend fun goToPage(index: Int) {
-        pagerState.scrollToPage(index.coerceIn(0, pagerState.pageCount - 1))
+    val viewerPager = rememberPhotoViewerPager(initialIndex, photos.size, settings.readingDirection) {
+        isPlaying = false
     }
-
-    suspend fun goToNextPage() = goToPage(pagerState.currentPage + 1)
-    suspend fun goToPreviousPage() = goToPage(pagerState.currentPage - 1)
 
     val systemController = rememberPhotoViewerSystem(
         settings = settings,
-        onNextPage = { pagerScope.launch { goToNextPage() } },
-        onPreviousPage = { pagerScope.launch { goToPreviousPage() } }
+        onNextPage = { pagerScope.launch { viewerPager.nextPage() } },
+        onPreviousPage = { pagerScope.launch { viewerPager.previousPage() } }
     )
 
     LaunchedEffect(areControlsVisible, settings.fullScreen, isMenuVisible) {
@@ -95,11 +83,9 @@ private fun PhotoViewerReader(
     }
 
     // 翻页落定后才记录阅读进度，拖动过程中经过的中间页不写入。
-    LaunchedEffect(pagerState, viewModel) {
-        snapshotFlow { pagerState.settledPage }.collect { index ->
+    LaunchedEffect(viewerPager, viewModel) {
+        snapshotFlow { viewerPager.settledPage }.collect { index ->
             viewModel.moveTo(index)
-            // 所有翻页方式到达末页后，都由页面统一停止自动播放。
-            if (index == pagerState.pageCount - 1) isPlaying = false
         }
     }
     Box(
@@ -112,14 +98,12 @@ private fun PhotoViewerReader(
                 )
             }
     ) {
-        PhotoViewerContent(
-            photos = photos,
-            pagerState = pagerState,
-            settings = settings
-        )
+        viewerPager.Content(settings) { index ->
+            PhotoViewerImage(photos[index], settings.pageScale)
+        }
         PhotoViewerControls(
-            currentPage = pagerState.currentPage,
-            pageCount = pagerState.pageCount,
+            currentPage = viewerPager.currentPage,
+            pageCount = viewerPager.pageCount,
             intervalSeconds = settings.autoPageSeconds,
             readingDirection = settings.readingDirection,
             isVisible = areControlsVisible,
@@ -127,13 +111,13 @@ private fun PhotoViewerReader(
             onPlayClick = { isPlaying = !isPlaying },
             onVisibilityChanged = { areControlsVisible = it },
             isMenuVisible = isMenuVisible,
-            onNextPage = { goToNextPage() },
-            onPageSelected = { index -> pagerScope.launch { goToPage(index) } }
+            onNextPage = { viewerPager.nextPage() },
+            onPageSelected = { index -> pagerScope.launch { viewerPager.goToPage(index) } }
         )
         PhotoViewerOverlay(
             settings = settings,
-            currentPage = pagerState.currentPage,
-            pageCount = pagerState.pageCount
+            currentPage = viewerPager.currentPage,
+            pageCount = viewerPager.pageCount
         )
     }
     if (isMenuVisible) {
