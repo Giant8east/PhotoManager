@@ -8,7 +8,6 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -19,8 +18,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.LayoutDirection
@@ -29,11 +26,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
 import com.example.photomanager.R
 import com.example.photomanager.data.ReadingDirection
-import com.example.photomanager.ui.theme.Teal
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 
-@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PhotoViewerControls(
     currentPage: Int,
@@ -49,7 +45,7 @@ fun PhotoViewerControls(
     onPageSelected: (Int) -> Unit
 ) {
     var isDragging by remember { mutableStateOf(false) }
-    var draggedPage by remember { mutableFloatStateOf(0f) }
+    var draggedPage by remember { mutableIntStateOf(0) }
     val nextPage by rememberUpdatedState(onNextPage)
     val changeVisibility by rememberUpdatedState(onVisibilityChanged)
 
@@ -113,7 +109,7 @@ fun PhotoViewerControls(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        "${(if (isDragging) draggedPage.toInt() else currentPage) + 1}",
+                        "${(if (isDragging) draggedPage else currentPage) + 1}",
                         color = Color.White,
                         fontSize = 14.sp,
                         maxLines = 1,
@@ -121,61 +117,13 @@ fun PhotoViewerControls(
                         textAlign = TextAlign.Center,
                         modifier = Modifier.width(pageNumberWidth)
                     )
-                    Slider(
-                        value = if (isDragging) draggedPage else currentPage.toFloat(),
-                        onValueChange = {
-                            isDragging = true
-                            draggedPage = it
-                        },
-                        onValueChangeFinished = {
-                            onPageSelected(draggedPage.toInt())
-                            isDragging = false
-                        },
-                        valueRange = 0f..(pageCount - 1).toFloat(),
-                        enabled = pageCount > 1,
-                        thumb = {
-                            Box(
-                                Modifier.size(20.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Box(
-                                    Modifier.size(12.dp).background(
-                                        if (pageCount > 1) Teal else Teal.copy(alpha = 0.38f),
-                                        CircleShape
-                                    )
-                                )
-                            }
-                        },
-                        track = { sliderState ->
-                            val isReversed = LocalLayoutDirection.current == LayoutDirection.Rtl
-                            // 与圆点使用相同高度，避免 Slider 的最小高度约束造成中心偏移。
-                            Canvas(Modifier.fillMaxWidth().height(20.dp)) {
-                                val lastIndex = pageCount - 1
-                                val fraction = if (lastIndex == 0) 0f
-                                else sliderState.value / lastIndex
-                                val start = if (isReversed) size.width else 0f
-                                val end = size.width - start
-                                drawLine(
-                                    Color.White.copy(alpha = 0.3f),
-                                    Offset(start, center.y), Offset(end, center.y),
-                                    strokeWidth = 2.dp.toPx(), cap = StrokeCap.Round
-                                )
-                                drawLine(
-                                    Teal,
-                                    Offset(start, center.y),
-                                    Offset(start + (end - start) * fraction, center.y),
-                                    strokeWidth = 2.dp.toPx(), cap = StrokeCap.Round
-                                )
-                            }
-                        },
-                        colors = SliderDefaults.colors(
-                            thumbColor = Teal,
-                            activeTrackColor = Teal,
-                            inactiveTrackColor = Color.White.copy(alpha = 0.3f),
-                            disabledThumbColor = Teal.copy(alpha = 0.38f),
-                            disabledActiveTrackColor = Teal.copy(alpha = 0.38f),
-                            disabledInactiveTrackColor = Color.White.copy(alpha = 0.12f)
-                        ),
+                    ReadingSeekBar(
+                        currentPage = currentPage,
+                        pageCount = pageCount,
+                        reversed = readingDirection == ReadingDirection.RIGHT_TO_LEFT,
+                        onPreviewPageChanged = { draggedPage = it },
+                        onTrackingChanged = { isDragging = it },
+                        onPageSelected = onPageSelected,
                         modifier = Modifier.weight(1f)
                     )
                     Text(
