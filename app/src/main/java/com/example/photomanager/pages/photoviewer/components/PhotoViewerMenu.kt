@@ -36,11 +36,15 @@ fun PhotoViewerMenu(
                     editingSettings.readingDirection,
                     ReadingDirection.entries
                 ) { editingSettings = editingSettings.copy(readingDirection = it) }
-                SettingMenuButton(
-                    "页面缩放",
-                    editingSettings.pageScale,
-                    PageScale.entries
-                ) { editingSettings = editingSettings.copy(pageScale = it) }
+                if (editingSettings.readingDirection == ReadingDirection.TOP_TO_BOTTOM) {
+                    Text("连续阅读：匹配宽度，双指缩放整列", modifier = Modifier.padding(vertical = 12.dp))
+                } else {
+                    SettingMenuButton(
+                        "页面缩放",
+                        editingSettings.pageScale,
+                        PageScale.entries
+                    ) { editingSettings = editingSettings.copy(pageScale = it) }
+                }
                 Text("自动翻页间隔（秒）：${editingSettings.autoPageSeconds}")
                 Slider(
                     value = editingSettings.autoPageSeconds.toFloat(),
