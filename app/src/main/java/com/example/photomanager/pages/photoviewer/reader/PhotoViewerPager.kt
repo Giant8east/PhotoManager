@@ -12,14 +12,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.systemBarsIgnoringVisibility
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.onSizeChanged
@@ -27,21 +31,12 @@ import androidx.compose.ui.platform.LocalContext
 import android.view.ViewConfiguration
 import com.example.photomanager.data.PhotoViewerSettings
 import com.example.photomanager.data.ReadingDirection
-import kotlinx.coroutines.CoroutineScope
+import com.example.photomanager.data.PhotoMetadataReader
+import com.example.photomanager.data.database.PhotoEntity
 
-@OptIn(ExperimentalFoundationApi::class)
 internal class PhotoViewerPager(
-    pagerState: PagerState,
-    readingDirection: ReadingDirection,
-    animationScope: CoroutineScope,
-    onEndReached: () -> Unit,
-    minimumFlingVelocity: Float,
-    maximumFlingVelocity: Float
+    private val layout: PhotoViewerLayoutManager<*>
 ) {
-    private val layout = PhotoViewerPagerLayoutManager(pagerState, readingDirection, animationScope, onEndReached).apply {
-        this.minimumFlingVelocity = minimumFlingVelocity
-        this.maximumFlingVelocity = maximumFlingVelocity
-    }
     private val gestures = PhotoViewerGestureRecognizer(
         layout::onDown, layout::onPosition, layout::onDrag,
         layout::onScale, layout::onUp, layout::onDoubleTap
@@ -49,6 +44,10 @@ internal class PhotoViewerPager(
     val currentPage get() = layout.currentPage
     val settledPage get() = layout.settledPage
     val pageCount get() = layout.pageCount
+    val isContinuous get() = layout is PhotoViewerScrollLayoutManager
+    val currentItemOffset
+        get() = (layout as? PhotoViewerScrollLayoutManager)?.currentItemOffset ?: 0
+
     fun isPageVisible(index: Int) = layout.isPageVisible(index)
     fun attachImage(index: Int, transform: PhotoTransform) = layout.attachImage(index, transform)
     fun detachImage(index: Int, transform: PhotoTransform) = layout.detachImage(index, transform)
@@ -72,8 +71,12 @@ internal class PhotoViewerPager(
         val tap = remember { { currentOnTap() } }
         val longPress = remember { { currentOnLongPress() } }
         val viewport = with(gestures) {
-            Modifier.fillMaxSize().windowInsetsPadding(imageInsets).clipToBounds()
-                .onSizeChanged(layout::resizeViewport).recognize(tap, longPress)
+            Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(imageInsets)
+                .clipToBounds()
+                .onSizeChanged(layout::resizeViewport)
+                .recognize(tap, longPress)
         }
         Box(viewport) {
             layout.Content(settings, pageContent)
@@ -86,20 +89,63 @@ internal class PhotoViewerPager(
 @Composable
 internal fun rememberPhotoViewerPager(
     initialIndex: Int,
-    pageCount: Int,
+    photos: List<PhotoEntity>,
     readingDirection: ReadingDirection,
     onEndReached: () -> Unit
 ): PhotoViewerPager {
-    val pagerState = rememberPagerState(initialPage = initialIndex, pageCount = { pageCount })
+    var lastIndex by remember { mutableIntStateOf(initialIndex) }
+    var verticalIndex by remember { mutableIntStateOf(initialIndex) }
+    var verticalOffset by remember { mutableIntStateOf(0) }
     val animationScope = rememberCoroutineScope()
-    val configuration = ViewConfiguration.get(LocalContext.current)
+    val context = LocalContext.current
+    val configuration = ViewConfiguration.get(context)
+    val metadata =
+        remember(context.applicationContext) { PhotoMetadataReader(context.applicationContext) }
     val currentOnEndReached by rememberUpdatedState(onEndReached)
-    val viewerPager = remember(pagerState, readingDirection) {
-        PhotoViewerPager(pagerState, readingDirection, animationScope, { currentOnEndReached() },
-            configuration.scaledMinimumFlingVelocity.toFloat(), configuration.scaledMaximumFlingVelocity.toFloat())
+    val currentPhotos by rememberUpdatedState(photos)
+    return key(readingDirection) {
+        val layout: PhotoViewerLayoutManager<*> =
+            if (readingDirection == ReadingDirection.TOP_TO_BOTTOM) {
+                val listState = rememberLazyListState(
+                    lastIndex,
+                    if (verticalIndex == lastIndex) verticalOffset else 0
+                )
+                remember(listState) {
+                    PhotoViewerScrollLayoutManager(
+                        listState,
+                        { currentPhotos },
+                        metadata,
+                        animationScope,
+                        { currentOnEndReached() },
+                        configuration.scaledMinimumFlingVelocity.toFloat(),
+                        configuration.scaledMaximumFlingVelocity.toFloat()
+                    )
+                }
+            } else {
+                val pagerState =
+                    rememberPagerState(initialPage = lastIndex, pageCount = { currentPhotos.size })
+                remember(pagerState) {
+                    PhotoViewerPagerLayoutManager(
+                        pagerState,
+                        readingDirection,
+                        animationScope
+                    ) { currentOnEndReached() }.apply {
+                        minimumFlingVelocity = configuration.scaledMinimumFlingVelocity.toFloat()
+                        maximumFlingVelocity = configuration.scaledMaximumFlingVelocity.toFloat()
+                    }
+                }
+            }
+        val reader = remember(layout) { PhotoViewerPager(layout) }
+        val currentIndex = layout.currentPage
+        val itemOffset = (layout as? PhotoViewerScrollLayoutManager)?.unscaledItemOffset ?: 0
+        SideEffect {
+            lastIndex = currentIndex
+            if (layout is PhotoViewerScrollLayoutManager) {
+                verticalIndex = currentIndex
+                verticalOffset = itemOffset
+            }
+        }
+        DisposableEffect(reader) { onDispose { reader.dispose() } }
+        reader
     }
-    DisposableEffect(viewerPager) {
-        onDispose { viewerPager.dispose() }
-    }
-    return viewerPager
 }

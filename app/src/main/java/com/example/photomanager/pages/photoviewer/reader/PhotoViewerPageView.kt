@@ -35,14 +35,14 @@ internal fun PhotoViewerPageView(
     index: Int
 ) {
     // 适配方式
-    val contentScale = when (pageScale) {
+    val contentScale = if (viewerPager.isContinuous) ContentScale.FillWidth else when (pageScale) {
         PageScale.ORIGINAL -> ContentScale.None
         PageScale.FIT_WIDTH -> ContentScale.FillWidth
         PageScale.FIT_HEIGHT -> ContentScale.FillHeight
         PageScale.FIT_SCREEN -> ContentScale.Fit
     }
     // 保存这一页的变换
-    val transform = remember(photo.id, pageScale) { PhotoTransform(contentScale) }
+    val transform = remember(photo.id, contentScale) { PhotoTransform(contentScale) }
     var retryCount by remember(photo.id, photo.contentUri) { mutableIntStateOf(0) }
     val context = LocalContext.current
     val request = remember(photo.contentUri, transform, context) {
@@ -50,7 +50,8 @@ internal fun PhotoViewerPageView(
             .size {
                 val viewport = snapshotFlow { transform.viewport }
                     .first { it.width > 0f && it.height > 0f }
-                coil.size.Size(viewport.width.toInt(), viewport.height.toInt())
+                // 连续阅读的长图项可高于屏幕，请求仍以屏幕预算采样，不整张原尺寸解码。
+                coil.size.Size(viewport.width.toInt(), minOf(viewport.height.toInt(), context.resources.displayMetrics.heightPixels))
             }.build()
     }
     // 重试只重建当前页请求；离开可见区域不取消相邻页的预加载。
@@ -71,9 +72,10 @@ internal fun PhotoViewerPageView(
         viewerPager.attachImage(index, transform)
         onDispose { viewerPager.detachImage(index, transform) }
     }
-    val isVisible by remember(viewerPager, index) {
+    // 确保状态在组合阶段被读取，不用by委托
+    val isVisible = remember(viewerPager, index) {
         derivedStateOf { viewerPager.isPageVisible(index) }
-    }
+    }.value
     // 在屏幕外准备好初始状态，避免重入首帧先画旧缩放再跳回；部分可见时不重置。
     SideEffect {
         if (!isVisible) transform.reset()

@@ -70,7 +70,7 @@ private fun PhotoViewerReader(
     var isMenuVisible by remember { mutableStateOf(false) }
     var areControlsVisible by remember { mutableStateOf(false) }
     var isPlaying by remember { mutableStateOf(false) }
-    val viewerPager = rememberPhotoViewerPager(initialIndex, photos.size, settings.readingDirection) {
+    val viewerPager = rememberPhotoViewerPager(initialIndex, photos, settings.readingDirection) {
         isPlaying = false
     }
 
