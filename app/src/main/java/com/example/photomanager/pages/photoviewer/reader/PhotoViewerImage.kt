@@ -11,14 +11,14 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.translate
-import androidx.compose.ui.layout.ContentScale
+import com.example.photomanager.data.PageScale
 
 /** 与 EhViewer 一致，限制相对于图片尺寸的实际比例。 */
 private const val MinScale = 0.1f
 private const val MaxScale = 10f
 
 /** 负责计算图片应该多大、在哪里 */
-internal class PhotoTransform(private val contentScale: ContentScale) {
+internal class PhotoTransform(private val pageScale: PageScale) {
     var scale by mutableFloatStateOf(1f)
         private set
     var offset by mutableStateOf(Offset.Zero)
@@ -30,12 +30,23 @@ internal class PhotoTransform(private val contentScale: ContentScale) {
     private val hasImageGeometry get() = imageSize.width > 0f && imageSize.height > 0f &&
         viewport.width > 0f && viewport.height > 0f
     private val initialScale get() =
-        if (hasImageGeometry) contentScale.computeScaleFactor(imageSize, viewport).scaleX else 1f
+        if (!hasImageGeometry) 1f else {
+            val widthScale = viewport.width / imageSize.width
+            val heightScale = viewport.height / imageSize.height
+            when (pageScale) {
+                PageScale.ORIGINAL -> 1f
+                PageScale.FIT_WIDTH -> widthScale
+                PageScale.FIT_HEIGHT -> heightScale
+                PageScale.FIT_SCREEN -> minOf(widthScale, heightScale)
+            }.coerceIn(MinScale, MaxScale)
+        }
+
+    private val actualScale get() = initialScale * scale
 
     val canPanHorizontally get() = hasImageGeometry &&
-        imageSize.width * initialScale * scale > viewport.width + 0.01f
+        imageSize.width * actualScale > viewport.width + 0.01f
     val canPanVertically get() = hasImageGeometry &&
-        imageSize.height * initialScale * scale > viewport.height + 0.01f
+        imageSize.height * actualScale > viewport.height + 0.01f
 
     /** 档位按实际比例排序，返回值换算为绘制使用的相对倍数。 */
     fun nextDoubleTapScale(): Float {
@@ -44,7 +55,6 @@ internal class PhotoTransform(private val contentScale: ContentScale) {
         val heightScale = viewport.height / imageSize.height
         val candidates = floatArrayOf(1f, widthScale, heightScale, maxOf(widthScale, heightScale) * 2f)
             .map { it.coerceIn(MinScale, MaxScale) }.sorted()
-        val actualScale = scale * initialScale
         val target = candidates.firstOrNull { actualScale < it - 0.01f } ?: candidates.first()
         return target / initialScale
     }
@@ -67,9 +77,8 @@ internal class PhotoTransform(private val contentScale: ContentScale) {
 
     private fun constrain(position: Offset, zoom: Float): Offset {
         if (imageSize.width <= 0f || imageSize.height <= 0f || viewport == Size.Zero) return Offset.Zero
-        val initialScale = contentScale.computeScaleFactor(imageSize, viewport)
-        val limitX = ((imageSize.width * initialScale.scaleX * zoom - viewport.width) / 2f).coerceAtLeast(0f)
-        val limitY = ((imageSize.height * initialScale.scaleY * zoom - viewport.height) / 2f).coerceAtLeast(0f)
+        val limitX = ((imageSize.width * initialScale * zoom - viewport.width) / 2f).coerceAtLeast(0f)
+        val limitY = ((imageSize.height * initialScale * zoom - viewport.height) / 2f).coerceAtLeast(0f)
         return Offset(
             if (limitX == 0f) 0f else position.x.coerceIn(-limitX, limitX),
             if (limitY == 0f) 0f else position.y.coerceIn(-limitY, limitY)
@@ -95,9 +104,8 @@ internal class PhotoTransform(private val contentScale: ContentScale) {
     /** 先变换完整图片，再求可见交集；源区域始终相对于完整解码图片。 */
     fun drawRegion(): PhotoDrawRegion? {
         if (!hasImageGeometry) return null
-        val factor = contentScale.computeScaleFactor(imageSize, viewport)
-        val width = imageSize.width * factor.scaleX * scale
-        val height = imageSize.height * factor.scaleY * scale
+        val width = imageSize.width * actualScale
+        val height = imageSize.height * actualScale
         val left = (viewport.width - width) / 2f + offset.x
         val top = (viewport.height - height) / 2f + offset.y
         val image = Rect(left, top, left + width, top + height)

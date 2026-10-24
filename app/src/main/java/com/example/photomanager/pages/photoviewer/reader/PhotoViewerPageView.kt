@@ -35,14 +35,15 @@ internal fun PhotoViewerPageView(
     index: Int
 ) {
     // 适配方式
-    val contentScale = if (viewerPager.isContinuous) ContentScale.FillWidth else when (pageScale) {
+    val effectivePageScale = if (viewerPager.isContinuous) PageScale.FIT_WIDTH else pageScale
+    val contentScale = when (effectivePageScale) {
         PageScale.ORIGINAL -> ContentScale.None
         PageScale.FIT_WIDTH -> ContentScale.FillWidth
         PageScale.FIT_HEIGHT -> ContentScale.FillHeight
         PageScale.FIT_SCREEN -> ContentScale.Fit
     }
     // 保存这一页的变换
-    val transform = remember(photo.id, contentScale) { PhotoTransform(contentScale) }
+    val transform = remember(photo.id, effectivePageScale) { PhotoTransform(effectivePageScale) }
     var retryCount by remember(photo.id, photo.contentUri) { mutableIntStateOf(0) }
     val context = LocalContext.current
     val request = remember(photo.contentUri, transform, context) {
