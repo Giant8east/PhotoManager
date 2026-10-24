@@ -19,5 +19,5 @@ enum class ReadingDirection(override val title: String) : ViewerSettingOption {
 
 @Serializable
 enum class PageScale(override val title: String) : ViewerSettingOption {
-    ORIGINAL("原始尺寸"), FIT_WIDTH("匹配宽度"), FIT_HEIGHT("匹配长度"), FIT_SCREEN("匹配屏幕")
+    ORIGINAL("原始尺寸"), FIT_WIDTH("匹配宽度"), FIT_HEIGHT("匹配高度"), FIT_SCREEN("匹配屏幕")
 }

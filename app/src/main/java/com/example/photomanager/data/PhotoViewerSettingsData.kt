@@ -4,6 +4,7 @@ package com.example.photomanager.data
 import android.content.Context
 import androidx.datastore.core.CorruptionException
 import androidx.datastore.core.Serializer
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.dataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -60,7 +61,9 @@ private object PhotoViewerSettingsSerializer : Serializer<PhotoViewerSettings> {
 // by表示属性如何创建、如何获取，交给 dataStore() 提供的委托对象管理
 private val Context.viewerSettingsStore by dataStore(
     fileName = "photo_viewer_settings.json",
-    serializer = PhotoViewerSettingsSerializer
+    serializer = PhotoViewerSettingsSerializer,
+    // 仅在配置无法反序列化时重建默认文件，普通读写错误仍交由 DataStore 抛出。
+    corruptionHandler = ReplaceFileCorruptionHandler { PhotoViewerSettings() }
 )
 
 @Singleton
