@@ -110,12 +110,6 @@ class AlbumData @Inject constructor(
     fun observePhotos(albumId: Long): Flow<List<PhotoEntity>> =
         database.photoDao().observePhotosQuery(albumId)
 
-    /** 为相册详情网格分页读取图片元数据。 */
-    fun pagePhotos(albumId: Long): Flow<PagingData<PhotoEntity>> = Pager(
-        config = PagingConfig(pageSize = 60, prefetchDistance = 15, enablePlaceholders = true),
-        pagingSourceFactory = { database.photoDao().queryPhotoPage(albumId) }
-    ).flow
-
     /** 递归同步根目录及子目录；空目录跳过，数据库只写入新增或变化的相册。 */
     suspend fun syncDirectory(rootUri: Uri) = withContext(Dispatchers.IO) {
         scanDirectories(rootUri) { scanned ->
