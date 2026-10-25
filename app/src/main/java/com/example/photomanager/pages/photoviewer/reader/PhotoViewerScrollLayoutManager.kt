@@ -13,6 +13,7 @@ import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.gestures.ScrollScope
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -111,30 +112,34 @@ internal class PhotoViewerScrollLayoutManager(
             }
         }
         CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
-            LazyColumn(
-                state = listState, userScrollEnabled = false,
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(gap)
-            ) {
-                items(pageCount, key = { photoAt(it).id }) { index ->
-                    val photo = photoAt(index)
-                    LaunchedEffect(photo.contentUri, photo.modifiedAt, photo.sizeBytes) { loadRatio(index) }
-                    val ratio = ratioFor(index)
-                    Box(
-                        Modifier.layout { measurable, constraints ->
-                            val width = constraints.maxWidth
-                            val scaledWidth = (width * zoom).roundToInt().coerceAtLeast(1)
-                            val height = ratio?.let { continuousImageHeight(width, it, zoom) }
-                                ?: viewport.height.coerceAtLeast(1)
-                            val child = measurable.measure(Constraints.fixed(scaledWidth, height))
-                            layout(width, height) {
-                                child.place(((width - scaledWidth) / 2f + offsetX).roundToInt(), 0)
-                            }
-                        },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        // 文件头确定比例后才创建图片请求，解码完成不再改变列表项高度。
-                        if (ratio != null) pageContent(index) else CircularProgressIndicator()
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+                // 首次测量就使用真实视口高度，避免 1px 占位让列表回填并丢失初始索引。
+                val placeholderHeight = constraints.maxHeight.coerceAtLeast(1)
+                LazyColumn(
+                    state = listState, userScrollEnabled = false,
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(gap)
+                ) {
+                    items(pageCount, key = { photoAt(it).id }) { index ->
+                        val photo = photoAt(index)
+                        LaunchedEffect(photo.contentUri, photo.modifiedAt, photo.sizeBytes) { loadRatio(index) }
+                        val ratio = ratioFor(index)
+                        Box(
+                            Modifier.layout { measurable, constraints ->
+                                val width = constraints.maxWidth
+                                val scaledWidth = (width * zoom).roundToInt().coerceAtLeast(1)
+                                val height = ratio?.let { continuousImageHeight(width, it, zoom) }
+                                    ?: placeholderHeight
+                                val child = measurable.measure(Constraints.fixed(scaledWidth, height))
+                                layout(width, height) {
+                                    child.place(((width - scaledWidth) / 2f + offsetX).roundToInt(), 0)
+                                }
+                            },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            // 文件头确定比例后才创建图片请求，解码完成不再改变列表项高度。
+                            if (ratio != null) pageContent(index) else CircularProgressIndicator()
+                        }
                     }
                 }
             }
