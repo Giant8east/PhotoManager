@@ -18,7 +18,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.core.view.WindowCompat
 import com.example.photomanager.navigation.AppNavigator
 import com.example.photomanager.pages.album.AlbumPage
-import com.example.photomanager.pages.photoviewer.PhotoViewerSystemController
+import com.example.photomanager.pages.photoviewer.system.PhotoViewerSystemController
 import com.example.photomanager.ui.theme.PhotoManagerTheme
 import com.example.photomanager.ui.theme.LocalStatusBarColor
 import dagger.hilt.android.AndroidEntryPoint
