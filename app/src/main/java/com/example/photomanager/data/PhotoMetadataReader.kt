@@ -45,6 +45,9 @@ internal class PhotoMetadataReader(context: Context) {
             PhotoDimensions(1, 1)
         } catch (_: SecurityException) {
             PhotoDimensions(1, 1)
+        } catch (_: IllegalArgumentException) {
+            // DocumentsProvider 对已删除的树 URI 子文件也可能抛此异常。
+            PhotoDimensions(1, 1)
         }
         // 无法读取的文件保留固定方形区域，具体打开失败由单页组件展示。
         cache.put(cacheKey(photo), size)
@@ -56,6 +59,10 @@ internal class PhotoMetadataReader(context: Context) {
             ExifInterface(it).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
         } ?: ExifInterface.ORIENTATION_NORMAL
     } catch (_: IOException) {
+        ExifInterface.ORIENTATION_NORMAL
+    } catch (_: SecurityException) {
+        ExifInterface.ORIENTATION_NORMAL
+    } catch (_: IllegalArgumentException) {
         ExifInterface.ORIENTATION_NORMAL
     }
 
