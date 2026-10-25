@@ -2,6 +2,7 @@ package com.example.photomanager.pages.album
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -48,13 +49,9 @@ fun AlbumPage(
     viewModel: AlbumViewModel = hiltViewModel()
 ) {
     var isActionFabExpanded by remember { mutableStateOf(false) }
-    BackHandler {
-        if (isActionFabExpanded) {
-            isActionFabExpanded = false
-            viewModel.clearSelection()
-        } else {
-            navigator.pop()
-        }
+    BackHandler(enabled = isActionFabExpanded) {
+        isActionFabExpanded = false
+        viewModel.clearSelection()
     }
     AlbumGroupDrawer(
         groups = viewModel.groups,
@@ -62,11 +59,12 @@ fun AlbumPage(
         onGroupSelected = viewModel::selectGroup,
 //        gesturesEnabled = !isActionFabExpanded
     ) {
-        Box(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
             Column {
                 Row(
                     Modifier
                         .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.secondary)
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -80,13 +78,13 @@ fun AlbumPage(
                         trailingIcon = if (viewModel.searchKeyword.isNotEmpty()) {
                             {
                                 IconButton(onClick = { viewModel.updateSearchKeyword("") }) {
-                                    Icon(Icons.Default.Clear, contentDescription = "清空搜索")
+                                    Icon(Icons.Default.Clear, contentDescription = "清空搜索", tint = MaterialTheme.colorScheme.onSecondary)
                                 }
                             }
                         } else null
                     )
                     IconButton(onClick = { navigator.pushTo { SettingPage(navigator) } }) {
-                        Icon(Icons.Default.Settings, contentDescription = "目录导入管理")
+                        Icon(Icons.Default.Settings, contentDescription = "目录导入管理", tint = MaterialTheme.colorScheme.onSecondary)
                     }
                 }
                 Row(
