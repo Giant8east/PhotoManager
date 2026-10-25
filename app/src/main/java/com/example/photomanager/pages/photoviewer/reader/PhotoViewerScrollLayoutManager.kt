@@ -178,7 +178,6 @@ internal class PhotoViewerScrollLayoutManager(
 
     override fun onDown(position: Offset, touchSlop: Float) {
         cancelMotion()
-        edgeAnimation?.cancel()
         edges.values.forEach { it.begin() }
         onPosition(position)
         releaseVelocity = Velocity.Zero
@@ -322,11 +321,12 @@ internal class PhotoViewerScrollLayoutManager(
         closeInputs()
         gesture?.cancel()
         zoomAnimation?.cancel()
+        edgeAnimation?.cancel()
+        releaseVelocity = Velocity.Zero
     }
 
     override fun dispose() {
         cancelMotion()
-        edgeAnimation?.cancel()
         edges.values.forEach { it.dispose() }
     }
 }

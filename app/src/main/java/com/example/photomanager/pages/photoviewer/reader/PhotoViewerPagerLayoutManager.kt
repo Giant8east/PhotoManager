@@ -219,21 +219,29 @@ internal class PhotoViewerPagerLayoutManager(
 
     /** 主动越界时反馈但不移动页码；播放状态由页面通过回调处理。 */
     override suspend fun goToPage(index: Int) {
-        flingJob?.cancel()
-        closeInputs()
-        gestureJob?.cancel()
-        releaseEdge()
+        if (index == pagerState.currentPage) return
+        cancelMotion()
         if (index !in 0 until pagerState.pageCount) {
             val isEnd = index >= pagerState.pageCount
             pullBoundary(isEnd)
             if (isEnd) onEndReached()
             return
         }
-        zoomAnimation?.cancel()
         pagerState.scrollToPage(index)
         resetInactiveImages()
     }
 
+    /** 跳页接管旧手势和动画；停止边缘拉动后只释放效果，不清空其回缩状态。 */
+    private fun cancelMotion() {
+        closeInputs()
+        gestureJob?.cancel()
+        flingJob?.cancel()
+        zoomAnimation?.cancel()
+        edgeAnimation?.cancel()
+        releaseVelocity = Velocity.Zero
+        isPulling = false
+        edges.values.forEach { it.release() }
+    }
     override suspend fun nextPage() = goToPage(pagerState.currentPage + 1)
 
     override suspend fun previousPage() = goToPage(pagerState.currentPage - 1)
