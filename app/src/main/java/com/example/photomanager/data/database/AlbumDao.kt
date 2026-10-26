@@ -13,6 +13,9 @@ import androidx.paging.PagingSource
 
 @Dao
 interface AlbumDao {
+    @Query("SELECT * FROM albums WHERE id = :albumId")
+    fun observeAlbumByIdQuery(albumId: Long): Flow<AlbumEntity?>
+
     @RawQuery(observedEntities = [AlbumEntity::class])
     fun observeAlbumQuery(query: SupportSQLiteQuery): Flow<List<AlbumEntity>>
 
