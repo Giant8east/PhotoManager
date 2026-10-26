@@ -17,18 +17,17 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
-import com.example.photomanager.data.PhotoMetadataReader
 import com.example.photomanager.data.PhotoViewerSettings
 import com.example.photomanager.data.database.PhotoEntity
 import com.example.photomanager.pages.photoviewer.edge.PhotoViewerEdge
@@ -53,13 +52,13 @@ internal fun continuousImageHeight(width: Int, aspectRatio: Float, zoom: Float):
 internal class PhotoViewerScrollLayoutManager(
     private val listState: LazyListState,
     private val photos: () -> List<PhotoEntity>,
-    private val metadata: PhotoMetadataReader,
     private val scope: CoroutineScope,
     private val onEndReached: () -> Unit,
     private val minimumVelocity: Float,
     private val maximumVelocity: Float
 ) : PhotoViewerLayoutManager<PhotoViewerScrollLayoutManager.Input>(scope) {
     private data class PageGeometry(val photo: PhotoEntity, val ratio: Float)
+
     private val geometries = mutableStateMapOf<Int, PageGeometry>()
     private var viewport by mutableStateOf(IntSize.Zero)
     private var zoom by mutableFloatStateOf(1f)
@@ -71,22 +70,29 @@ internal class PhotoViewerScrollLayoutManager(
     private var edgeAnimation: Job? = null
     private val navigation = Mutex()
 
+    /** 连续阅读布局接收到的一次手势输入,给不同输入一个共同类型 */
     sealed interface Input {
+        /** 拖动，只有位移 */
         data class Drag(val delta: Offset) : Input
+        /** 缩放，包含双指焦点位置、本次相对缩放倍率、双指移动产生的平移量 */
         data class Scale(val focus: Offset, val factor: Float, val pan: Offset) : Input
     }
 
     override val pageCount get() = photos().size
+
+    /** 按完整图片索引取记录，顺序与详情页保持一致。 */
     private fun photoAt(index: Int) = photos()[index]
-    override val currentPage get() = continuousPageIndex(
-        listState.layoutInfo.visibleItemsInfo.map { it.index to (it.offset + it.size) },
-        listState.firstVisibleItemIndex,
-        listState.layoutInfo.visibleItemsInfo.isNotEmpty() && !listState.canScrollForward
-    )
+    override val currentPage
+        get() = continuousPageIndex(
+            listState.layoutInfo.visibleItemsInfo.map { it.index to (it.offset + it.size) },
+            listState.firstVisibleItemIndex,
+            listState.layoutInfo.visibleItemsInfo.isNotEmpty() && !listState.canScrollForward
+        )
     override val settledPage get() = settledIndex
-    val currentItemOffset get() = listState.layoutInfo.visibleItemsInfo
-        .firstOrNull { it.index == currentPage }?.let { (-it.offset).coerceAtLeast(0) }
-        ?: listState.firstVisibleItemScrollOffset
+    val currentItemOffset
+        get() = listState.layoutInfo.visibleItemsInfo
+            .firstOrNull { it.index == currentPage }?.let { (-it.offset).coerceAtLeast(0) }
+            ?: listState.firstVisibleItemScrollOffset
     val unscaledItemOffset get() = (currentItemOffset / zoom).roundToInt()
 
     override fun isPageVisible(index: Int): Boolean = listState.layoutInfo.visibleItemsInfo.any {
@@ -97,19 +103,15 @@ internal class PhotoViewerScrollLayoutManager(
     override fun Content(settings: PhotoViewerSettings, pageContent: @Composable (Int) -> Unit) {
         val density = LocalDensity.current
         val gap = if (settings.showPageGap) 12.dp else 0.dp
+        // 把页面间隔换算成像素，供缩放计算使用
         SideEffect { gapPixels = with(density) { gap.toPx() } }
+        // 持续观察滚动何时停下来
         LaunchedEffect(this) {
             snapshotFlow { if (!listState.isScrollInProgress) currentPage else null }
                 .filterNotNull().collect { index ->
                     settledIndex = index
                     images.forEach { (page, image) -> if (!isPageVisible(page)) image.reset() }
                 }
-        }
-        // 预读附近文件头；图片请求仍由单页容器持有，不解码整个相册。
-        LaunchedEffect(currentPage, pageCount) {
-            for (index in maxOf(0, currentPage - 2)..minOf(pageCount - 1, currentPage + 3)) {
-                loadRatio(index)
-            }
         }
         CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
             BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -121,8 +123,6 @@ internal class PhotoViewerScrollLayoutManager(
                     verticalArrangement = Arrangement.spacedBy(gap)
                 ) {
                     items(pageCount, key = { photoAt(it).id }) { index ->
-                        val photo = photoAt(index)
-                        LaunchedEffect(photo.contentUri, photo.modifiedAt, photo.sizeBytes) { loadRatio(index) }
                         val ratio = ratioFor(index)
                         Box(
                             Modifier.layout { measurable, constraints ->
@@ -130,15 +130,18 @@ internal class PhotoViewerScrollLayoutManager(
                                 val scaledWidth = (width * zoom).roundToInt().coerceAtLeast(1)
                                 val height = ratio?.let { continuousImageHeight(width, it, zoom) }
                                     ?: placeholderHeight
-                                val child = measurable.measure(Constraints.fixed(scaledWidth, height))
+                                val child =
+                                    measurable.measure(Constraints.fixed(scaledWidth, height))
                                 layout(width, height) {
-                                    child.place(((width - scaledWidth) / 2f + offsetX).roundToInt(), 0)
+                                    child.place(
+                                        ((width - scaledWidth) / 2f + offsetX).roundToInt(),
+                                        0
+                                    )
                                 }
                             },
                             contentAlignment = Alignment.Center
                         ) {
-                            // 文件头确定比例后才创建图片请求，解码完成不再改变列表项高度。
-                            if (ratio != null) pageContent(index) else CircularProgressIndicator()
+                            pageContent(index)
                         }
                     }
                 }
@@ -146,18 +149,19 @@ internal class PhotoViewerScrollLayoutManager(
         }
     }
 
-    private suspend fun loadRatio(index: Int) {
-        if (ratioFor(index) != null) return
-        val photo = photoAt(index)
-        val ratio = metadata.readSize(photo).aspectRatio
-        geometries[index] = PageGeometry(photo, ratio)
+    /** 只接收当前记录的有效解码尺寸，不再独立读取文件头。 */
+    override fun onImageSizeChanged(index: Int, photo: PhotoEntity, size: Size) {
+        if (photoAt(index) != photo || !size.width.isFinite() || !size.height.isFinite() ||
+            size.width <= 0f || size.height <= 0f) return
+        val geometry = PageGeometry(photo, size.width / size.height)
+        if (geometries[index] == geometry) return
+        // LazyListState 保留首个可见项的 key 与滚动偏移；只更新高度，不另发跳页争抢滚动。
+        geometries[index] = geometry
     }
 
-    private fun ratioFor(index: Int): Float? {
-        val photo = photoAt(index)
-        return geometries[index]?.takeIf { it.photo == photo }?.ratio
-            ?: metadata.cachedSize(photo)?.aspectRatio
-    }
+    /** 未解码成功的项维持视口高度占位，失败与重试均由单页展示。 */
+    private fun ratioFor(index: Int): Float? =
+        geometries[index]?.takeIf { it.photo == photoAt(index) }?.ratio
 
     override fun resizeViewport(size: IntSize) {
         if (viewport != size) {
@@ -169,7 +173,10 @@ internal class PhotoViewerScrollLayoutManager(
             offsetX = clampX(offsetX)
             if (oldWidth > 0 && size.width != oldWidth) {
                 zoomAnimation = scope.launch {
-                    listState.scrollToItem(index, (offset * size.width.toFloat() / oldWidth).roundToInt())
+                    listState.scrollToItem(
+                        index,
+                        (offset * size.width.toFloat() / oldWidth).roundToInt()
+                    )
                 }
             }
         }
@@ -198,10 +205,15 @@ internal class PhotoViewerScrollLayoutManager(
         }
     }
 
-    override fun onDrag(delta: Offset) { inputs?.trySend(Input.Drag(delta)) }
+    override fun onDrag(delta: Offset) {
+        inputs?.trySend(Input.Drag(delta))
+    }
+
     override fun onScale(focus: Offset, zoom: Float, pan: Offset) {
         inputs?.trySend(Input.Scale(focus, zoom, pan))
     }
+
+    /** 先收回已有边缘，再分配整列横移与纵向滚动，剩余纵向距离触发越界。 */
     private fun drag(scroll: ScrollScope, delta: Offset) {
         val x = retractAxis(delta.x, PhotoViewerEdge.LEFT, PhotoViewerEdge.RIGHT)
         val y = retractAxis(delta.y, PhotoViewerEdge.TOP, PhotoViewerEdge.BOTTOM)
@@ -215,17 +227,20 @@ internal class PhotoViewerScrollLayoutManager(
         pull(y + consumed, true)
     }
 
+    /** 将未消费的有效距离交给对应边缘；连续布局当前只启用纵向反馈。 */
     private fun pull(remaining: Float, vertical: Boolean) {
         if (abs(remaining) <= 0.01f) return
         edges.getValue(edgeFor(remaining, vertical)).pull(abs(remaining))
     }
 
+    /** 将手指位移方向映射为物理边缘：正向对应上或左，负向对应下或右。 */
     private fun edgeFor(delta: Float, vertical: Boolean) = if (vertical) {
         if (delta > 0) PhotoViewerEdge.TOP else PhotoViewerEdge.BOTTOM
     } else {
         if (delta > 0) PhotoViewerEdge.LEFT else PhotoViewerEdge.RIGHT
     }
 
+    /** 按整列缩放后的宽度限制横移，防止列边缘移入视口造成额外留白。 */
     private fun clampX(x: Float): Float {
         val limit = viewport.width * (zoom - 1f) / 2f
         return x.coerceIn(-limit, limit)
@@ -236,11 +251,14 @@ internal class PhotoViewerScrollLayoutManager(
         val next = target.coerceIn(1f, 2f)
         val factor = next / zoom
         val first = listState.layoutInfo.visibleItemsInfo.firstOrNull()
-        val gapsBeforeFocus = listState.layoutInfo.visibleItemsInfo.count { it.offset < focus.y }.minus(1).coerceAtLeast(0)
+        val gapsBeforeFocus =
+            listState.layoutInfo.visibleItemsInfo.count { it.offset < focus.y }.minus(1)
+                .coerceAtLeast(0)
         val contentBeforeFocus = focus.y - (first?.offset ?: 0) - gapPixels * gapsBeforeFocus
         val oldLeft = viewport.width * (1f - zoom) / 2f + offsetX
         zoom = next
-        offsetX = clampX(focus.x - (focus.x - oldLeft) * factor + pan.x - viewport.width * (1f - next) / 2f)
+        offsetX =
+            clampX(focus.x - (focus.x - oldLeft) * factor + pan.x - viewport.width * (1f - next) / 2f)
         scroll.scrollBy(contentBeforeFocus * (factor - 1f) - pan.y)
     }
 
@@ -250,18 +268,26 @@ internal class PhotoViewerScrollLayoutManager(
         val target = if (zoom < 1.99f) 2f else 1f
         zoomAnimation = scope.launch {
             listState.scroll {
-                animate(start, target, animationSpec = tween(300, easing = LinearOutSlowInEasing)) { value, _ ->
+                animate(
+                    start,
+                    target,
+                    animationSpec = tween(300, easing = LinearOutSlowInEasing)
+                ) { value, _ ->
                     scale(this, focus, value, Offset.Zero)
                 }
             }
         }
     }
 
+    /** 单轴执行减速惯性，撞边后停止该轴；仅纵向撞边产生速度反馈。 */
     private suspend fun flingAxis(speed: Float, vertical: Boolean, scroll: ScrollScope) {
         if (abs(speed) < minimumVelocity) return
         val initial = speed.coerceIn(-maximumVelocity, maximumVelocity)
         var previous = 0f
-        AnimationState(initialValue = 0f, initialVelocity = initial).animateDecay(exponentialDecay()) {
+        AnimationState(
+            initialValue = 0f,
+            initialVelocity = initial
+        ).animateDecay(exponentialDecay()) {
             val delta = value - previous
             previous = value
             val consumed = if (vertical) -scroll.scrollBy(-delta) else {
@@ -271,7 +297,8 @@ internal class PhotoViewerScrollLayoutManager(
             }
             if (abs(delta - consumed) > 0.01f) {
                 if (vertical) {
-                    edges.getValue(edgeFor(initial, true)).absorb(abs(initial), viewport.height.toFloat())
+                    edges.getValue(edgeFor(initial, true))
+                        .absorb(abs(initial), viewport.height.toFloat())
                 }
                 // 连续阅读的水平惯性仍在边界停止，不显示水平撞边反馈。
                 // else edges.getValue(edgeFor(initial, false)).absorb(abs(initial), viewport.width.toFloat())
@@ -282,6 +309,7 @@ internal class PhotoViewerScrollLayoutManager(
 
     override suspend fun goToPage(index: Int) = navigation.withLock { navigate(index) }
 
+    /** 停止旧交互并直接定位目标项，由单页异步加载后更新高度；保留整列缩放，越过末页时通知停止播放。 */
     private suspend fun navigate(index: Int) {
         cancelMotion()
         edges.values.forEach { it.release() }
@@ -290,19 +318,14 @@ internal class PhotoViewerScrollLayoutManager(
             if (index >= pageCount) onEndReached()
             return
         }
-        val wasPrepared = ratioFor(index) != null
-        loadRatio(index)
-        if (!wasPrepared) {
-            // 让新比例先完成测量；到达末尾时由列表自然限制位置，不添加尾部空白。
-            withFrameNanos { }
-            withFrameNanos { }
-        }
         listState.scrollToItem(index)
         settledIndex = index
     }
+
     override suspend fun nextPage() = navigation.withLock { navigate(currentPage + 1) }
     override suspend fun previousPage() = navigation.withLock { navigate(currentPage - 1) }
 
+    /** 为主动越界模拟一次纵向拉动，随后交由边缘效果自然回缩。 */
     private fun boundary(isEnd: Boolean) {
         edgeAnimation?.cancel()
         val edge = edges.getValue(if (isEnd) PhotoViewerEdge.BOTTOM else PhotoViewerEdge.TOP)
@@ -310,13 +333,18 @@ internal class PhotoViewerScrollLayoutManager(
         edge.begin()
         val start = edge.distance
         edgeAnimation = scope.launch {
-            animate(start, maxOf(start, viewport.height / 7f), animationSpec = tween(300)) { value, _ ->
+            animate(
+                start,
+                maxOf(start, viewport.height / 7f),
+                animationSpec = tween(300)
+            ) { value, _ ->
                 edge.pull(value - edge.distance)
             }
             edge.release()
         }
     }
 
+    /** 取消旧输入、手势惯性和动画并清零释放速度，不重置整列缩放与位置。 */
     private fun cancelMotion() {
         closeInputs()
         gesture?.cancel()

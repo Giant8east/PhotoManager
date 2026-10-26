@@ -3,6 +3,8 @@ package com.example.photomanager.pages.photoviewer.reader
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import com.example.photomanager.data.database.PhotoEntity
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.Velocity
 import com.example.photomanager.data.PhotoViewerSettings
@@ -40,6 +42,9 @@ internal abstract class PhotoViewerLayoutManager<Input>(scope: CoroutineScope) {
         onImageDetached(index)
         images.remove(index)
     }
+
+    /** 单页报告解码尺寸；横向固定页高无需重新排列。 */
+    open fun onImageSizeChanged(index: Int, photo: PhotoEntity, size: Size) {}
 
     protected open fun onImageDetached(index: Int) {}
 
