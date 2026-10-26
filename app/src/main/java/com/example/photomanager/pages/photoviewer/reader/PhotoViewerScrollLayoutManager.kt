@@ -8,7 +8,6 @@ import androidx.compose.animation.core.animateDecay
 import androidx.compose.animation.core.exponentialDecay
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.gestures.ScrollScope
 import androidx.compose.foundation.layout.Arrangement
@@ -123,39 +122,38 @@ internal class PhotoViewerScrollLayoutManager(
                     images.forEach { (page, image) -> if (!isPageVisible(page)) image.reset() }
                 }
         }
-        CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
-            BoxWithConstraints(Modifier.fillMaxSize()) {
-                // 首次测量就使用真实视口高度，避免 1px 占位让列表回填并丢失初始索引。
-                val placeholderHeight = constraints.maxHeight.coerceAtLeast(1)
-                LazyColumn(
-                    state = listState, userScrollEnabled = false,
-                    modifier = Modifier.fillMaxSize().then(measurement),
-                    verticalArrangement = Arrangement.spacedBy(gap)
-                ) {
-                    items(pageCount, key = { photoAt(it).id }) { index ->
-                        Box(
-                            Modifier.layout { measurable, constraints ->
-                                val width = constraints.maxWidth
-                                val scaledWidth = (width * zoom).roundToInt().coerceAtLeast(1)
-                                // 在测量时读取尺寸，成功回报后可立即重测，不等待下一轮重组。
-                                val height = pageHeight(index, IntSize(width, placeholderHeight))
-                                val child =
-                                    measurable.measure(Constraints.fixed(scaledWidth, height))
-                                layout(width, height) {
-                                    child.place(
-                                        ((width - scaledWidth) / 2f + offsetX).roundToInt(),
-                                        0
-                                    )
-                                }
-                            },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            pageContent(index)
-                        }
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            // 首次测量就使用真实视口高度，避免 1px 占位让列表回填并丢失初始索引。
+            val placeholderHeight = constraints.maxHeight.coerceAtLeast(1)
+            LazyColumn(
+                state = listState, userScrollEnabled = false,
+                modifier = Modifier.fillMaxSize().then(measurement),
+                verticalArrangement = Arrangement.spacedBy(gap)
+            ) {
+                items(pageCount, key = { photoAt(it).id }) { index ->
+                    Box(
+                        Modifier.layout { measurable, constraints ->
+                            val width = constraints.maxWidth
+                            val scaledWidth = (width * zoom).roundToInt().coerceAtLeast(1)
+                            // 在测量时读取尺寸，成功回报后可立即重测，不等待下一轮重组。
+                            val height = pageHeight(index, IntSize(width, placeholderHeight))
+                            val child =
+                                measurable.measure(Constraints.fixed(scaledWidth, height))
+                            layout(width, height) {
+                                child.place(
+                                    ((width - scaledWidth) / 2f + offsetX).roundToInt(),
+                                    0
+                                )
+                            }
+                        },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        pageContent(index)
                     }
                 }
             }
         }
+    
     }
 
     /** 只接收当前记录的有效解码尺寸，不再独立读取文件头。 */

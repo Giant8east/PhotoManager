@@ -29,6 +29,7 @@ import com.example.photomanager.data.database.PhotoEntity
 import com.example.photomanager.data.PhotoViewerSettings
 import com.example.photomanager.navigation.AppNavigator
 import com.example.photomanager.ui.theme.PhotoViewerBackground
+import com.example.photomanager.ui.theme.PhotoManagerTheme
 import kotlinx.coroutines.launch
 
 @Composable
@@ -42,18 +43,20 @@ fun PhotoViewerPage(
     LaunchedEffect(albumId) { viewModel.load(albumId) }
     val settings by viewModel.settings.collectAsState()
     // 根容器始终占满窗口并绘制阅读底色；配置未到达前不按默认值猜测窗口状态。
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(PhotoViewerBackground),
-        contentAlignment = Alignment.Center
-    ) {
-        settings?.let { loadedSettings ->
-            val photos = viewModel.photos
-            if (photos == null) {
-                CircularProgressIndicator()
-            } else {
-                PhotoViewerReader(viewModel, photos, initialIndex, loadedSettings)
+    PhotoManagerTheme(darkTheme = true) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(PhotoViewerBackground),
+            contentAlignment = Alignment.Center
+        ) {
+            settings?.let { loadedSettings ->
+                val photos = viewModel.photos
+                if (photos == null) {
+                    CircularProgressIndicator()
+                } else {
+                    PhotoViewerReader(viewModel, photos, initialIndex, loadedSettings)
+                }
             }
         }
     }

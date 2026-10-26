@@ -10,14 +10,12 @@ import androidx.compose.animation.core.exponentialDecay
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.gestures.ScrollScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.IntSize
@@ -202,14 +200,13 @@ internal class PhotoViewerPagerLayoutManager(
     @Composable
     override fun Content(settings: PhotoViewerSettings, pageContent: @Composable (Int) -> Unit) {
         val pageSpacing = if (settings.showPageGap) 12.dp else 0.dp
-        CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
-            HorizontalPager(
-                state = pagerState, beyondBoundsPageCount = 1,
-                reverseLayout = readingDirection == ReadingDirection.RIGHT_TO_LEFT,
-                pageSpacing = pageSpacing, userScrollEnabled = false,
-                modifier = Modifier.fillMaxSize()
-            ) { pageContent(it) }
-        }
+        HorizontalPager(
+            state = pagerState, beyondBoundsPageCount = 1,
+            reverseLayout = readingDirection == ReadingDirection.RIGHT_TO_LEFT,
+            pageSpacing = pageSpacing, userScrollEnabled = false,
+            modifier = Modifier.fillMaxSize()
+        ) { pageContent(it) }
+    
     }
 
     override fun resizeViewport(size: IntSize) {

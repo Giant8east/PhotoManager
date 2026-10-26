@@ -13,6 +13,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.luminance
 import androidx.core.view.WindowCompat
@@ -39,6 +42,7 @@ class MainActivity : ComponentActivity() {
         return super.onKeyUp(keyCode, event)
     }
 
+    @OptIn(ExperimentalFoundationApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -66,7 +70,9 @@ class MainActivity : ComponentActivity() {
                 // 页面内的返回处理优先；根页面交回桌面，保留当前任务。
                 BackHandler { moveTaskToBack(true) }
                 // 导航宿主始终占满窗口，具体页面在自身条目内部处理安全区。
-                Box(Modifier.fillMaxSize()) { navigator.render() }
+                CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
+                    Box(Modifier.fillMaxSize()) { navigator.render() }
+                }
             }
         }
     }
