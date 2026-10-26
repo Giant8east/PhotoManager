@@ -23,6 +23,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.Remeasurement
+import androidx.compose.ui.layout.RemeasurementModifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntSize
@@ -58,6 +60,7 @@ internal class PhotoViewerScrollLayoutManager(
     private val maximumVelocity: Float
 ) : PhotoViewerLayoutManager<PhotoViewerScrollLayoutManager.Input>(scope) {
     private data class PageGeometry(val photo: PhotoEntity, val ratio: Float)
+    private data class ReadingAnchor(val index: Int, val top: Int)
 
     private val geometries = mutableStateMapOf<Int, PageGeometry>()
     private var viewport by mutableStateOf(IntSize.Zero)
@@ -65,10 +68,17 @@ internal class PhotoViewerScrollLayoutManager(
     private var offsetX by mutableFloatStateOf(0f)
     private var settledIndex by mutableIntStateOf(listState.firstVisibleItemIndex)
     private var gapPixels = 0f
+    private var isScrollingBackward = false
     private var gesture: Job? = null
     private var zoomAnimation: Job? = null
     private var edgeAnimation: Job? = null
     private val navigation = Mutex()
+    private var remeasurement: Remeasurement? = null
+    private val measurement = object : RemeasurementModifier {
+        override fun onRemeasurementAvailable(remeasurement: Remeasurement) {
+            this@PhotoViewerScrollLayoutManager.remeasurement = remeasurement
+        }
+    }
 
     /** 连续阅读布局接收到的一次手势输入,给不同输入一个共同类型 */
     sealed interface Input {
@@ -119,17 +129,16 @@ internal class PhotoViewerScrollLayoutManager(
                 val placeholderHeight = constraints.maxHeight.coerceAtLeast(1)
                 LazyColumn(
                     state = listState, userScrollEnabled = false,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().then(measurement),
                     verticalArrangement = Arrangement.spacedBy(gap)
                 ) {
                     items(pageCount, key = { photoAt(it).id }) { index ->
-                        val ratio = ratioFor(index)
                         Box(
                             Modifier.layout { measurable, constraints ->
                                 val width = constraints.maxWidth
                                 val scaledWidth = (width * zoom).roundToInt().coerceAtLeast(1)
-                                val height = ratio?.let { continuousImageHeight(width, it, zoom) }
-                                    ?: placeholderHeight
+                                // 在测量时读取尺寸，成功回报后可立即重测，不等待下一轮重组。
+                                val height = pageHeight(index, IntSize(width, placeholderHeight))
                                 val child =
                                     measurable.measure(Constraints.fixed(scaledWidth, height))
                                 layout(width, height) {
@@ -155,9 +164,43 @@ internal class PhotoViewerScrollLayoutManager(
             size.width <= 0f || size.height <= 0f) return
         val geometry = PageGeometry(photo, size.width / size.height)
         if (geometries[index] == geometry) return
-        // LazyListState 保留首个可见项的 key 与滚动偏移；只更新高度，不另发跳页争抢滚动。
+        val anchor = captureAnchor()
         geometries[index] = geometry
+        anchor?.let(::restoreAnchor)
     }
+
+    /** 向前面的图片滚动时跳过不稳定的占位项，其余情况保持首个可见项。 */
+    private fun captureAnchor(): ReadingAnchor? {
+        val visible = listState.layoutInfo.visibleItemsInfo.filter {
+            it.offset + it.size > 0 && it.offset < listState.layoutInfo.viewportEndOffset
+        }
+        val anchor = if (isScrollingBackward) {
+            visible.firstOrNull { ratioFor(it.index) != null } ?: visible.firstOrNull()
+        } else visible.firstOrNull()
+        return anchor?.let { ReadingAnchor(it.index, it.offset) }
+    }
+
+    /** 同步恢复锚点的屏幕位置，不启动会抢占手势或惯性的滚动任务。 */
+    private fun restoreAnchor(anchor: ReadingAnchor) {
+        remeasurement?.forceRemeasure()
+        val top = pageTop(anchor.index) ?: return
+        listState.dispatchRawDelta((top - anchor.top).toFloat())
+    }
+
+    /** 优先使用真实布局坐标；锚点被挤出可见区时才按统一高度反算。 */
+    private fun pageTop(index: Int): Int? {
+        val layout = listState.layoutInfo
+        layout.visibleItemsInfo.firstOrNull { it.index == index }?.let { return it.offset }
+        val first = layout.visibleItemsInfo.firstOrNull() ?: return null
+        val range = minOf(first.index, index) until maxOf(first.index, index)
+        val distance = range.sumOf { pageHeight(it, layout.viewportSize) + gapPixels.roundToInt() }
+        return first.offset + if (index >= first.index) distance else -distance
+    }
+
+    /** 列表测量和锚点反算共用高度，未知尺寸维持一屏占位。 */
+    private fun pageHeight(index: Int, viewport: IntSize): Int =
+        ratioFor(index)?.let { continuousImageHeight(viewport.width, it, zoom) }
+            ?: viewport.height.coerceAtLeast(1)
 
     /** 未解码成功的项维持视口高度占位，失败与重试均由单页展示。 */
     private fun ratioFor(index: Int): Float? =
@@ -221,24 +264,24 @@ internal class PhotoViewerScrollLayoutManager(
             // 与 EhViewer 连续布局一致：允许横移，但不显示左右越界反馈。
             // val previousX = offsetX
             offsetX = clampX(offsetX + x)
-            // pull(x - (offsetX - previousX), false)
+            // val remainingX = x - (offsetX - previousX)
+            // val edge = if (remainingX > 0) PhotoViewerEdge.LEFT else PhotoViewerEdge.RIGHT
+            // if (abs(remainingX) > 0.01f) edges.getValue(edge).pull(abs(remainingX))
         }
+        if (y != 0f) isScrollingBackward = y > 0f
         val consumed = scroll.scrollBy(-y)
-        pull(y + consumed, true)
+        pull(y + consumed)
     }
 
-    /** 将未消费的有效距离交给对应边缘；连续布局当前只启用纵向反馈。 */
-    private fun pull(remaining: Float, vertical: Boolean) {
+    /** 将未消费的纵向距离交给顶部或底部边缘。 */
+    private fun pull(remaining: Float) {
         if (abs(remaining) <= 0.01f) return
-        edges.getValue(edgeFor(remaining, vertical)).pull(abs(remaining))
+        edges.getValue(verticalEdgeFor(remaining)).pull(abs(remaining))
     }
 
-    /** 将手指位移方向映射为物理边缘：正向对应上或左，负向对应下或右。 */
-    private fun edgeFor(delta: Float, vertical: Boolean) = if (vertical) {
+    /** 手指向下拉对应顶部，向上拉对应底部。 */
+    private fun verticalEdgeFor(delta: Float) =
         if (delta > 0) PhotoViewerEdge.TOP else PhotoViewerEdge.BOTTOM
-    } else {
-        if (delta > 0) PhotoViewerEdge.LEFT else PhotoViewerEdge.RIGHT
-    }
 
     /** 按整列缩放后的宽度限制横移，防止列边缘移入视口造成额外留白。 */
     private fun clampX(x: Float): Float {
@@ -290,6 +333,7 @@ internal class PhotoViewerScrollLayoutManager(
         ).animateDecay(exponentialDecay()) {
             val delta = value - previous
             previous = value
+            if (vertical && delta != 0f) isScrollingBackward = delta > 0f
             val consumed = if (vertical) -scroll.scrollBy(-delta) else {
                 val oldX = offsetX
                 offsetX = clampX(offsetX + delta)
@@ -297,11 +341,14 @@ internal class PhotoViewerScrollLayoutManager(
             }
             if (abs(delta - consumed) > 0.01f) {
                 if (vertical) {
-                    edges.getValue(edgeFor(initial, true))
+                    edges.getValue(verticalEdgeFor(initial))
                         .absorb(abs(initial), viewport.height.toFloat())
                 }
                 // 连续阅读的水平惯性仍在边界停止，不显示水平撞边反馈。
-                // else edges.getValue(edgeFor(initial, false)).absorb(abs(initial), viewport.width.toFloat())
+                // else {
+                //     val edge = if (initial > 0) PhotoViewerEdge.LEFT else PhotoViewerEdge.RIGHT
+                //     edges.getValue(edge).absorb(abs(initial), viewport.width.toFloat())
+                // }
                 cancelAnimation()
             }
         }
@@ -351,6 +398,7 @@ internal class PhotoViewerScrollLayoutManager(
         zoomAnimation?.cancel()
         edgeAnimation?.cancel()
         releaseVelocity = Velocity.Zero
+        isScrollingBackward = false
     }
 
     override fun dispose() {
