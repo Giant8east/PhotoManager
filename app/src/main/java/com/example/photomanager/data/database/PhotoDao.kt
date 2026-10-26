@@ -9,6 +9,12 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface PhotoDao {
     @Query("SELECT * FROM photos WHERE albumId = :albumId ORDER BY name ASC")
+    suspend fun queryPhotosByAlbumId(albumId: Long): List<PhotoEntity>
+
+    @Query("SELECT * FROM photos WHERE albumId = :albumId ORDER BY name ASC")
+    fun queryPhotoPage(albumId: Long): androidx.paging.PagingSource<Int, PhotoEntity>
+
+    @Query("SELECT * FROM photos WHERE albumId = :albumId ORDER BY name ASC")
     fun observePhotosQuery(albumId: Long): Flow<List<PhotoEntity>>
 
     @Query("DELETE FROM photos WHERE albumId = :albumId")
