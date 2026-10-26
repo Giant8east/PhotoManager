@@ -80,8 +80,11 @@ internal fun PhotoViewerPageView(
     val success = imageState as? AsyncImagePainter.State.Success
     val imageSize = success?.painter?.intrinsicSize
     // 成功结果或适配对象变化时同步一次，缓存命中也走同一入口。
-    LaunchedEffect(transform, imageSize) {
-        imageSize?.let { transform.resizeImage(it) }
+    LaunchedEffect(viewerPager, index, photo, transform, imageSize) {
+        imageSize?.let {
+            transform.resizeImage(it)
+            viewerPager.onImageSizeChanged(index, photo, it)
+        }
     }
     // 向阅读器注册当前图片
     DisposableEffect(viewerPager, index, transform) {

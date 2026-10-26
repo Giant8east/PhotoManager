@@ -25,13 +25,13 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import android.view.ViewConfiguration
 import com.example.photomanager.data.PhotoViewerSettings
 import com.example.photomanager.data.ReadingDirection
-import com.example.photomanager.data.PhotoMetadataReader
 import com.example.photomanager.data.database.PhotoEntity
 
 internal class PhotoViewerPager(
@@ -50,6 +50,8 @@ internal class PhotoViewerPager(
 
     fun isPageVisible(index: Int) = layout.isPageVisible(index)
     fun attachImage(index: Int, transform: PhotoTransform) = layout.attachImage(index, transform)
+    fun onImageSizeChanged(index: Int, photo: PhotoEntity, size: Size) =
+        layout.onImageSizeChanged(index, photo, size)
     fun detachImage(index: Int, transform: PhotoTransform) = layout.detachImage(index, transform)
     suspend fun goToPage(index: Int) = layout.goToPage(index)
     suspend fun nextPage() = layout.nextPage()
@@ -99,8 +101,6 @@ internal fun rememberPhotoViewerPager(
     val animationScope = rememberCoroutineScope()
     val context = LocalContext.current
     val configuration = ViewConfiguration.get(context)
-    val metadata =
-        remember(context.applicationContext) { PhotoMetadataReader(context.applicationContext) }
     val currentOnEndReached by rememberUpdatedState(onEndReached)
     val currentPhotos by rememberUpdatedState(photos)
     return key(readingDirection) {
@@ -114,7 +114,6 @@ internal fun rememberPhotoViewerPager(
                     PhotoViewerScrollLayoutManager(
                         listState,
                         { currentPhotos },
-                        metadata,
                         animationScope,
                         { currentOnEndReached() },
                         configuration.scaledMinimumFlingVelocity.toFloat(),
