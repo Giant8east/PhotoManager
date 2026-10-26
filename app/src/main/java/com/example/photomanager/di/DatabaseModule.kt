@@ -4,6 +4,8 @@ package com.example.photomanager.di
 import android.content.Context
 import androidx.room.Room
 import com.example.photomanager.data.database.PhotoDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -31,5 +33,9 @@ object DatabaseModule {
         context,
         PhotoDatabase::class.java,
         "photo_manager.db"
-    ).build()
+    ).addMigrations(object : Migration(1, 2) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE albums ADD COLUMN totalSizeBytes INTEGER")
+        }
+    }).build()
 }
