@@ -25,6 +25,8 @@ data class AlbumEntity(
     /** 真实目录修改时间，使用 UTC ISO 8601 字符串；无法读取时为空。 */
     val modifiedAt: String? = null,
     val photoCount: Int = 0,
+    /** 当前目录直接包含图片的总字节数；由同步结果持久化。 */
+    val totalSizeBytes: Long? = null,
     /** 上次浏览到的图片下标，从 0 开始。 */
     val lastViewedPhotoIndex: Int = 0,
     val coverPath: String? = null,
