@@ -13,7 +13,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.io.File
 import javax.inject.Inject
-import javax.inject.Singleton
 
 private val Context.settingStore by preferencesDataStore("settings")
 
@@ -22,7 +21,6 @@ data class SettingDirectory(val path: String) {
     val name: String get() = File(path).name.ifEmpty { path }
 }
 
-@Singleton
 class SettingData @Inject constructor(
     @ApplicationContext private val context: Context,
     private val database: PhotoDatabase,

@@ -12,7 +12,6 @@ import java.io.File
 import java.nio.file.Paths
 import java.time.Instant
 import javax.inject.Inject
-import javax.inject.Singleton
 
 data class ScannedAlbum(
     val path: String,
@@ -23,7 +22,6 @@ data class ScannedAlbum(
     val children: List<File>
 )
 
-@Singleton
 class DirectoryScanner @Inject constructor() {
     /** 将系统目录选择器返回的 URI 解析为规范化绝对路径。 */
     fun resolveDirectoryPath(uri: Uri): String {

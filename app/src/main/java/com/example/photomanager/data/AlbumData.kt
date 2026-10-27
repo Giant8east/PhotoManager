@@ -19,9 +19,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
-import javax.inject.Singleton
 
-@Singleton
 class AlbumData @Inject constructor(
     private val database: PhotoDatabase,
     private val directoryScanner: DirectoryScanner
