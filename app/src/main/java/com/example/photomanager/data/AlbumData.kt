@@ -23,7 +23,8 @@ import java.time.format.DateTimeFormatter
 
 class AlbumData @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val database: PhotoDatabase
+    private val database: PhotoDatabase,
+    private val directoryScanner: DirectoryScanner
 ) {
     /** 构造相册查询并持续观察数据库变化。 */
     fun observeAlbums(
@@ -110,202 +111,87 @@ class AlbumData @Inject constructor(
     fun observePhotos(albumId: Long): Flow<List<PhotoEntity>> =
         database.photoDao().observePhotosQuery(albumId)
 
-    /** 递归同步根目录及子目录；空目录跳过，数据库只写入新增或变化的相册。 */
+    /** 详情只读取已加载分页，阅读页仍保留完整图片索引。 */
+    fun pagePhotos(albumId: Long): Flow<PagingData<PhotoEntity>> = Pager(
+        PagingConfig(pageSize = 30, initialLoadSize = 30, prefetchDistance = 6, enablePlaceholders = false),
+        pagingSourceFactory = { database.photoDao().queryPhotoPage(albumId) }
+    ).flow
+
+    /** 持续观察某一个相册 */
+    fun observeAlbum(albumId: Long) = database.albumDao().observeAlbumByIdQuery(albumId)
+
+    /** 同步树中每个相册；扫描细节由 DirectoryScanner 负责。 */
     suspend fun syncDirectory(rootUri: Uri) = withContext(Dispatchers.IO) {
-        scanDirectories(rootUri) { scanned ->
-            database.withTransaction {
-                val albumDao = database.albumDao()
-                val existing = albumDao.queryAlbumByPath(scanned.path)
-                if (existing == null) {
-                    val albumId = albumDao.insertAlbum(
-                        AlbumEntity(
-                            name = scanned.name,
-                            modifiedAt = scanned.modifiedAt,
-                            photoCount = scanned.imageUris.size,
-                            coverPath = scanned.imageUris.firstOrNull(),
-                            albumPath = scanned.path,
-                            sortOrder = System.currentTimeMillis()
-                        )
-                    )
-                    syncPhotos(albumId, scanned.imageUris)
-                } else if (
-                    existing.name != scanned.name ||
-                    existing.modifiedAt != scanned.modifiedAt ||
-                    existing.photoCount != scanned.imageUris.size ||
-                    existing.coverPath != scanned.imageUris.firstOrNull()
-                ) {
-                    albumDao.updateAlbums(
-                        listOf(
-                            existing.copy(
-                                name = scanned.name,
-                                modifiedAt = scanned.modifiedAt,
-                                photoCount = scanned.imageUris.size,
-                                coverPath = scanned.imageUris.firstOrNull()
-                            )
-                        )
-                    )
-                    syncPhotos(existing.id, scanned.imageUris)
-                } else {
-                    syncPhotos(existing.id, scanned.imageUris)
-                }
-            }
-        }
-    }
-
-    private suspend fun syncPhotos(albumId: Long, imageUris: List<String>) {
-        val photoDao = database.photoDao()
-        photoDao.deletePhotosByAlbumId(albumId)
-        photoDao.insertPhotos(imageUris.map { uri ->
-            PhotoEntity(albumId = albumId, name = uri.substringAfterLast('/'), contentUri = uri)
-        })
-    }
-
-    /** 表示一次目录扫描得到的相册信息。 */
-    private data class ScannedAlbum(
-        val path: String,
-        val name: String,
-        val modifiedAt: String?,
-        val imageUris: List<String>
-    )
-
-    /** 每扫描完一个含图片的目录就提交，避免等待整棵目录树扫描完成。 */
-    private suspend fun scanDirectories(
-        rootUri: Uri,
-        onAlbumScanned: suspend (ScannedAlbum) -> Unit
-    ) {
         val pending = ArrayDeque<Uri>()
         pending.add(rootUri)
-        val resolver = context.contentResolver
         while (pending.isNotEmpty()) {
             currentCoroutineContext().ensureActive()
-            val directoryUri = pending.removeFirst()
-            val documentId = if (DocumentsContract.isDocumentUri(context, directoryUri)) {
-                DocumentsContract.getDocumentId(directoryUri)
-            } else {
-                DocumentsContract.getTreeDocumentId(directoryUri)
-            }
-            val documentUri = DocumentsContract.buildDocumentUriUsingTree(directoryUri, documentId)
-            val metadata = resolver.query(
-                documentUri,
-                arrayOf(
-                    DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                    DocumentsContract.Document.COLUMN_LAST_MODIFIED
-                ), null, null, null
-            )?.use { cursor ->
-                if (!cursor.moveToFirst()) null else cursor.getString(0) to
-                        if (cursor.isNull(1)) null else cursor.getLong(1)
-                            .takeIf { it > 0 }?.let(Instant::ofEpochMilli)?.toString()
-            } ?: continue
-            val childrenUri =
-                DocumentsContract.buildChildDocumentsUriUsingTree(directoryUri, documentId)
-            val images = mutableListOf<String>()
-            val childDirectories = mutableListOf<String>()
-            resolver.query(
-                childrenUri,
-                arrayOf(
-                    DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-                    DocumentsContract.Document.COLUMN_MIME_TYPE,
-                    DocumentsContract.Document.COLUMN_DISPLAY_NAME
-                ), null, null, null
-            )?.use { cursor ->
-                while (cursor.moveToNext()) {
-                    currentCoroutineContext().ensureActive()
-                    val childId = cursor.getString(0)
-                    val childUri =
-                        DocumentsContract.buildDocumentUriUsingTree(directoryUri, childId)
-                    if (cursor.getString(1) == DocumentsContract.Document.MIME_TYPE_DIR) {
-                        childDirectories += childId
-                    } else if (cursor.getString(1)?.startsWith("image/") == true) {
-                        images += childUri.toString()
-                    }
-                }
-            }
-            if (images.isNotEmpty()) onAlbumScanned(
-                ScannedAlbum(
-                    directoryUri.toString(), metadata.first, metadata.second, images.sorted()
-                )
-            )
-            childDirectories.forEach { childId ->
-                pending.add(DocumentsContract.buildDocumentUriUsingTree(directoryUri, childId))
-            }
+            val scanned = directoryScanner.scanAlbum(pending.removeFirst())
+            if (scanned.photos.isNotEmpty()) saveScannedAlbum(scanned)
+            pending.addAll(scanned.children)
+        }
+    }
+    /** 在同一事务中确定新增或更新，避免重复导入创建第二条相册记录。 */
+    private suspend fun saveScannedAlbum(scanned: ScannedAlbum) = database.withTransaction {
+        val existing = database.albumDao().queryAlbumByPath(scanned.path)
+        if (existing == null) {
+            insertScannedAlbum(scanned)
+        } else {
+            updateScannedAlbum(existing, scanned)
         }
     }
 
-    /** 导入单个目录并写入相册记录。 */
-    suspend fun importDirectory(tree: Uri) = withContext(Dispatchers.IO) {
-        val resolver = context.contentResolver
-        val document = DocumentsContract.buildDocumentUriUsingTree(
-            tree,
-            DocumentsContract.getTreeDocumentId(tree)
+    /** 新相册由数据库生成 ID，再用该 ID 关联图片。 */
+    private suspend fun insertScannedAlbum(scanned: ScannedAlbum) {
+        val albumId = database.albumDao().insertAlbum(
+            AlbumEntity(
+                name = scanned.name,
+                albumPath = scanned.path,
+                modifiedAt = scanned.modifiedAt,
+                photoCount = scanned.photos.size,
+                coverPath = scanned.photos.firstOrNull()?.contentUri,
+                totalSizeBytes = scanned.totalSizeBytes,
+                sortOrder = System.currentTimeMillis()
+            )
         )
-        val directory = resolver.query(
-            document,
-            arrayOf(
-                DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                DocumentsContract.Document.COLUMN_LAST_MODIFIED
-            ),
-            null,
-            null,
-            null
-        )?.use { cursor ->
-            if (!cursor.moveToFirst()) return@use null
-            val modifiedAt = if (cursor.isNull(1)) null else cursor.getLong(1)
-                .takeIf { it > 0 }?.let { Instant.ofEpochMilli(it).toString() }
-            cursor.getString(0) to modifiedAt
-        } ?: error("目录不可用")
-        val (name, modifiedAt) = directory
-        val children = DocumentsContract.buildChildDocumentsUriUsingTree(
-            tree,
-            DocumentsContract.getTreeDocumentId(tree)
+        database.photoDao().insertPhotos(scanned.photos.map { it.copy(albumId = albumId) })
+    }
+
+    /** 摘要变化保留进度；图片内容或容量变化才替换索引并清零进度。 */
+    private suspend fun updateScannedAlbum(existing: AlbumEntity, scanned: ScannedAlbum) {
+        val photoDao = database.photoDao()
+        val previous = photoDao.queryPhotosByAlbumId(existing.id)
+        val contentChanged = existing.totalSizeBytes != scanned.totalSizeBytes ||
+            previous.size != scanned.photos.size ||
+            previous.zip(scanned.photos).any { (old, new) -> !samePhotoFile(old, new) }
+        val updated = existing.copy(
+            name = scanned.name,
+            modifiedAt = scanned.modifiedAt,
+            photoCount = scanned.photos.size,
+            coverPath = scanned.photos.firstOrNull()?.contentUri,
+            totalSizeBytes = scanned.totalSizeBytes,
+            lastViewedPhotoIndex = if (contentChanged) 0 else existing.lastViewedPhotoIndex
         )
-        val images = mutableListOf<String>()
-        resolver.query(
-            children,
-            arrayOf(
-                DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-                DocumentsContract.Document.COLUMN_MIME_TYPE,
-                DocumentsContract.Document.COLUMN_DISPLAY_NAME
-            ),
-            null,
-            null,
-            null
-        )?.use { cursor ->
-            val records = mutableListOf<Pair<String, String>>()
-            while (cursor.moveToNext()) if (cursor.getString(1)
-                    ?.startsWith("image/") == true
-            ) records += cursor.getString(2) to DocumentsContract.buildDocumentUriUsingTree(
-                tree,
-                cursor.getString(0)
-            ).toString()
-            images += records.sortedBy { it.first }.map { it.second }
-        }
-        val albumPath = tree.toString()
-        database.withTransaction {
-            val albumDao = database.albumDao()
-            val existing = albumDao.queryAlbumByPath(albumPath)
-            if (existing == null) {
-                albumDao.insertAlbum(
-                    AlbumEntity(
-                        name = name,
-                        modifiedAt = modifiedAt,
-                        albumPath = albumPath,
-                        coverPath = images.firstOrNull(),
-                        photoCount = images.size,
-                        sortOrder = System.currentTimeMillis()
-                    )
-                )
-            } else {
-                albumDao.updateAlbums(
-                    listOf(
-                        existing.copy(
-                            name = name,
-                            modifiedAt = modifiedAt,
-                            coverPath = images.firstOrNull(),
-                            photoCount = images.size
-                        )
-                    )
-                )
-            }
+        if (updated != existing) database.albumDao().updateAlbums(listOf(updated))
+        if (!contentChanged) return
+        photoDao.deletePhotosByAlbumId(existing.id)
+        photoDao.insertPhotos(scanned.photos.map { it.copy(albumId = existing.id) })
+    }
+
+    /** 比较文件身份和扫描元数据，不比较数据库 ID 或解码得到的尺寸。 */
+    private fun samePhotoFile(old: PhotoEntity, new: PhotoEntity): Boolean =
+        old.contentUri == new.contentUri && old.name == new.name &&
+            old.sizeBytes == new.sizeBytes && old.modifiedAt == new.modifiedAt
+
+    /** 仅刷新当前相册，空目录移出相册库，不递归同步子目录。 */
+    suspend fun refreshAlbum(album: AlbumEntity): Boolean = withContext(Dispatchers.IO) {
+        val scanned = directoryScanner.scanAlbum(Uri.parse(album.albumPath))
+        if (scanned.photos.isEmpty()) {
+            database.albumDao().deleteAlbum(album.id)
+            false
+        } else {
+            saveScannedAlbum(scanned)
+            true
         }
     }
 
@@ -314,10 +200,12 @@ class AlbumData @Inject constructor(
         val documents = albums.map { album ->
             val tree = Uri.parse(album.albumPath)
             require(DocumentsContract.isTreeUri(tree)) { "此相册尚未获得目录删除授权" }
-            tree to DocumentsContract.buildDocumentUriUsingTree(
-                tree,
+            val documentId = if (DocumentsContract.isDocumentUri(context, tree)) {
+                DocumentsContract.getDocumentId(tree)
+            } else {
                 DocumentsContract.getTreeDocumentId(tree)
-            )
+            }
+            tree to DocumentsContract.buildDocumentUriUsingTree(tree, documentId)
         }
         documents.forEach { (tree, document) ->
             check(
