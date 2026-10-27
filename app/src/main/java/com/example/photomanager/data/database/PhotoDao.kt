@@ -4,6 +4,7 @@ package com.example.photomanager.data.database
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
+import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -20,6 +21,12 @@ interface PhotoDao {
     @Query("DELETE FROM photos WHERE albumId = :albumId")
     suspend fun deletePhotosByAlbumId(albumId: Long)
 
+    @Query("DELETE FROM photos WHERE id IN (:ids)")
+    suspend fun deletePhotosByIds(ids: List<Long>)
+
     @Insert
     suspend fun insertPhotos(photos: List<PhotoEntity>)
+
+    @Update
+    suspend fun updatePhotos(photos: List<PhotoEntity>)
 }
