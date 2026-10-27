@@ -1,15 +1,14 @@
 /** 相册数据库访问对象，提供主页相册查询和自定义排序更新。 */
 package com.example.photomanager.data.database
 
+import androidx.paging.PagingSource
 import androidx.room.Dao
+import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.RawQuery
-import androidx.sqlite.db.SupportSQLiteQuery
 import androidx.room.Update
-import androidx.room.Insert
-
+import androidx.sqlite.db.SupportSQLiteQuery
 import kotlinx.coroutines.flow.Flow
-import androidx.paging.PagingSource
 
 @Dao
 interface AlbumDao {
@@ -40,8 +39,8 @@ interface AlbumDao {
     @Query("DELETE FROM albums WHERE id = :id")
     suspend fun deleteAlbum(id: Long)
 
-    @Query("DELETE FROM albums WHERE albumPath LIKE :pathPrefix")
-    suspend fun deleteAlbumsUnderPath(pathPrefix: String)
+    @Query("DELETE FROM albums WHERE albumPath = :path OR albumPath LIKE :childPrefix")
+    suspend fun deleteAlbumsUnderPath(path: String, childPrefix: String = "$path/%")
 
     @Update
     suspend fun updateAlbums(albums: List<AlbumEntity>)

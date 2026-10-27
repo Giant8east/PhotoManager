@@ -1,93 +1,108 @@
-/** SAF 目录读取边界：把 URI、提供器返回值和单层图片记录归一化为同步输入。 */
+/** 本地目录扫描与路径归一化边界：将选择器 URI 或本地路径统一转换为规范绝对路径并扫描单层图片。 */
 package com.example.photomanager.data
 
-import android.content.Context
 import android.net.Uri
+import android.os.Environment
 import android.provider.DocumentsContract
+import android.webkit.MimeTypeMap
 import com.example.photomanager.data.database.PhotoEntity
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import java.io.File
+import java.nio.file.Paths
 import java.time.Instant
 import javax.inject.Inject
+import javax.inject.Singleton
 
 data class ScannedAlbum(
     val path: String,
     val name: String,
     val modifiedAt: String?,
     val photos: List<PhotoEntity>,
-    val totalSizeBytes: Long?,
-    val children: List<Uri>
+    val totalSizeBytes: Long,
+    val children: List<File>
 )
 
-class DirectoryScanner @Inject constructor(
-    @ApplicationContext private val context: Context
-) {
-    suspend fun scanAlbum(directory: Uri): ScannedAlbum {
-        val id = if (DocumentsContract.isDocumentUri(context, directory))
-            DocumentsContract.getDocumentId(directory)
-        else DocumentsContract.getTreeDocumentId(directory)
-        val document = DocumentsContract.buildDocumentUriUsingTree(directory, id)
-        val metadata = queryMetadata(document)
-        val children = mutableListOf<Uri>()
+@Singleton
+class DirectoryScanner @Inject constructor() {
+    /** 将系统目录选择器返回的 URI 解析为规范化绝对路径。 */
+    fun resolveDirectoryPath(uri: Uri): String {
+        if (uri.scheme == "file") return normalizePath(requireNotNull(uri.path) { "无效目录路径" })
+        val docId = DocumentsContract.getTreeDocumentId(uri)
+        val parts = docId.split(":", limit = 2)
+        val volume = parts[0]
+        val relative = parts.getOrElse(1) { "" }.trimStart('/')
+        val baseDir = if (volume.equals("primary", ignoreCase = true)) {
+            Environment.getExternalStorageDirectory().path
+        } else {
+            "/storage/$volume"
+        }
+        return normalizePath(if (relative.isEmpty()) baseDir else "$baseDir/$relative")
+    }
+
+    /** 扫描单个本地目录，跳过隐藏项，分离直接包含的图片与子目录。 */
+    suspend fun scanAlbum(directory: File): ScannedAlbum {
+        val canonicalDir = directory.canonicalFile
+        check(canonicalDir.isDirectory) { "目录不存在或不可用：${canonicalDir.path}" }
+        val entries = canonicalDir.listFiles() ?: error("无法读取目录内容：${canonicalDir.path}")
+        val children = mutableListOf<File>()
         val photos = mutableListOf<PhotoEntity>()
         var totalSize = 0L
-        var sizeKnown = true
-        val cursor = context.contentResolver.query(
-            DocumentsContract.buildChildDocumentsUriUsingTree(directory, id),
-            arrayOf(
-                DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-                DocumentsContract.Document.COLUMN_MIME_TYPE,
-                DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                DocumentsContract.Document.COLUMN_SIZE,
-                DocumentsContract.Document.COLUMN_LAST_MODIFIED
-            ), null, null, null
-        ) ?: error("无法读取目录内容")
-        cursor.use {
-            while (it.moveToNext()) {
-                currentCoroutineContext().ensureActive()
-                val childUri = DocumentsContract.buildDocumentUriUsingTree(directory, it.getString(0))
-                if (it.getString(1) == DocumentsContract.Document.MIME_TYPE_DIR) {
-                    children += childUri
-                    continue
-                }
-                if (it.getString(1)?.startsWith("image/") != true) continue
-                val bytes = if (it.isNull(3)) {
-                    sizeKnown = false
-                    0L
-                } else it.getLong(3).coerceAtLeast(0L)
-                totalSize += bytes
+
+        for (entry in entries) {
+            currentCoroutineContext().ensureActive()
+            if (entry.name.startsWith(".")) continue
+            if (entry.isDirectory) {
+                children += entry
+            } else if (entry.isFile && isImageFile(entry)) {
+                val size = entry.length().coerceAtLeast(0L)
+                totalSize += size
                 photos += PhotoEntity(
                     albumId = 0,
-                    name = it.getString(2),
-                    contentUri = childUri.toString(),
-                    modifiedAt = nullableTime(it, 4),
-                    sizeBytes = bytes
+                    name = entry.name,
+                    contentUri = normalizePath(entry.path),
+                    modifiedAt = formatEpochMillis(entry.lastModified()),
+                    sizeBytes = size
                 )
             }
         }
         return ScannedAlbum(
-            path = directory.toString(), name = metadata.first, modifiedAt = metadata.second,
+            path = normalizePath(canonicalDir.path),
+            name = canonicalDir.name.ifEmpty { canonicalDir.path },
+            modifiedAt = formatEpochMillis(canonicalDir.lastModified()),
             photos = photos.sortedBy { it.name },
-            totalSizeBytes = totalSize.takeIf { sizeKnown }, children = children
+            totalSizeBytes = totalSize,
+            children = children.sortedBy { it.name }
         )
     }
 
-    private fun queryMetadata(document: Uri): Pair<String, String?> {
-        val cursor = context.contentResolver.query(
-            document,
-            arrayOf(
-                DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                DocumentsContract.Document.COLUMN_LAST_MODIFIED
-            ), null, null, null
-        ) ?: error("目录不可用")
-        cursor.use {
-            check(it.moveToFirst()) { "目录不可用" }
-            return it.getString(0) to nullableTime(it, 1)
-        }
-    }
+    companion object {
+        private val IMAGE_EXTENSIONS = setOf(
+            "jpg", "jpeg", "png", "webp", "gif", "bmp", "heic", "heif", "avif"
+        )
 
-    private fun nullableTime(cursor: android.database.Cursor, column: Int): String? =
-        if (cursor.isNull(column)) null else cursor.getLong(column)
-            .takeIf { it > 0 }?.let(Instant::ofEpochMilli)?.toString()
+        /** 归一化本地路径，消除冗余分隔符、`.`、`..` 与末尾斜杠。 */
+        fun normalizePath(rawPath: String): String =
+            runCatching { File(rawPath).canonicalPath }
+                .getOrElse { Paths.get(rawPath).toAbsolutePath().normalize().toString() }
+
+        /** 判断两个路径是否为同一目录或父子目录关系。 */
+        fun isSameOrSubPath(parent: String, child: String): Boolean {
+            val p = normalizePath(parent)
+            val c = normalizePath(child)
+            return c == p || (p == "/" && c.startsWith("/")) || c.startsWith("$p/")
+        }
+
+        private fun isImageFile(file: File): Boolean {
+            val ext = file.extension.lowercase()
+            if (ext.isEmpty()) return false
+            if (ext in IMAGE_EXTENSIONS) return true
+            return runCatching {
+                MimeTypeMap.getSingleton()?.getMimeTypeFromExtension(ext)?.startsWith("image/") == true
+            }.getOrDefault(false)
+        }
+
+        private fun formatEpochMillis(millis: Long): String? =
+            millis.takeIf { it > 0L }?.let(Instant::ofEpochMilli)?.toString()
+    }
 }
