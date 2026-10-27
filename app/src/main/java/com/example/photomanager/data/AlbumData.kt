@@ -67,11 +67,12 @@ class AlbumData @Inject constructor(
         return SimpleSQLiteQuery(sql, arrayOf(groupId, groupId, searchPattern(keyword)))
     }
 
+    /** 转义 SQLite LIKE 模式中的特殊通配符。 */
+    private fun escapeLike(value: String): String =
+        value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
     /** 将关键词转换为 LIKE 的包含匹配模式。 */
-    private fun searchPattern(keyword: String): String {
-        val escaped = keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        return "%$escaped%"
-    }
+    private fun searchPattern(keyword: String): String = "%${escapeLike(keyword)}%"
 
     /** 将 ISO 时间格式化为页面显示文本。 */
     fun displayTime(modifiedAt: String?): String = modifiedAt?.let {
@@ -94,8 +95,9 @@ class AlbumData @Inject constructor(
     /** 删除指定扫描目录及其子目录对应的相册记录。 */
     suspend fun deleteAlbumsUnderPath(path: String) {
         val normalized = DirectoryScanner.normalizePath(path)
+        val childPrefix = if (normalized == "/") "/%" else "${escapeLike(normalized)}/%"
         database.withTransaction {
-            database.albumDao().deleteAlbumsUnderPath(normalized, "$normalized/%")
+            database.albumDao().deleteAlbumsUnderPath(normalized, childPrefix)
         }
     }
 

@@ -39,8 +39,8 @@ interface AlbumDao {
     @Query("DELETE FROM albums WHERE id = :id")
     suspend fun deleteAlbum(id: Long)
 
-    @Query("DELETE FROM albums WHERE albumPath = :path OR albumPath LIKE :childPrefix")
-    suspend fun deleteAlbumsUnderPath(path: String, childPrefix: String = "$path/%")
+    @Query("DELETE FROM albums WHERE albumPath = :path OR albumPath LIKE :childPrefix ESCAPE '\\'")
+    suspend fun deleteAlbumsUnderPath(path: String, childPrefix: String)
 
     @Update
     suspend fun updateAlbums(albums: List<AlbumEntity>)
