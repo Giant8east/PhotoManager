@@ -13,6 +13,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.time.Instant
@@ -100,17 +101,11 @@ class AlbumData @Inject constructor(
 
     /** 持续观察相册的完整图片索引。 */
     fun observePhotos(albumId: Long): Flow<List<PhotoEntity>> =
-        database.photoDao().observePhotosQuery(albumId)
-
-    /** 详情分页读取相册图片，阅读页仍使用完整图片索引。 */
-    fun pagePhotos(albumId: Long): Flow<PagingData<PhotoEntity>> = Pager(
-        PagingConfig(pageSize = 30, initialLoadSize = 30, prefetchDistance = 6, enablePlaceholders = false),
-        pagingSourceFactory = { database.photoDao().queryPhotoPage(albumId) }
-    ).flow
+        database.photoDao().observePhotosQuery(albumId).distinctUntilChanged()
 
     /** 持续观察单个相册实体。 */
     fun observeAlbum(albumId: Long): Flow<AlbumEntity?> =
-        database.albumDao().observeAlbumByIdQuery(albumId)
+        database.albumDao().observeAlbumByIdQuery(albumId).distinctUntilChanged()
 
     /** 递归同步根目录下所有含图片的相册。 */
     suspend fun syncDirectory(rootPath: String) = withContext(Dispatchers.IO) {
