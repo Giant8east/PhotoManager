@@ -9,7 +9,10 @@ import com.example.photomanager.data.database.PhotoEntity
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.NoSuchFileException
 import java.nio.file.Paths
+import java.nio.file.attribute.BasicFileAttributes
 import java.time.Instant
 import javax.inject.Inject
 
@@ -38,36 +41,42 @@ class DirectoryScanner @Inject constructor() {
         return normalizePath(if (relative.isEmpty()) baseDir else "$baseDir/$relative")
     }
 
-    /** 扫描单个本地目录，跳过隐藏项，分离直接包含的图片与子目录。 */
-    suspend fun scanAlbum(directory: File): ScannedAlbum {
-        val canonicalDir = directory.canonicalFile
-        check(canonicalDir.isDirectory) { "目录不存在或不可用：${canonicalDir.path}" }
-        val entries = canonicalDir.listFiles() ?: error("无法读取目录内容：${canonicalDir.path}")
+    /** 扫描已规范化绝对路径的单个目录，包含隐藏项；明确不存在时返回 null。 */
+    suspend fun scanAlbum(directory: File): ScannedAlbum? {
+        val attributes = try {
+            Files.readAttributes(directory.toPath(), BasicFileAttributes::class.java)
+        } catch (missing: NoSuchFileException) {
+            return null
+        }
+        check(attributes.isDirectory) { "路径不是目录：${directory.path}" }
+        val dirPath = directory.path
+        val dirName = directory.name.ifEmpty { dirPath }
+        val entries = directory.listFiles() ?: error("无法读取目录内容：$dirPath")
         val children = mutableListOf<File>()
         val photos = mutableListOf<PhotoEntity>()
         var totalSize = 0L
 
         for (entry in entries) {
             currentCoroutineContext().ensureActive()
-            if (entry.name.startsWith(".")) continue
             if (entry.isDirectory) {
                 children += entry
             } else if (entry.isFile && isImageFile(entry)) {
-                val size = entry.length().coerceAtLeast(0L)
+                val size = entry.length()
                 totalSize += size
+                val photoPath = if (dirPath == "/") "/${entry.name}" else "$dirPath/${entry.name}"
                 photos += PhotoEntity(
                     albumId = 0,
                     name = entry.name,
-                    contentUri = normalizePath(entry.path),
+                    contentUri = photoPath,
                     modifiedAt = formatEpochMillis(entry.lastModified()),
                     sizeBytes = size
                 )
             }
         }
         return ScannedAlbum(
-            path = normalizePath(canonicalDir.path),
-            name = canonicalDir.name.ifEmpty { canonicalDir.path },
-            modifiedAt = formatEpochMillis(canonicalDir.lastModified()),
+            path = dirPath,
+            name = dirName,
+            modifiedAt = formatEpochMillis(attributes.lastModifiedTime().toMillis()),
             photos = photos.sortedBy { it.name },
             totalSizeBytes = totalSize,
             children = children.sortedBy { it.name }

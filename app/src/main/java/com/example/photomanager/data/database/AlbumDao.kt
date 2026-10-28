@@ -30,6 +30,9 @@ interface AlbumDao {
     @Query("SELECT * FROM albums WHERE albumPath = :path LIMIT 1")
     suspend fun queryAlbumByPath(path: String): AlbumEntity?
 
+    @Query("SELECT albumPath FROM albums WHERE albumPath = :path OR substr(albumPath, 1, length(:childPrefix)) = :childPrefix")
+    suspend fun queryAlbumPathsUnderPath(path: String, childPrefix: String): List<String>
+
     @Insert
     suspend fun insertAlbum(album: AlbumEntity): Long
 
@@ -39,7 +42,10 @@ interface AlbumDao {
     @Query("DELETE FROM albums WHERE id = :id")
     suspend fun deleteAlbum(id: Long)
 
-    @Query("DELETE FROM albums WHERE albumPath = :path OR albumPath LIKE :childPrefix ESCAPE '\\'")
+    @Query("DELETE FROM albums WHERE albumPath = :path")
+    suspend fun deleteAlbumByPath(path: String)
+
+    @Query("DELETE FROM albums WHERE albumPath = :path OR substr(albumPath, 1, length(:childPrefix)) = :childPrefix")
     suspend fun deleteAlbumsUnderPath(path: String, childPrefix: String)
 
     @Update

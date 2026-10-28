@@ -74,6 +74,10 @@ class AlbumData @Inject constructor(
     /** 将关键词转换为 LIKE 的包含匹配模式。 */
     private fun searchPattern(keyword: String): String = "%${escapeLike(keyword)}%"
 
+    /** 生成指定规范路径的子目录精确前缀（区分大小写）。 */
+    private fun childPathPrefix(normalizedPath: String): String =
+        if (normalizedPath == "/") "/" else "$normalizedPath/"
+
     /** 将 ISO 时间格式化为页面显示文本。 */
     fun displayTime(modifiedAt: String?): String = modifiedAt?.let {
         DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm").withZone(ZoneId.systemDefault())
@@ -92,12 +96,17 @@ class AlbumData @Inject constructor(
     suspend fun updateReadingProgress(albumId: Long, photoIndex: Int) =
         database.albumDao().updateAlbumReadingProgress(albumId, photoIndex)
 
+    /** 仅删除指定精确路径的相册记录，关联图片由外键级联清理。 */
+    suspend fun deleteAlbumRecord(path: String) {
+        val normalized = DirectoryScanner.normalizePath(path)
+        database.albumDao().deleteAlbumByPath(normalized)
+    }
+
     /** 删除指定扫描目录及其子目录对应的相册记录。 */
     suspend fun deleteAlbumsUnderPath(path: String) {
         val normalized = DirectoryScanner.normalizePath(path)
-        val childPrefix = if (normalized == "/") "/%" else "${escapeLike(normalized)}/%"
         database.withTransaction {
-            database.albumDao().deleteAlbumsUnderPath(normalized, childPrefix)
+            database.albumDao().deleteAlbumsUnderPath(normalized, childPathPrefix(normalized))
         }
     }
 
@@ -109,25 +118,47 @@ class AlbumData @Inject constructor(
     fun observeAlbum(albumId: Long): Flow<AlbumEntity?> =
         database.albumDao().observeAlbumByIdQuery(albumId).distinctUntilChanged()
 
-    /** 递归同步根目录下所有含图片的相册。 */
+    /** 遍历同步整个根目录，并对数据库已有但未在本次遍历中发现的旧路径进行补充对账。 */
     suspend fun syncDirectory(rootPath: String) = withContext(Dispatchers.IO) {
-        val rootDir = File(DirectoryScanner.normalizePath(rootPath))
-        check(rootDir.isDirectory) { "扫描目录不存在或不可访问：${rootDir.path}" }
-        val pending = ArrayDeque<File>()
-        pending.add(rootDir)
+        val normalizedRoot = DirectoryScanner.normalizePath(rootPath)
+        val remainingPaths = database.albumDao()
+            .queryAlbumPathsUnderPath(normalizedRoot, childPathPrefix(normalizedRoot))
+            .toMutableSet()
+        val pending = ArrayDeque<String>()
+        pending.add(normalizedRoot)
+
         while (pending.isNotEmpty()) {
             currentCoroutineContext().ensureActive()
-            val currentDir = pending.removeFirst()
-            val scanned = directoryScanner.scanAlbum(currentDir)
-            if (scanned.photos.isNotEmpty()) {
-                saveScannedAlbum(scanned)
-            } else {
-                database.albumDao().queryAlbumByPath(scanned.path)?.let { emptyExisting ->
-                    database.albumDao().deleteAlbum(emptyExisting.id)
-                }
+            val currentPath = pending.removeFirst()
+            val scanned = refreshDirectory(currentPath, knownPaths = remainingPaths)
+            remainingPaths.remove(currentPath)
+            if (scanned != null) {
+                pending.addAll(scanned.children.map { DirectoryScanner.normalizePath(it.path) })
             }
-            pending.addAll(scanned.children)
         }
+
+        for (stalePath in remainingPaths) {
+            currentCoroutineContext().ensureActive()
+            refreshDirectory(stalePath, knownPaths = remainingPaths)
+        }
+    }
+
+    /** 单相册刷新入口：规范化一次路径后，复用同步使用的单目录处理。 */
+    suspend fun refreshAlbum(path: String): ScannedAlbum? = withContext(Dispatchers.IO) {
+        refreshDirectory(DirectoryScanner.normalizePath(path))
+    }
+
+    /** 路径已由入口或入队时规范化；扫描与记录清理沿用同一条路径。 */
+    private suspend fun refreshDirectory(path: String, knownPaths: Set<String>? = null): ScannedAlbum? {
+        val scanned = directoryScanner.scanAlbum(File(path))
+        if (scanned == null || scanned.photos.isEmpty()) {
+            if (knownPaths == null || path in knownPaths) {
+                database.albumDao().deleteAlbumByPath(path)
+            }
+        } else {
+            saveScannedAlbum(scanned)
+        }
+        return scanned
     }
 
     /** 在同一事务中确定新增或差分更新，避免重复导入创建第二条相册记录并保持图片 ID 稳定。 */
@@ -195,23 +226,10 @@ class AlbumData @Inject constructor(
         }
     }
 
-    /** 仅刷新当前相册，空目录移出相册库，不递归同步子目录。 */
-    suspend fun refreshAlbum(album: AlbumEntity): Boolean = withContext(Dispatchers.IO) {
-        val targetDir = File(DirectoryScanner.normalizePath(album.albumPath))
-        val scanned = directoryScanner.scanAlbum(targetDir)
-        if (scanned.photos.isEmpty()) {
-            database.albumDao().deleteAlbum(album.id)
-            false
-        } else {
-            saveScannedAlbum(scanned)
-            true
-        }
-    }
-
     /** 先删除真实本地目录及其文件，再清理 Room 相册记录。 */
     suspend fun delete(albums: List<AlbumEntity>) = withContext(Dispatchers.IO) {
         val directories = albums.map { album ->
-            album to File(DirectoryScanner.normalizePath(album.albumPath)).canonicalFile
+            album to File(DirectoryScanner.normalizePath(album.albumPath))
         }
         directories.forEach { (_, dir) ->
             if (dir.exists()) {
