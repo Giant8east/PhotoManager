@@ -1,13 +1,11 @@
 /** 排列阅读页面，分配拖动距离，管理落页、缩放和主动越界拉动。 */
 package com.example.photomanager.pages.photoviewer.reader
 
-import com.example.photomanager.pages.photoviewer.edge.PhotoViewerEdge
-
-import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.AnimationState
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateDecay
 import androidx.compose.animation.core.exponentialDecay
-import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.MutatePriority
@@ -19,17 +17,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Velocity
+import androidx.compose.ui.unit.dp
 import com.example.photomanager.data.PhotoViewerSettings
 import com.example.photomanager.data.ReadingDirection
+import com.example.photomanager.pages.photoviewer.edge.PhotoViewerEdge
 import kotlin.math.abs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 
 /** 只有对应方向确实不能继续滚动时，剩余距离才属于相册越界。 */
 internal fun isReaderBoundary(
@@ -60,6 +59,8 @@ internal class PhotoViewerPagerLayoutManager(
     private val pagerState: PagerState,
     private val readingDirection: ReadingDirection,
     private val animationScope: CoroutineScope,
+    private val minimumFlingVelocity: Float = 50f,
+    private val maximumFlingVelocity: Float = 8000f,
     private val onEndReached: () -> Unit
 ) : PhotoViewerLayoutManager<Offset>(animationScope) {
     private var viewportSize = IntSize.Zero
@@ -69,8 +70,6 @@ internal class PhotoViewerPagerLayoutManager(
     private var gestureJob: Job? = null
     private var zoomAnimation: Job? = null
     private var flingJob: Job? = null
-    var minimumFlingVelocity = 50f
-    var maximumFlingVelocity = 8000f
 
     override fun onImageDetached(index: Int) {
         if (index == pagerState.currentPage) flingJob?.cancel()
@@ -85,6 +84,8 @@ internal class PhotoViewerPagerLayoutManager(
 
     private val scrollDirection get() = if (readingDirection == ReadingDirection.RIGHT_TO_LEFT) 1f else -1f
 
+    private val isPageAligned get() = abs(pagerState.currentPageOffsetFraction) < 0.0001f
+
     /** 同一段距离按边缘收回、图片平移、页面滚动的顺序消费，不重复分发。 */
     private fun dragImageAndPage(scrollScope: ScrollScope, delta: Offset) {
         var available = Offset(
@@ -92,7 +93,6 @@ internal class PhotoViewerPagerLayoutManager(
             retractAxis(delta.y, PhotoViewerEdge.TOP, PhotoViewerEdge.BOTTOM)
         )
         val image = images[pagerState.currentPage]
-        val isPageAligned = abs(pagerState.currentPageOffsetFraction) < 0.0001f
         if (isPageAligned) {
             available -= image?.pan(available) ?: Offset.Zero
         }
@@ -109,8 +109,8 @@ internal class PhotoViewerPagerLayoutManager(
             pullEdges(Offset(physicalRemaining, 0f))
         }
         // 非阅读轴只反馈确实能平移的图片边界，不让适配后留白区域产生虚假越界。
-        if (isPageAligned && abs(pagerState.currentPageOffsetFraction) < 0.0001f) {
-            if (image?.canPanVertically == true) pullEdges(Offset(0f, available.y))
+        if (isPageAligned && image?.canPanVertically == true) {
+            pullEdges(Offset(0f, available.y))
         }
     }
 
@@ -206,7 +206,6 @@ internal class PhotoViewerPagerLayoutManager(
             pageSpacing = pageSpacing, userScrollEnabled = false,
             modifier = Modifier.fillMaxSize()
         ) { pageContent(it) }
-    
     }
 
     override fun resizeViewport(size: IntSize) {
@@ -239,6 +238,7 @@ internal class PhotoViewerPagerLayoutManager(
         isPulling = false
         edges.values.forEach { it.release() }
     }
+
     override suspend fun nextPage() = goToPage(pagerState.currentPage + 1)
 
     override suspend fun previousPage() = goToPage(pagerState.currentPage - 1)
@@ -258,8 +258,7 @@ internal class PhotoViewerPagerLayoutManager(
             pagerState.scroll(MutatePriority.UserInput) {
                 for (delta in deltas) dragImageAndPage(this, delta)
                 releaseEdge()
-                val canFling = pagerState.currentPage == startPage &&
-                    abs(pagerState.currentPageOffsetFraction) < 0.0001f
+                val canFling = pagerState.currentPage == startPage && isPageAligned
                 settlePage(this, startPage, touchSlop)
                 if (canFling) startImageFling(releaseVelocity)
             }

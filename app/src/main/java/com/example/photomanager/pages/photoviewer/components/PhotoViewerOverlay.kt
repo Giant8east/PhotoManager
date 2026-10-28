@@ -53,12 +53,11 @@ fun PhotoViewerOverlay(settings: PhotoViewerSettings, currentPage: Int, pageCoun
 /** 首次组合即提供真实值，避免空内容引起首次布局变化。 */
 @Composable
 private fun rememberCurrentTime(): State<String> {
-    val initialTime = remember {
-        SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
-    }
-    return produceState(initialValue = initialTime) {
+    val formatter = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
+    val initialTime = remember(formatter) { formatter.format(Date()) }
+    return produceState(initialValue = initialTime, key1 = formatter) {
         while (true) {
-            value = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
+            value = formatter.format(Date())
             delay(1_000L)
         }
     }

@@ -31,7 +31,6 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import com.example.photomanager.data.PageScale
 import com.example.photomanager.data.database.PhotoEntity
-import kotlinx.coroutines.flow.first
 
 /** 解码预算不随长图项高度或整列缩放增加；单张请求最多约四百万像素。 */
 internal fun readerDecodeSize(viewport: Size, screen: IntSize): IntSize = IntSize(
@@ -52,23 +51,20 @@ internal fun PhotoViewerPageView(
     val transform = remember(photo.id, effectivePageScale) { PhotoTransform(effectivePageScale) }
     var retryCount by remember(photo) { mutableIntStateOf(0) }
     val context = LocalContext.current
-    val request = remember(photo, transform, context) {
-            ImageRequest.Builder(context).data(photo.contentUri)
-                .scale(Scale.FIT)
-                .memoryCacheKey("${photo.contentUri}|${photo.modifiedAt}|${photo.sizeBytes}|reader")
-                .size {
-                    // 等待页面完成测量，观察 viewport，等它第一次出现有效宽高，获取视口宽高
-                    val viewport = snapshotFlow { transform.viewport }
-                        .first { it.width > 0f && it.height > 0f }
-                    // 连续阅读的长图项可高于屏幕，请求仍以屏幕预算采样，不整张原尺寸解码。
-                    val metrics = context.resources.displayMetrics
-                    val size = readerDecodeSize(
-                        viewport,
-                        IntSize(metrics.widthPixels, metrics.heightPixels)
-                    )
-                    coil.size.Size(size.width, size.height)
-                }.build()
-        }
+    val request = remember(photo, context) {
+        val metrics = context.resources.displayMetrics
+        val screenSize = IntSize(metrics.widthPixels, metrics.heightPixels)
+        val initialViewport = Size(screenSize.width.toFloat(), screenSize.height.toFloat())
+        val size = readerDecodeSize(
+            transform.viewport.takeIf { it.width > 0f && it.height > 0f } ?: initialViewport,
+            screenSize
+        )
+        ImageRequest.Builder(context).data(photo.contentUri)
+            .scale(Scale.FIT)
+            .memoryCacheKey("${photo.contentUri}|${photo.modifiedAt}|${photo.sizeBytes}|reader")
+            .size(size.width, size.height)
+            .build()
+    }
     // 重试重建 Painter 并重新执行同一请求，不影响相邻页预加载。
     val painter = key(retryCount) {
         rememberAsyncImagePainter(

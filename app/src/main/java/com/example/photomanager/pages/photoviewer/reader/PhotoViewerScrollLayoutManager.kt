@@ -21,9 +21,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.Remeasurement
 import androidx.compose.ui.layout.RemeasurementModifier
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntSize
@@ -32,13 +32,15 @@ import androidx.compose.ui.unit.dp
 import com.example.photomanager.data.PhotoViewerSettings
 import com.example.photomanager.data.database.PhotoEntity
 import com.example.photomanager.pages.photoviewer.edge.PhotoViewerEdge
-import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.launch
 
 /** 顶边参考线归属第一张仍占据可见区域的图片，间隔不单独占用页码。 */
 internal fun continuousPageIndex(
@@ -58,10 +60,10 @@ internal class PhotoViewerScrollLayoutManager(
     private val minimumVelocity: Float,
     private val maximumVelocity: Float
 ) : PhotoViewerLayoutManager<PhotoViewerScrollLayoutManager.Input>(scope) {
-    private data class PageGeometry(val photo: PhotoEntity, val ratio: Float)
     private data class ReadingAnchor(val index: Int, val top: Int)
 
-    private val geometries = mutableStateMapOf<Int, PageGeometry>()
+    /** 以稳定的 PhotoEntity.id 为键保存已解码宽高比，不受索引变化影响。 */
+    private val aspectRatios = mutableStateMapOf<Long, Float>()
     private var viewport by mutableStateOf(IntSize.Zero)
     private var zoom by mutableFloatStateOf(1f)
     private var offsetX by mutableFloatStateOf(0f)
@@ -71,7 +73,6 @@ internal class PhotoViewerScrollLayoutManager(
     private var gesture: Job? = null
     private var zoomAnimation: Job? = null
     private var edgeAnimation: Job? = null
-    private val navigation = Mutex()
     private var remeasurement: Remeasurement? = null
     private val measurement = object : RemeasurementModifier {
         override fun onRemeasurementAvailable(remeasurement: Remeasurement) {
@@ -79,11 +80,9 @@ internal class PhotoViewerScrollLayoutManager(
         }
     }
 
-    /** 连续阅读布局接收到的一次手势输入,给不同输入一个共同类型 */
+    /** 连续阅读布局接收到的一次手势输入。 */
     sealed interface Input {
-        /** 拖动，只有位移 */
         data class Drag(val delta: Offset) : Input
-        /** 缩放，包含双指焦点位置、本次相对缩放倍率、双指移动产生的平移量 */
         data class Scale(val focus: Offset, val factor: Float, val pan: Offset) : Input
     }
 
@@ -91,6 +90,7 @@ internal class PhotoViewerScrollLayoutManager(
 
     /** 按完整图片索引取记录，顺序与详情页保持一致。 */
     private fun photoAt(index: Int) = photos()[index]
+
     override val currentPage
         get() = continuousPageIndex(
             listState.layoutInfo.visibleItemsInfo.map { it.index to (it.offset + it.size) },
@@ -112,9 +112,7 @@ internal class PhotoViewerScrollLayoutManager(
     override fun Content(settings: PhotoViewerSettings, pageContent: @Composable (Int) -> Unit) {
         val density = LocalDensity.current
         val gap = if (settings.showPageGap) 12.dp else 0.dp
-        // 把页面间隔换算成像素，供缩放计算使用
         SideEffect { gapPixels = with(density) { gap.toPx() } }
-        // 持续观察滚动何时停下来
         LaunchedEffect(this) {
             snapshotFlow { if (!listState.isScrollInProgress) currentPage else null }
                 .filterNotNull().collect { index ->
@@ -153,17 +151,16 @@ internal class PhotoViewerScrollLayoutManager(
                 }
             }
         }
-    
     }
 
-    /** 只接收当前记录的有效解码尺寸，不再独立读取文件头。 */
+    /** 只接收有效解码尺寸，按图片唯一 ID 缓存宽高比并恢复锚点。 */
     override fun onImageSizeChanged(index: Int, photo: PhotoEntity, size: Size) {
-        if (photoAt(index) != photo || !size.width.isFinite() || !size.height.isFinite() ||
+        if (!size.width.isFinite() || !size.height.isFinite() ||
             size.width <= 0f || size.height <= 0f) return
-        val geometry = PageGeometry(photo, size.width / size.height)
-        if (geometries[index] == geometry) return
+        val ratio = size.width / size.height
+        if (aspectRatios[photo.id] == ratio) return
         val anchor = captureAnchor()
-        geometries[index] = geometry
+        aspectRatios[photo.id] = ratio
         anchor?.let(::restoreAnchor)
     }
 
@@ -201,8 +198,7 @@ internal class PhotoViewerScrollLayoutManager(
             ?: viewport.height.coerceAtLeast(1)
 
     /** 未解码成功的项维持视口高度占位，失败与重试均由单页展示。 */
-    private fun ratioFor(index: Int): Float? =
-        geometries[index]?.takeIf { it.photo == photoAt(index) }?.ratio
+    private fun ratioFor(index: Int): Float? = aspectRatios[photoAt(index).id]
 
     override fun resizeViewport(size: IntSize) {
         if (viewport != size) {
@@ -222,7 +218,6 @@ internal class PhotoViewerScrollLayoutManager(
             }
         }
     }
-
 
     override fun onDown(position: Offset, touchSlop: Float) {
         cancelMotion()
@@ -259,12 +254,7 @@ internal class PhotoViewerScrollLayoutManager(
         val x = retractAxis(delta.x, PhotoViewerEdge.LEFT, PhotoViewerEdge.RIGHT)
         val y = retractAxis(delta.y, PhotoViewerEdge.TOP, PhotoViewerEdge.BOTTOM)
         if (zoom > 1f) {
-            // 与 EhViewer 连续布局一致：允许横移，但不显示左右越界反馈。
-            // val previousX = offsetX
             offsetX = clampX(offsetX + x)
-            // val remainingX = x - (offsetX - previousX)
-            // val edge = if (remainingX > 0) PhotoViewerEdge.LEFT else PhotoViewerEdge.RIGHT
-            // if (abs(remainingX) > 0.01f) edges.getValue(edge).pull(abs(remainingX))
         }
         if (y != 0f) isScrollingBackward = y > 0f
         val consumed = scroll.scrollBy(-y)
@@ -342,20 +332,13 @@ internal class PhotoViewerScrollLayoutManager(
                     edges.getValue(verticalEdgeFor(initial))
                         .absorb(abs(initial), viewport.height.toFloat())
                 }
-                // 连续阅读的水平惯性仍在边界停止，不显示水平撞边反馈。
-                // else {
-                //     val edge = if (initial > 0) PhotoViewerEdge.LEFT else PhotoViewerEdge.RIGHT
-                //     edges.getValue(edge).absorb(abs(initial), viewport.width.toFloat())
-                // }
                 cancelAnimation()
             }
         }
     }
 
-    override suspend fun goToPage(index: Int) = navigation.withLock { navigate(index) }
-
     /** 停止旧交互并直接定位目标项，由单页异步加载后更新高度；保留整列缩放，越过末页时通知停止播放。 */
-    private suspend fun navigate(index: Int) {
+    override suspend fun goToPage(index: Int) {
         cancelMotion()
         edges.values.forEach { it.release() }
         if (index !in 0 until pageCount) {
@@ -367,8 +350,8 @@ internal class PhotoViewerScrollLayoutManager(
         settledIndex = index
     }
 
-    override suspend fun nextPage() = navigation.withLock { navigate(currentPage + 1) }
-    override suspend fun previousPage() = navigation.withLock { navigate(currentPage - 1) }
+    override suspend fun nextPage() = goToPage(currentPage + 1)
+    override suspend fun previousPage() = goToPage(currentPage - 1)
 
     /** 为主动越界模拟一次纵向拉动，随后交由边缘效果自然回缩。 */
     private fun boundary(isEnd: Boolean) {

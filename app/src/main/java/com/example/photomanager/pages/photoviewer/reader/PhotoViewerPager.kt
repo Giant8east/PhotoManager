@@ -1,8 +1,7 @@
 /** 阅读交互入口，组装固定视口、手势识别、页面布局与边缘绘制。 */
 package com.example.photomanager.pages.photoviewer.reader
 
-import com.example.photomanager.pages.photoviewer.edge.PhotoViewerEdgeView
-
+import android.view.ViewConfiguration
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -12,27 +11,25 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.systemBarsIgnoringVisibility
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
-import android.view.ViewConfiguration
 import com.example.photomanager.data.PhotoViewerSettings
 import com.example.photomanager.data.ReadingDirection
 import com.example.photomanager.data.database.PhotoEntity
+import com.example.photomanager.pages.photoviewer.edge.PhotoViewerEdgeView
 
 internal class PhotoViewerPager(
     private val layout: PhotoViewerLayoutManager<*>
@@ -87,6 +84,8 @@ internal class PhotoViewerPager(
     }
 }
 
+private class ReaderPositionMemory(var index: Int, var verticalOffset: Int = 0)
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun rememberPhotoViewerPager(
@@ -95,54 +94,49 @@ internal fun rememberPhotoViewerPager(
     readingDirection: ReadingDirection,
     onEndReached: () -> Unit
 ): PhotoViewerPager {
-    var lastIndex by remember { mutableIntStateOf(initialIndex) }
-    var verticalIndex by remember { mutableIntStateOf(initialIndex) }
-    var verticalOffset by remember { mutableIntStateOf(0) }
+    // 仅用于在切换阅读方向重建布局时继承当前页码与纵向偏移，无需使用可变 Compose State 触发额外重组。
+    val memory = remember { ReaderPositionMemory(initialIndex) }
     val animationScope = rememberCoroutineScope()
     val context = LocalContext.current
     val configuration = ViewConfiguration.get(context)
+    val minFlingVelocity = configuration.scaledMinimumFlingVelocity.toFloat()
+    val maxFlingVelocity = configuration.scaledMaximumFlingVelocity.toFloat()
     val currentOnEndReached by rememberUpdatedState(onEndReached)
     val currentPhotos by rememberUpdatedState(photos)
     return key(readingDirection) {
         val layout: PhotoViewerLayoutManager<*> =
             if (readingDirection == ReadingDirection.TOP_TO_BOTTOM) {
-                val listState = rememberLazyListState(
-                    lastIndex,
-                    if (verticalIndex == lastIndex) verticalOffset else 0
-                )
+                val listState = rememberLazyListState(memory.index, memory.verticalOffset)
                 remember(listState) {
                     PhotoViewerScrollLayoutManager(
-                        listState,
-                        { currentPhotos },
-                        animationScope,
-                        { currentOnEndReached() },
-                        configuration.scaledMinimumFlingVelocity.toFloat(),
-                        configuration.scaledMaximumFlingVelocity.toFloat()
+                        listState = listState,
+                        photos = { currentPhotos },
+                        scope = animationScope,
+                        onEndReached = { currentOnEndReached() },
+                        minimumVelocity = minFlingVelocity,
+                        maximumVelocity = maxFlingVelocity
                     )
                 }
             } else {
                 val pagerState =
-                    rememberPagerState(initialPage = lastIndex, pageCount = { currentPhotos.size })
+                    rememberPagerState(initialPage = memory.index, pageCount = { currentPhotos.size })
                 remember(pagerState) {
                     PhotoViewerPagerLayoutManager(
-                        pagerState,
-                        readingDirection,
-                        animationScope
-                    ) { currentOnEndReached() }.apply {
-                        minimumFlingVelocity = configuration.scaledMinimumFlingVelocity.toFloat()
-                        maximumFlingVelocity = configuration.scaledMaximumFlingVelocity.toFloat()
-                    }
+                        pagerState = pagerState,
+                        readingDirection = readingDirection,
+                        animationScope = animationScope,
+                        minimumFlingVelocity = minFlingVelocity,
+                        maximumFlingVelocity = maxFlingVelocity,
+                        onEndReached = { currentOnEndReached() }
+                    )
                 }
             }
         val reader = remember(layout) { PhotoViewerPager(layout) }
         val currentIndex = layout.currentPage
-        val itemOffset = (layout as? PhotoViewerScrollLayoutManager)?.unscaledItemOffset ?: 0
+        val unscaledOffset = (layout as? PhotoViewerScrollLayoutManager)?.unscaledItemOffset ?: 0
         SideEffect {
-            lastIndex = currentIndex
-            if (layout is PhotoViewerScrollLayoutManager) {
-                verticalIndex = currentIndex
-                verticalOffset = itemOffset
-            }
+            memory.index = currentIndex
+            memory.verticalOffset = unscaledOffset
         }
         DisposableEffect(reader) { onDispose { reader.dispose() } }
         reader
