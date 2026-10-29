@@ -47,7 +47,7 @@ private object PhotoViewerSettingsSerializer : Serializer<PhotoViewerSettings> {
     override suspend fun readFrom(input: InputStream): PhotoViewerSettings = try {
         json.decodeFromString<PhotoViewerSettings>(input.readBytes().toString(Charsets.UTF_8))
     } catch (error: SerializationException) {
-        throw CorruptionException("阅读配置格式错误", error)
+        throw CorruptionException("Invalid reader settings format", error)
     }
 
     override suspend fun writeTo(t: PhotoViewerSettings, output: OutputStream) {

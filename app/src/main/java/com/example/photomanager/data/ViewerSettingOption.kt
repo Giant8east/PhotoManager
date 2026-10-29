@@ -1,23 +1,26 @@
-/** 阅读选项的稳定枚举值与中文标题，序列化只保存英文枚举值。 */
+/** 阅读选项的稳定枚举值与本地化标题资源，序列化只保存英文枚举值。 */
 package com.example.photomanager.data
+
+import com.example.photomanager.R
+import androidx.annotation.StringRes
 
 import kotlinx.serialization.Serializable
 
 interface ViewerSettingOption {
-    val title: String
+    @get:StringRes val titleRes: Int
 }
 
 @Serializable
-enum class ScreenOrientation(override val title: String) : ViewerSettingOption {
-    SYSTEM("系统默认"), PORTRAIT("竖屏"), LANDSCAPE("横屏"), AUTO("自动旋转")
+enum class ScreenOrientation(override @get:StringRes val titleRes: Int) : ViewerSettingOption {
+    SYSTEM(R.string.orientation_system), PORTRAIT(R.string.orientation_portrait), LANDSCAPE(R.string.orientation_landscape), AUTO(R.string.orientation_auto)
 }
 
 @Serializable
-enum class ReadingDirection(override val title: String) : ViewerSettingOption {
-    LEFT_TO_RIGHT("从左至右"), RIGHT_TO_LEFT("从右至左"), TOP_TO_BOTTOM("从上至下")
+enum class ReadingDirection(override @get:StringRes val titleRes: Int) : ViewerSettingOption {
+    LEFT_TO_RIGHT(R.string.reading_ltr), RIGHT_TO_LEFT(R.string.reading_rtl), TOP_TO_BOTTOM(R.string.reading_vertical)
 }
 
 @Serializable
-enum class PageScale(override val title: String) : ViewerSettingOption {
-    ORIGINAL("原始尺寸"), FIT_WIDTH("匹配宽度"), FIT_HEIGHT("匹配高度"), FIT_SCREEN("匹配屏幕")
+enum class PageScale(override @get:StringRes val titleRes: Int) : ViewerSettingOption {
+    ORIGINAL(R.string.scale_original), FIT_WIDTH(R.string.scale_width), FIT_HEIGHT(R.string.scale_height), FIT_SCREEN(R.string.scale_screen)
 }

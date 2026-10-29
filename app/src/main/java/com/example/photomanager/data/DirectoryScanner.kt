@@ -1,6 +1,10 @@
 /** 本地目录扫描与路径归一化边界：将选择器 URI 或本地路径统一转换为规范绝对路径并扫描单层图片。 */
 package com.example.photomanager.data
 
+import android.content.Context
+import com.example.photomanager.R
+import dagger.hilt.android.qualifiers.ApplicationContext
+import javax.inject.Provider
 import android.net.Uri
 import android.os.Environment
 import android.provider.DocumentsContract
@@ -25,10 +29,12 @@ data class ScannedAlbum(
     val children: List<File>
 )
 
-class DirectoryScanner @Inject constructor() {
+class DirectoryScanner @Inject constructor(
+    @ApplicationContext private val context: Context
+) {
     /** 将系统目录选择器返回的 URI 解析为规范化绝对路径。 */
     fun resolveDirectoryPath(uri: Uri): String {
-        if (uri.scheme == "file") return normalizePath(requireNotNull(uri.path) { "无效目录路径" })
+        if (uri.scheme == "file") return normalizePath(requireNotNull(uri.path) { context.getString(R.string.invalid_directory_path) })
         val docId = DocumentsContract.getTreeDocumentId(uri)
         val parts = docId.split(":", limit = 2)
         val volume = parts[0]
@@ -48,10 +54,10 @@ class DirectoryScanner @Inject constructor() {
         } catch (missing: NoSuchFileException) {
             return null
         }
-        check(attributes.isDirectory) { "路径不是目录：${directory.path}" }
+        check(attributes.isDirectory) { context.getString(R.string.path_not_directory, directory.path) }
         val dirPath = directory.path
         val dirName = directory.name.ifEmpty { dirPath }
-        val entries = directory.listFiles() ?: error("无法读取目录内容：$dirPath")
+        val entries = directory.listFiles() ?: error(context.getString(R.string.directory_read_failed, dirPath))
         val children = mutableListOf<File>()
         val photos = mutableListOf<PhotoEntity>()
         var totalSize = 0L

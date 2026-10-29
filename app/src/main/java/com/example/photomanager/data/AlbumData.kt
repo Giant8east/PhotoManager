@@ -1,6 +1,9 @@
 /** 相册数据入口，基于规范化本地文件路径负责目录扫描同步、差分持久化、排序查询与目录删除。 */
 package com.example.photomanager.data
 
+import android.content.Context
+import com.example.photomanager.R
+import dagger.hilt.android.qualifiers.ApplicationContext
 import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
@@ -23,7 +26,8 @@ import javax.inject.Inject
 
 class AlbumData @Inject constructor(
     private val database: PhotoDatabase,
-    private val directoryScanner: DirectoryScanner
+    private val directoryScanner: DirectoryScanner,
+    @ApplicationContext private val context: Context
 ) {
     /** 构造相册查询并持续观察数据库变化。 */
     fun observeAlbums(
@@ -82,7 +86,7 @@ class AlbumData @Inject constructor(
     fun displayTime(modifiedAt: String?): String = modifiedAt?.let {
         DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm").withZone(ZoneId.systemDefault())
             .format(Instant.parse(it))
-    } ?: "修改时间未知"
+    } ?: context.getString(R.string.unknown_modified_time)
 
     /** 批量移动相册到目标分组。 */
     suspend fun move(albums: List<AlbumEntity>, groupId: Long?) =
@@ -95,12 +99,6 @@ class AlbumData @Inject constructor(
     /** 保存相册最近一次浏览到的图片位置。 */
     suspend fun updateReadingProgress(albumId: Long, photoIndex: Int) =
         database.albumDao().updateAlbumReadingProgress(albumId, photoIndex)
-
-    /** 仅删除指定精确路径的相册记录，关联图片由外键级联清理。 */
-    suspend fun deleteAlbumRecord(path: String) {
-        val normalized = DirectoryScanner.normalizePath(path)
-        database.albumDao().deleteAlbumByPath(normalized)
-    }
 
     /** 删除指定扫描目录及其子目录对应的相册记录。 */
     suspend fun deleteAlbumsUnderPath(path: String) {
@@ -233,7 +231,7 @@ class AlbumData @Inject constructor(
         }
         directories.forEach { (_, dir) ->
             if (dir.exists()) {
-                check(dir.deleteRecursively()) { "目录删除失败：${dir.path}" }
+                check(dir.deleteRecursively()) { context.getString(R.string.directory_delete_failed, dir.path) }
             }
         }
         database.withTransaction {
