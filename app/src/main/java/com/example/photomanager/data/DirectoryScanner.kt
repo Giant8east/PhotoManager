@@ -100,6 +100,7 @@ class DirectoryScanner @Inject constructor() {
             return c == p || (p == "/" && c.startsWith("/")) || c.startsWith("$p/")
         }
 
+        /** 扫描只按扩展名识别类型，不预解码或过滤零字节、损坏及透明图片。 */
         private fun isImageFile(file: File): Boolean {
             val ext = file.extension.lowercase()
             if (ext.isEmpty()) return false
