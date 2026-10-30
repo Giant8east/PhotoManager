@@ -11,6 +11,41 @@ import androidx.compose.ui.graphics.Color
 
 /** 独立于 Material 配色的系统安全区颜色，对应 EhViewer 的 colorPrimaryDark。 */
 val LocalStatusBarColor = staticCompositionLocalOf { TealDark }
+/** Material 之外的全局颜色角色；页面只消费角色，不判断明暗主题。 */
+data class AppColors(
+    val toolbarBackground: Color,
+    val toolbarContent: Color,
+    val headerBackground: Color,
+    val headerContent: Color,
+    val cardBackground: Color,
+    val actionText: Color,
+    val accentActionText: Color
+)
+
+private val LightAppColors = AppColors(
+    toolbarBackground = Teal,
+    toolbarContent = Color.White,
+    headerBackground = Teal,
+    headerContent = Color.White,
+    cardBackground = Color(0xFFF5F5F5),
+    actionText = Teal,
+    accentActionText = AccentPurple
+)
+
+private val DarkAppColors = AppColors(
+    toolbarBackground = DarkBackground,
+    toolbarContent = Color.White,
+    headerBackground = Color(0xFF3A3A3A),
+    headerContent = Color.White,
+    cardBackground = Color(0xFF424242),
+    actionText = Color(0xB3FFFFFF),
+    accentActionText = Color(0xB3FFFFFF)
+)
+
+private val LocalAppColors = staticCompositionLocalOf { LightAppColors }
+
+val appColors: AppColors
+    @Composable get() = LocalAppColors.current
 
 private val LightColorScheme = lightColorScheme(
     primary = Teal,
@@ -49,7 +84,7 @@ private val DarkColorScheme = darkColorScheme(
     onPrimary = Color.White,
     primaryContainer = Color(0xFF3A3A3A),
     onPrimaryContainer = Color.White,
-    secondary = DarkBackground,
+    secondary = Teal,
     onSecondary = Color.White,
     secondaryContainer = Color(0xFF3A3A3A),
     onSecondaryContainer = Color.White,
@@ -82,7 +117,10 @@ fun PhotoManagerTheme(
     content: @Composable () -> Unit
 ) {
     // 固定明暗配色，避免壁纸动态取色覆盖参考主题。
-    CompositionLocalProvider(LocalStatusBarColor provides if (darkTheme) DarkStatusBar else TealDark) {
+    CompositionLocalProvider(
+        LocalStatusBarColor provides if (darkTheme) DarkStatusBar else TealDark,
+        LocalAppColors provides if (darkTheme) DarkAppColors else LightAppColors
+    ) {
         MaterialTheme(
             colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme,
             typography = Typography,
