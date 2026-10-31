@@ -16,7 +16,6 @@ import com.example.photomanager.data.database.AlbumEntity
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -38,8 +37,6 @@ class AlbumDetailViewModel @AssistedInject constructor(
 
     var state by mutableStateOf<PageState<AlbumDetailUiState>>(PageState.Loading)
         private set
-    var isDeleting by mutableStateOf(false)
-        private set
     private var loadJob: Job? = null
     private var refreshJob: Job? = null
 
@@ -47,9 +44,9 @@ class AlbumDetailViewModel @AssistedInject constructor(
         observeAlbum()
     }
 
-    private fun observeAlbum(showLoading: Boolean = true) {
+    private fun observeAlbum() {
         loadJob?.cancel()
-        if (showLoading) state = PageState.Loading
+        state = PageState.Loading
         loadJob = viewModelScope.launch {
             combine(albumData.observeAlbum(albumId), albumData.observePhotos(albumId)) { album, photos ->
                 album to photos
@@ -62,7 +59,7 @@ class AlbumDetailViewModel @AssistedInject constructor(
                     photos.isEmpty() -> PageState.Message(UiText.Resource(R.string.page_no_photos))
                     else -> PageState.Content(AlbumDetailUiState(album, photos))
                 }
-            }.collect { if (showLoading || it != PageState.Loading) state = it }
+            }.collect { state = it }
         }
     }
 
@@ -70,7 +67,7 @@ class AlbumDetailViewModel @AssistedInject constructor(
     fun retryLoad() = observeAlbum()
 
     fun refreshDirectory(onFinished: (Boolean) -> Unit) {
-        if (isDeleting || refreshJob?.isActive == true) return
+        if (refreshJob?.isActive == true) return
         refreshJob = viewModelScope.launch {
             try {
                 val isAlbumAvailable = albumData.refreshAlbum(albumPath)
@@ -91,37 +88,11 @@ class AlbumDetailViewModel @AssistedInject constructor(
         }
     }
 
-    fun delete(onDeleted: () -> Unit) {
-        val previousState = state as? PageState.Content<AlbumDetailUiState> ?: return
-        val album = previousState.value.album
-        loadJob?.cancel()
+    /** 删除相册目录和数据库记录；由确认弹窗等待完成并决定导航。 */
+    suspend fun delete(album: AlbumEntity) {
         refreshJob?.cancel()
-        isDeleting = true
-        state = PageState.Loading
-        viewModelScope.launch {
-            try {
-                // 文件删除和数据库清理必须成对完成，页面取消不能停在中间状态。
-                withContext(NonCancellable) { albumData.delete(listOf(album)) }
-                if (currentCoroutineContext()[Job]?.isActive == true) {
-                    Toast.makeText(context, R.string.album_delete_success, Toast.LENGTH_SHORT).show()
-                    onDeleted()
-                }
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Exception) {
-                if (currentCoroutineContext()[Job]?.isActive == true) {
-                    isDeleting = false
-                    state = previousState
-                    observeAlbum(showLoading = false)
-                    Toast.makeText(
-                        context,
-                        error.message?.takeIf { it.isNotBlank() }
-                            ?: context.getString(R.string.album_detail_delete_failed),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-            }
-        }
+        // 文件删除和数据库清理必须成对完成，弹窗取消也不能停在中间状态。
+        withContext(NonCancellable) { albumData.delete(listOf(album)) }
     }
 }
 
