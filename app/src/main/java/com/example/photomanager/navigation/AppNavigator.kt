@@ -2,6 +2,13 @@
 package com.example.photomanager.navigation
 
 import android.annotation.SuppressLint
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.HasDefaultViewModelProviderFactory
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.animation.AnimatedContent
@@ -21,7 +28,9 @@ class AppNavigator(
         val useSafeArea: Boolean,   // 为false时绘制到完整窗口，不使用普通页面的安全区 padding
         val transition: PageTransition,
         val content: @Composable () -> Unit
-    )
+    ) {
+        val viewModelStore = ViewModelStore()
+    }
 
     private val pages = mutableStateListOf<PageEntry>() // 页面栈,类型是 Compose 能观察到变化的可变列表
     private var nextPageId = 0L
@@ -47,6 +56,10 @@ class AppNavigator(
     @Composable
     fun render() {
         val currentPage = pages.last()
+        val parentOwner = checkNotNull(LocalViewModelStoreOwner.current)
+        DisposableEffect(this) {
+            onDispose { pages.forEach { it.viewModelStore.clear() } }
+        }
         AnimatedContent(
             targetState = currentPage,
             modifier = Modifier.fillMaxSize(),
@@ -59,7 +72,21 @@ class AppNavigator(
             label = "页面转场"
         ) { page ->
             Box(Modifier.fillMaxSize()) {
-                PageContainer(useSafeArea = page.useSafeArea) { page.content() }
+                val owner = remember(page, parentOwner) {
+                    object : ViewModelStoreOwner, HasDefaultViewModelProviderFactory {
+                        override val viewModelStore = page.viewModelStore
+                        override val defaultViewModelProviderFactory =
+                            (parentOwner as HasDefaultViewModelProviderFactory).defaultViewModelProviderFactory
+                        override val defaultViewModelCreationExtras = (parentOwner as HasDefaultViewModelProviderFactory).defaultViewModelCreationExtras
+                    }
+                }
+                DisposableEffect(page) {
+                    // 入栈覆盖时保留实例，出栈转场结束后才清理任务。
+                    onDispose { if (page !in pages) page.viewModelStore.clear() }
+                }
+                CompositionLocalProvider(LocalViewModelStoreOwner provides owner) {
+                    PageContainer(useSafeArea = page.useSafeArea) { page.content() }
+                }
                 if (transition.currentState != transition.targetState) {
                     // 只消费指针事件，不使用 clickable，避免转场期间出现水波纹。
                     Box(Modifier.fillMaxSize().pointerInput(Unit) {
