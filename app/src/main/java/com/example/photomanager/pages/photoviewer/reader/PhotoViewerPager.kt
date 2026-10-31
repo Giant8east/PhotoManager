@@ -41,9 +41,8 @@ internal class PhotoViewerPager(
     val currentPage get() = layout.currentPage
     val settledPage get() = layout.settledPage
     val pageCount get() = layout.pageCount
-    val isContinuous get() = layout is PhotoViewerScrollLayoutManager
-    val currentItemOffset
-        get() = (layout as? PhotoViewerScrollLayoutManager)?.currentItemOffset ?: 0
+    val isContinuous get() = layout.isContinuous
+    val currentItemOffset get() = layout.currentItemOffset
 
     fun isPageVisible(index: Int) = layout.isPageVisible(index)
     fun attachImage(index: Int, transform: PhotoTransform) = layout.attachImage(index, transform)
@@ -133,7 +132,7 @@ internal fun rememberPhotoViewerPager(
             }
         val reader = remember(layout) { PhotoViewerPager(layout) }
         val currentIndex = layout.currentPage
-        val unscaledOffset = (layout as? PhotoViewerScrollLayoutManager)?.unscaledItemOffset ?: 0
+        val unscaledOffset = layout.unscaledItemOffset
         SideEffect {
             memory.index = currentIndex
             memory.verticalOffset = unscaledOffset
