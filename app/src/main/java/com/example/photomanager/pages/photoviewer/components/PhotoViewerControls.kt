@@ -94,8 +94,8 @@ fun PhotoViewerControls(
                 containerColor = Color(0xFFBDBDBD),
                 contentColor = Color(0xFF303030)
             ) {
-                if (isPlaying) Icon(painterResource(R.drawable.ic_pause), stringResource(R.string.viewer_pause_auto_play))
-                else Icon(Icons.Default.PlayArrow, stringResource(R.string.viewer_start_auto_play))
+                if (isPlaying) Icon(painterResource(R.drawable.ic_pause), contentDescription = null)
+                else Icon(Icons.Default.PlayArrow, contentDescription = null)
             }
         }
         AnimatedVisibility(

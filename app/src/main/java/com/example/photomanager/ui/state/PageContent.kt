@@ -6,8 +6,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.example.photomanager.R
 
@@ -27,10 +25,7 @@ fun <T> PageContent(
 ) {
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         when (state) {
-            PageState.Loading -> {
-                val description = stringResource(R.string.page_loading)
-                CircularProgressIndicator(Modifier.semantics { contentDescription = description })
-            }
+            PageState.Loading -> CircularProgressIndicator()
             is PageState.Content -> content(state.value)
             is PageState.Message -> Column(
                 Modifier.padding(24.dp),

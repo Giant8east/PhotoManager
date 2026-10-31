@@ -18,8 +18,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntSize
 import coil.compose.AsyncImagePainter
@@ -132,8 +130,7 @@ internal fun PhotoViewerPageView(
                         it.height.toFloat()
                     )
                 )
-            }
-            .semantics { contentDescription = photo.name },
+            },
         contentAlignment = Alignment.Center
     ) {
         when (imageState) {
