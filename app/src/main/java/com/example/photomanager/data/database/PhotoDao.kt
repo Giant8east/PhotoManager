@@ -15,9 +15,6 @@ interface PhotoDao {
     @Query("SELECT * FROM photos WHERE albumId = :albumId ORDER BY name ASC")
     fun observePhotosQuery(albumId: Long): Flow<List<PhotoEntity>>
 
-    @Query("DELETE FROM photos WHERE albumId = :albumId")
-    suspend fun deletePhotosByAlbumId(albumId: Long)
-
     @Query("DELETE FROM photos WHERE id IN (:ids)")
     suspend fun deletePhotosByIds(ids: List<Long>)
 

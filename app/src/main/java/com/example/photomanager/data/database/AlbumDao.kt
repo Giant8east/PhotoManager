@@ -1,7 +1,6 @@
 /** 相册数据库访问对象，提供主页相册查询和自定义排序更新。 */
 package com.example.photomanager.data.database
 
-import androidx.paging.PagingSource
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
@@ -18,12 +17,6 @@ interface AlbumDao {
     @RawQuery(observedEntities = [AlbumEntity::class])
     fun observeAlbumQuery(query: SupportSQLiteQuery): Flow<List<AlbumEntity>>
 
-    @RawQuery(observedEntities = [AlbumEntity::class])
-    fun queryAlbumPage(query: SupportSQLiteQuery): PagingSource<Int, AlbumEntity>
-
-    @Query("SELECT * FROM albums")
-    suspend fun queryAllAlbums(): List<AlbumEntity>
-
     @Query("SELECT COUNT(*) FROM albums WHERE photoCount > 0")
     fun observeValidAlbumCount(): Flow<Int>
 
@@ -35,9 +28,6 @@ interface AlbumDao {
 
     @Insert
     suspend fun insertAlbum(album: AlbumEntity): Long
-
-    @Insert
-    suspend fun insertAlbums(albums: List<AlbumEntity>)
 
     @Query("DELETE FROM albums WHERE id = :id")
     suspend fun deleteAlbum(id: Long)
