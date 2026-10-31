@@ -17,10 +17,13 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.Placeable
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import com.example.photomanager.data.PhotoViewerSettings
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
@@ -29,8 +32,8 @@ import java.util.Locale
 
 @Composable
 fun PhotoViewerOverlay(settings: PhotoViewerSettings, currentPage: Int, pageCount: Int) {
-    val currentTime by rememberCurrentTime()
-    val battery by rememberBatteryStatus()
+    val currentTime = if (settings.showClock) rememberCurrentTime().value else ""
+    val battery = if (settings.showBattery) rememberBatteryStatus().value else null
     val textStyle = TextStyle(
         color = Color.White.copy(alpha = 0.7f),
         fontSize = 14.sp,
@@ -39,7 +42,7 @@ fun PhotoViewerOverlay(settings: PhotoViewerSettings, currentPage: Int, pageCoun
     PhotoViewerHeaderLayout(
         fullScreen = settings.fullScreen,
         battery = {
-            if (settings.showBattery) BatteryIndicator(battery, textStyle)
+            battery?.let { BatteryIndicator(it, textStyle) }
         },
         progress = {
             if (settings.showProgress) Text("${currentPage + 1}/$pageCount", style = textStyle, maxLines = 1)
@@ -54,11 +57,14 @@ fun PhotoViewerOverlay(settings: PhotoViewerSettings, currentPage: Int, pageCoun
 @Composable
 private fun rememberCurrentTime(): State<String> {
     val formatter = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
     val initialTime = remember(formatter) { formatter.format(Date()) }
-    return produceState(initialValue = initialTime, key1 = formatter) {
-        while (true) {
-            value = formatter.format(Date())
-            delay(1_000L)
+    return produceState(initialValue = initialTime, key1 = formatter, key2 = lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (true) {
+                value = formatter.format(Date())
+                delay(1_000L)
+            }
         }
     }
 }
@@ -69,13 +75,16 @@ private fun rememberBatteryStatus(): State<BatteryStatus> {
     val batteryManager = remember(context) {
         context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
     }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
     val initialBattery = remember(batteryManager) {
         batteryManager.readBatteryStatus()
     }
-    return produceState(initialValue = initialBattery, key1 = batteryManager) {
-        while (true) {
-            value = batteryManager.readBatteryStatus()
-            delay(1_000L)
+    return produceState(initialValue = initialBattery, key1 = batteryManager, key2 = lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (true) {
+                value = batteryManager.readBatteryStatus()
+                delay(1_000L)
+            }
         }
     }
 }
@@ -91,12 +100,15 @@ private fun BatteryManager.readBatteryStatus() = BatteryStatus(
 @Composable
 private fun BatteryIndicator(battery: BatteryStatus, textStyle: TextStyle) {
     val isAnimating = battery.isCharging && battery.level < 100
-    val animatedLevel by produceState(initialValue = 0, key1 = isAnimating) {
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val animatedLevel by produceState(initialValue = 0, key1 = isAnimating, key2 = lifecycle) {
         value = 0
         if (isAnimating) {
-            while (true) {
-                value = if (value >= 100) 0 else value + 2
-                delay(200L)
+            lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                while (true) {
+                    value = if (value >= 100) 0 else value + 2
+                    delay(200L)
+                }
             }
         }
     }
