@@ -48,18 +48,18 @@ class AlbumDetailViewModel @AssistedInject constructor(
         loadJob?.cancel()
         state = PageState.Loading
         loadJob = viewModelScope.launch {
-            combine(albumData.observeAlbum(albumId), albumData.observePhotos(albumId)) { album, photos ->
-                album to photos
-            }.asPageStates(R.string.page_detail_load_failed) { (album, photos) ->
-                when {
-                    album == null -> PageState.Message(
-                        UiText.Resource(R.string.page_album_missing),
-                        canRetry = true
-                    )
-                    photos.isEmpty() -> PageState.Message(UiText.Resource(R.string.page_no_photos))
-                    else -> PageState.Content(AlbumDetailUiState(album, photos))
-                }
-            }.collect { state = it }
+            albumData.observeAlbumDetail(albumId)
+                .asPageStates(R.string.page_detail_load_failed) { detail ->
+                    when {
+                        detail == null -> PageState.Message(
+                            UiText.Resource(R.string.page_album_missing),
+                            canRetry = true
+                        )
+                        else -> PageState.Content(
+                            AlbumDetailUiState(detail.album, detail.photos)
+                        )
+                    }
+                }.collect { state = it }
         }
     }
 
