@@ -10,8 +10,10 @@ import android.os.Environment
 import android.provider.DocumentsContract
 import android.webkit.MimeTypeMap
 import com.example.photomanager.data.database.PhotoEntity
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.NoSuchFileException
@@ -20,7 +22,7 @@ import java.nio.file.attribute.BasicFileAttributes
 import java.time.Instant
 import javax.inject.Inject
 
-data class ScannedAlbum(
+internal data class ScannedAlbum(
     val path: String,
     val name: String,
     val modifiedAt: String?,
@@ -32,23 +34,42 @@ data class ScannedAlbum(
 class DirectoryScanner @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    /** 将系统目录选择器返回的 URI 解析为规范化绝对路径。 */
-    fun resolveDirectoryPath(uri: Uri): String {
-        if (uri.scheme == "file") return normalizePath(requireNotNull(uri.path) { context.getString(R.string.invalid_directory_path) })
+    /**
+     * 将系统目录选择器返回的 URI 解析为规范化绝对路径。
+     * 只接受本地外部存储提供者；Downloads、云盘等 provider 的 docId 不是真实文件路径。
+     */
+    suspend fun resolveDirectoryPath(uri: Uri): String = withContext(Dispatchers.IO) {
+        if (uri.scheme == "file") {
+            return@withContext normalizePath(
+                requireNotNull(uri.path) { context.getString(R.string.invalid_directory_path) }
+            )
+        }
+        check(uri.authority == EXTERNAL_STORAGE_AUTHORITY) {
+            context.getString(R.string.unsupported_directory_provider)
+        }
+        check(DocumentsContract.isTreeUri(uri)) {
+            context.getString(R.string.invalid_directory_path)
+        }
         val docId = DocumentsContract.getTreeDocumentId(uri)
         val parts = docId.split(":", limit = 2)
+        require(parts.size == 2 && parts[0].isNotBlank()) {
+            context.getString(R.string.unsupported_directory_provider)
+        }
         val volume = parts[0]
-        val relative = parts.getOrElse(1) { "" }.trimStart('/')
+        check(!volume.equals("home", ignoreCase = true)) {
+            context.getString(R.string.unsupported_directory_provider)
+        }
+        val relative = parts[1].trimStart('/')
         val baseDir = if (volume.equals("primary", ignoreCase = true)) {
             Environment.getExternalStorageDirectory().path
         } else {
             "/storage/$volume"
         }
-        return normalizePath(if (relative.isEmpty()) baseDir else "$baseDir/$relative")
+        normalizePath(if (relative.isEmpty()) baseDir else "$baseDir/$relative")
     }
 
     /** 扫描已规范化绝对路径的单个目录，包含隐藏项；明确不存在时返回 null。 */
-    suspend fun scanAlbum(directory: File): ScannedAlbum? {
+    internal suspend fun scanAlbum(directory: File): ScannedAlbum? {
         val attributes = try {
             Files.readAttributes(directory.toPath(), BasicFileAttributes::class.java)
         } catch (missing: NoSuchFileException) {
@@ -90,6 +111,8 @@ class DirectoryScanner @Inject constructor(
     }
 
     companion object {
+        private const val EXTERNAL_STORAGE_AUTHORITY = "com.android.externalstorage.documents"
+
         private val IMAGE_EXTENSIONS = setOf(
             "jpg", "jpeg", "png", "webp", "gif", "bmp", "heic", "heif", "avif"
         )
