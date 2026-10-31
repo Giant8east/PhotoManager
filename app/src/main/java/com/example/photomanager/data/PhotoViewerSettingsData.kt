@@ -7,13 +7,6 @@ import androidx.datastore.core.Serializer
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.dataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.encodeToString
@@ -46,16 +39,21 @@ private object PhotoViewerSettingsSerializer : Serializer<PhotoViewerSettings> {
 
     override suspend fun readFrom(input: InputStream): PhotoViewerSettings = try {
         json.decodeFromString<PhotoViewerSettings>(input.readBytes().toString(Charsets.UTF_8))
+            .sanitized()
     } catch (error: SerializationException) {
         throw CorruptionException("Invalid reader settings format", error)
     }
 
     override suspend fun writeTo(t: PhotoViewerSettings, output: OutputStream) {
-        withContext(Dispatchers.IO) {
-            output.write(json.encodeToString(t).toByteArray(Charsets.UTF_8))
-        }
+        output.write(json.encodeToString(t).toByteArray(Charsets.UTF_8))
     }
 }
+
+/** 归一化旧版本或手工修改过的配置，保证 UI 控件和窗口参数都在合法范围内。 */
+private fun PhotoViewerSettings.sanitized(): PhotoViewerSettings = copy(
+    autoPageSeconds = autoPageSeconds.coerceIn(1, 60),
+    customBrightness = customBrightness.coerceIn(0.1f, 1f)
+)
 
 // 扩展属性context.viewerSettingsStore是当前文件声明的扩展
 // by表示属性如何创建、如何获取，交给 dataStore() 提供的委托对象管理
@@ -70,17 +68,10 @@ private val Context.viewerSettingsStore by dataStore(
 class PhotoViewerSettingsData @Inject constructor(
     @ApplicationContext private val context: Context // 使用应用级 Context
 ) {
-    /** 应用启动后持续持有阅读配置，页面进入时直接读取当前值。 */
-    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
-    /** 首个磁盘值到达前为 null，调用方据此区分未就绪和用户真实配置，不按默认值先应用窗口。 */
-    val settings: StateFlow<PhotoViewerSettings?> = context.viewerSettingsStore.data.stateIn(
-        scope = applicationScope,
-        started = SharingStarted.Eagerly,
-        initialValue = null
-    )
+    /** 页面直接订阅 DataStore 的缓存数据，读取失败可向页面传递并重新订阅。 */
+    fun observeSettings() = context.viewerSettingsStore.data
 
     suspend fun save(settings: PhotoViewerSettings) {
-        context.viewerSettingsStore.updateData { settings }
+        context.viewerSettingsStore.updateData { settings.sanitized() }
     }
 }
