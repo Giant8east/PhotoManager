@@ -4,9 +4,6 @@ package com.example.photomanager.data
 import android.content.Context
 import com.example.photomanager.R
 import dagger.hilt.android.qualifiers.ApplicationContext
-import androidx.paging.Pager
-import androidx.paging.PagingConfig
-import androidx.paging.PagingData
 import androidx.room.withTransaction
 import androidx.sqlite.db.SimpleSQLiteQuery
 import com.example.photomanager.data.database.AlbumEntity
@@ -19,9 +16,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
 class AlbumData @Inject constructor(
@@ -30,45 +24,26 @@ class AlbumData @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     /** 构造相册查询并持续观察数据库变化。 */
-    fun observeAlbums(
-        groupId: Long?,
-        keyword: String,
-        sortField: AlbumSortField,
-        isDescending: Boolean
-    ): Flow<List<AlbumEntity>> =
-        database.albumDao().observeAlbumQuery(buildAlbumQuery(groupId, keyword, sortField, isDescending))
+    fun observeAlbums(query: AlbumQuery): Flow<List<AlbumEntity>> =
+        database.albumDao().observeAlbumQuery(buildAlbumQuery(query))
 
-    /** 创建分页相册数据流，与普通查询共用同一 SQL 规则。 */
-    fun pageAlbums(
-        groupId: Long?,
-        keyword: String,
-        sortField: AlbumSortField,
-        isDescending: Boolean
-    ): Flow<PagingData<AlbumEntity>> = Pager(
-        config = PagingConfig(pageSize = 30, prefetchDistance = 10, enablePlaceholders = false),
-        pagingSourceFactory = {
-            database.albumDao().queryAlbumPage(buildAlbumQuery(groupId, keyword, sortField, isDescending))
-        }
-    ).flow
-
-    private fun buildAlbumQuery(
-        groupId: Long?,
-        keyword: String,
-        sortField: AlbumSortField,
-        isDescending: Boolean
-    ): SimpleSQLiteQuery {
-        val direction = if (isDescending) "DESC" else "ASC"
+    /** 将查询条件转换为排序与筛选 SQL；列名来自枚举，不拼接外部输入。 */
+    private fun buildAlbumQuery(query: AlbumQuery): SimpleSQLiteQuery {
+        val direction = if (query.isDescending) "DESC" else "ASC"
         // 未知修改时间始终放在最后，同值相册按路径保持稳定顺序。
-        val nullOrder = if (sortField == AlbumSortField.MODIFIED_AT) {
+        val nullOrder = if (query.sortField == AlbumSortField.MODIFIED_AT) {
             "julianday(modifiedAt) IS NULL ASC, "
         } else ""
         val sql = """
             SELECT * FROM albums
             WHERE (? IS NULL OR groupId = ?)
               AND name LIKE ? ESCAPE '\' COLLATE NOCASE
-            ORDER BY $nullOrder${sortField.sqlExpression} $direction, albumPath ASC
+            ORDER BY $nullOrder${query.sortField.sqlExpression} $direction, albumPath ASC
         """.trimIndent()
-        return SimpleSQLiteQuery(sql, arrayOf(groupId, groupId, searchPattern(keyword)))
+        return SimpleSQLiteQuery(
+            sql,
+            arrayOf(query.groupId, query.groupId, searchPattern(query.keyword))
+        )
     }
 
     /** 转义 SQLite LIKE 模式中的特殊通配符。 */
@@ -81,12 +56,6 @@ class AlbumData @Inject constructor(
     /** 生成指定规范路径的子目录精确前缀（区分大小写）。 */
     private fun childPathPrefix(normalizedPath: String): String =
         if (normalizedPath == "/") "/" else "$normalizedPath/"
-
-    /** 将 ISO 时间格式化为页面显示文本。 */
-    fun displayTime(modifiedAt: String?): String = modifiedAt?.let {
-        DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm").withZone(ZoneId.systemDefault())
-            .format(Instant.parse(it))
-    } ?: context.getString(R.string.unknown_modified_time)
 
     /** 批量移动相册到目标分组。 */
     suspend fun move(albums: List<AlbumEntity>, groupId: Long?) =
@@ -103,9 +72,7 @@ class AlbumData @Inject constructor(
     /** 删除指定扫描目录及其子目录对应的相册记录。 */
     suspend fun deleteAlbumsUnderPath(path: String) {
         val normalized = DirectoryScanner.normalizePath(path)
-        database.withTransaction {
-            database.albumDao().deleteAlbumsUnderPath(normalized, childPathPrefix(normalized))
-        }
+        database.albumDao().deleteAlbumsUnderPath(normalized, childPathPrefix(normalized))
     }
 
     /** 持续观察相册的完整图片索引。 */
@@ -128,7 +95,7 @@ class AlbumData @Inject constructor(
         while (pending.isNotEmpty()) {
             currentCoroutineContext().ensureActive()
             val currentPath = pending.removeFirst()
-            val scanned = refreshDirectory(currentPath, knownPaths = remainingPaths)
+            val scanned = refreshDirectory(currentPath)
             remainingPaths.remove(currentPath)
             if (scanned != null) {
                 pending.addAll(scanned.children.map { DirectoryScanner.normalizePath(it.path) })
@@ -137,22 +104,20 @@ class AlbumData @Inject constructor(
 
         for (stalePath in remainingPaths) {
             currentCoroutineContext().ensureActive()
-            refreshDirectory(stalePath, knownPaths = remainingPaths)
+            refreshDirectory(stalePath)
         }
     }
 
-    /** 单相册刷新入口：规范化一次路径后，复用同步使用的单目录处理。 */
-    suspend fun refreshAlbum(path: String): ScannedAlbum? = withContext(Dispatchers.IO) {
-        refreshDirectory(DirectoryScanner.normalizePath(path))
+    /** 单相册刷新入口：返回刷新后目录是否仍有图片，扫描细节不跨层暴露。 */
+    suspend fun refreshAlbum(path: String): Boolean = withContext(Dispatchers.IO) {
+        refreshDirectory(DirectoryScanner.normalizePath(path))?.photos?.isNotEmpty() == true
     }
 
-    /** 路径已由入口或入队时规范化；扫描与记录清理沿用同一条路径。 */
-    private suspend fun refreshDirectory(path: String, knownPaths: Set<String>? = null): ScannedAlbum? {
+    /** 扫描单个目录；目录不存在或没有图片时清理对应记录。 */
+    private suspend fun refreshDirectory(path: String): ScannedAlbum? {
         val scanned = directoryScanner.scanAlbum(File(path))
         if (scanned == null || scanned.photos.isEmpty()) {
-            if (knownPaths == null || path in knownPaths) {
-                database.albumDao().deleteAlbumByPath(path)
-            }
+            database.albumDao().deleteAlbumByPath(path)
         } else {
             saveScannedAlbum(scanned)
         }
@@ -226,12 +191,12 @@ class AlbumData @Inject constructor(
 
     /** 先删除真实本地目录及其文件，再清理 Room 相册记录。 */
     suspend fun delete(albums: List<AlbumEntity>) = withContext(Dispatchers.IO) {
-        val directories = albums.map { album ->
-            album to File(DirectoryScanner.normalizePath(album.albumPath))
-        }
-        directories.forEach { (_, dir) ->
-            if (dir.exists()) {
-                check(dir.deleteRecursively()) { context.getString(R.string.directory_delete_failed, dir.path) }
+        albums.forEach { album ->
+            val directory = File(DirectoryScanner.normalizePath(album.albumPath))
+            if (directory.exists()) {
+                check(directory.deleteRecursively()) {
+                    context.getString(R.string.directory_delete_failed, directory.path)
+                }
             }
         }
         database.withTransaction {
@@ -240,9 +205,9 @@ class AlbumData @Inject constructor(
     }
 
     companion object {
-        /** 比较文件元数据是否一致，保留数据库已有 ID 和已解码宽高。 */
+        /** 比较文件元数据是否一致，保留数据库已有 ID 与图片记录。 */
         internal fun samePhotoMetadata(old: PhotoEntity, new: PhotoEntity): Boolean =
-            old.name == new.name && old.sizeBytes == new.sizeBytes && old.modifiedAt == new.modifiedAt
+            old.sizeBytes == new.sizeBytes && old.modifiedAt == new.modifiedAt
 
         /**
          * 根据旧图片列表与旧阅读进度，计算新列表中最匹配的阅读下标：
