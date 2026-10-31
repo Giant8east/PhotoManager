@@ -8,14 +8,13 @@ import com.example.photomanager.pages.photoviewer.reader.PhotoViewerPageView
 import com.example.photomanager.pages.photoviewer.reader.rememberPhotoViewerPager
 import com.example.photomanager.pages.photoviewer.system.rememberPhotoViewerSystem
 
+import com.example.photomanager.ui.state.PageContent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,7 +40,6 @@ fun PhotoViewerPage(
 ) {
     BackHandler { navigator.pop() }
     LaunchedEffect(albumId) { viewModel.load(albumId) }
-    val settings by viewModel.settings.collectAsState()
     // 根容器始终占满窗口并绘制阅读底色；配置未到达前不按默认值猜测窗口状态。
     PhotoManagerTheme(darkTheme = true) {
         Box(
@@ -50,13 +48,8 @@ fun PhotoViewerPage(
                 .background(PhotoViewerBackground),
             contentAlignment = Alignment.Center
         ) {
-            settings?.let { loadedSettings ->
-                val photos = viewModel.photos
-                if (photos == null) {
-                    CircularProgressIndicator()
-                } else {
-                    PhotoViewerReader(viewModel, photos, initialIndex, loadedSettings)
-                }
+            PageContent(viewModel.state, viewModel::retry) { content ->
+                PhotoViewerReader(viewModel, content.photos, initialIndex, content.settings)
             }
         }
     }
