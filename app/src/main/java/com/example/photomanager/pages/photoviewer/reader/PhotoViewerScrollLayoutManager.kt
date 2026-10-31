@@ -48,10 +48,13 @@ internal fun continuousPageIndex(
 ): Int = if (isAtEnd) visible.lastOrNull { it.second > 0 }?.first ?: fallback
 else visible.firstOrNull { it.second > 0 }?.first ?: fallback
 
+/** 只有前面确实还有内容可回滚时才把“不能前滚”视为到达末尾；全部内容适配视口时仍按首项计。 */
+internal fun isContinuousReadingEnd(canScrollForward: Boolean, canScrollBackward: Boolean): Boolean =
+    !canScrollForward && canScrollBackward
+
 internal fun continuousImageHeight(width: Int, aspectRatio: Float, zoom: Float): Int =
     (width * zoom / aspectRatio).roundToInt().coerceAtLeast(1)
 
-@OptIn(ExperimentalFoundationApi::class)
 internal class PhotoViewerScrollLayoutManager(
     private val listState: LazyListState,
     private val photos: () -> List<PhotoEntity>,
@@ -95,14 +98,15 @@ internal class PhotoViewerScrollLayoutManager(
         get() = continuousPageIndex(
             listState.layoutInfo.visibleItemsInfo.map { it.index to (it.offset + it.size) },
             listState.firstVisibleItemIndex,
-            listState.layoutInfo.visibleItemsInfo.isNotEmpty() && !listState.canScrollForward
+            isContinuousReadingEnd(listState.canScrollForward, listState.canScrollBackward)
         )
     override val settledPage get() = settledIndex
-    val currentItemOffset
+    override val isContinuous get() = true
+    override val currentItemOffset
         get() = listState.layoutInfo.visibleItemsInfo
             .firstOrNull { it.index == currentPage }?.let { (-it.offset).coerceAtLeast(0) }
             ?: listState.firstVisibleItemScrollOffset
-    val unscaledItemOffset get() = (currentItemOffset / zoom).roundToInt()
+    override val unscaledItemOffset get() = (currentItemOffset / zoom).roundToInt()
 
     override fun isPageVisible(index: Int): Boolean = listState.layoutInfo.visibleItemsInfo.any {
         it.index == index && it.offset + it.size > 0 && it.offset < viewport.height
@@ -117,7 +121,6 @@ internal class PhotoViewerScrollLayoutManager(
             snapshotFlow { if (!listState.isScrollInProgress) currentPage else null }
                 .filterNotNull().collect { index ->
                     settledIndex = index
-                    images.forEach { (page, image) -> if (!isPageVisible(page)) image.reset() }
                 }
         }
         BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -385,5 +388,7 @@ internal class PhotoViewerScrollLayoutManager(
     override fun dispose() {
         cancelMotion()
         edges.values.forEach { it.dispose() }
+        images.clear()
+        aspectRatios.clear()
     }
 }
