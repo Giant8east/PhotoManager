@@ -70,7 +70,7 @@ class AlbumData @Inject constructor(
         database.albumDao().updateAlbumReadingProgress(albumId, photoIndex)
 
     /** 删除指定扫描目录及其子目录对应的相册记录。 */
-    suspend fun deleteAlbumsUnderPath(path: String) {
+    suspend fun deleteAlbumsUnderPath(path: String) = withContext(Dispatchers.IO) {
         val normalized = DirectoryScanner.normalizePath(path)
         database.albumDao().deleteAlbumsUnderPath(normalized, childPathPrefix(normalized))
     }

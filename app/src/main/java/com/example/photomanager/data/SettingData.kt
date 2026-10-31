@@ -8,8 +8,10 @@ import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.photomanager.data.database.PhotoDatabase
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import java.io.File
 import javax.inject.Inject
 
@@ -33,10 +35,10 @@ class SettingData @Inject constructor(
     val validAlbumCount: Flow<Int> = database.albumDao().observeValidAlbumCount()
 
     /** 将系统选择器返回的 URI 解析为规范化绝对路径。 */
-    fun resolvePath(uri: Uri): String = directoryScanner.resolveDirectoryPath(uri)
+    suspend fun resolvePath(uri: Uri): String = directoryScanner.resolveDirectoryPath(uri)
 
     /** 添加扫描目录；若已在现有父目录范围内则返回 false，否则合并被覆盖的子目录并返回 true。 */
-    suspend fun addDirectory(rawPath: String): Boolean {
+    suspend fun addDirectory(rawPath: String): Boolean = withContext(Dispatchers.IO) {
         val newPath = DirectoryScanner.normalizePath(rawPath)
         var changed = false
         context.settingStore.edit { preferences ->
@@ -47,10 +49,10 @@ class SettingData @Inject constructor(
                 .toSet() + newPath
             changed = true
         }
-        return changed
+        changed
     }
 
-    suspend fun removeDirectory(path: String) {
+    suspend fun removeDirectory(path: String) = withContext(Dispatchers.IO) {
         val normalized = DirectoryScanner.normalizePath(path)
         context.settingStore.edit { preferences ->
             preferences[directoryKey] = preferences[directoryKey].orEmpty() - normalized
