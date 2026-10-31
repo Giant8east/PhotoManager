@@ -6,9 +6,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.example.photomanager.R
 import com.example.photomanager.data.*
 
 @Composable
@@ -20,32 +22,32 @@ fun PhotoViewerMenu(
     var editingSettings by remember(settings) { mutableStateOf(settings) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("阅读设置") },
+        title = { Text(stringResource(R.string.viewer_settings)) },
         text = {
             Column(
                 Modifier
                     .heightIn(max = 520.dp)
                     .verticalScroll(rememberScrollState())) {
                 SettingMenuButton(
-                    "屏幕方向",
+                    stringResource(R.string.viewer_screen_orientation),
                     editingSettings.screenOrientation,
                     ScreenOrientation.entries
                 ) { editingSettings = editingSettings.copy(screenOrientation = it) }
                 SettingMenuButton(
-                    "阅读方向",
+                    stringResource(R.string.viewer_reading_direction),
                     editingSettings.readingDirection,
                     ReadingDirection.entries
                 ) { editingSettings = editingSettings.copy(readingDirection = it) }
                 if (editingSettings.readingDirection == ReadingDirection.TOP_TO_BOTTOM) {
-                    Text("连续阅读：匹配宽度，双指缩放整列", modifier = Modifier.padding(vertical = 12.dp))
+                    Text(stringResource(R.string.viewer_continuous_reading_hint), modifier = Modifier.padding(vertical = 12.dp))
                 } else {
                     SettingMenuButton(
-                        "页面缩放",
+                        stringResource(R.string.viewer_page_scale),
                         editingSettings.pageScale,
                         PageScale.entries
                     ) { editingSettings = editingSettings.copy(pageScale = it) }
                 }
-                Text("自动翻页间隔（秒）：${editingSettings.autoPageSeconds}")
+                Text(stringResource(R.string.viewer_auto_page_interval, editingSettings.autoPageSeconds))
                 Slider(
                     value = editingSettings.autoPageSeconds.toFloat(),
                     onValueChange = {
@@ -54,29 +56,29 @@ fun PhotoViewerMenu(
                     valueRange = 1f..60f,
                     steps = 58
                 )
-                SettingSwitch("屏幕常亮", editingSettings.keepScreenOn) {
+                SettingSwitch(stringResource(R.string.viewer_keep_screen_on), editingSettings.keepScreenOn) {
                     editingSettings = editingSettings.copy(keepScreenOn = it)
                 }
-                SettingSwitch("显示时钟", editingSettings.showClock) {
+                SettingSwitch(stringResource(R.string.viewer_show_clock), editingSettings.showClock) {
                     editingSettings = editingSettings.copy(showClock = it)
                 }
-                SettingSwitch("显示进度", editingSettings.showProgress) {
+                SettingSwitch(stringResource(R.string.viewer_show_progress), editingSettings.showProgress) {
                     editingSettings = editingSettings.copy(showProgress = it)
                 }
-                SettingSwitch("显示电量", editingSettings.showBattery) {
+                SettingSwitch(stringResource(R.string.viewer_show_battery), editingSettings.showBattery) {
                     editingSettings = editingSettings.copy(showBattery = it)
                 }
-                SettingSwitch("显示页面间隔", editingSettings.showPageGap) {
+                SettingSwitch(stringResource(R.string.viewer_show_page_gap), editingSettings.showPageGap) {
                     editingSettings = editingSettings.copy(showPageGap = it)
                 }
-                SettingSwitch("使用音量键翻页", editingSettings.volumeKeyPaging) {
+                SettingSwitch(stringResource(R.string.viewer_volume_key_paging), editingSettings.volumeKeyPaging) {
                     editingSettings = editingSettings.copy(volumeKeyPaging = it)
                 }
-                SettingSwitch("全屏", editingSettings.fullScreen) {
+                SettingSwitch(stringResource(R.string.viewer_full_screen), editingSettings.fullScreen) {
                     editingSettings = editingSettings.copy(fullScreen = it)
                 }
                 SettingSwitch(
-                    "自定义屏幕亮度",
+                    stringResource(R.string.viewer_custom_brightness),
                     editingSettings.customBrightnessEnabled
                 ) { editingSettings = editingSettings.copy(customBrightnessEnabled = it) }
                 if (editingSettings.customBrightnessEnabled) {
@@ -90,8 +92,8 @@ fun PhotoViewerMenu(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { onConfirm(editingSettings) }) { Text("确定") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+        confirmButton = { TextButton(onClick = { onConfirm(editingSettings) }) { Text(stringResource(R.string.viewer_confirm)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.viewer_cancel)) } }
     )
 }
 
@@ -107,13 +109,13 @@ private fun <T : ViewerSettingOption> SettingMenuButton(
         TextButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(label)
-                Text(value.title)
+                Text(stringResource(value.titleRes))
             }
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             options.forEach { option ->
                 DropdownMenuItem(
-                    text = { Text(option.title) },
+                    text = { Text(stringResource(option.titleRes)) },
                     onClick = { onSelected(option); expanded = false })
             }
         }

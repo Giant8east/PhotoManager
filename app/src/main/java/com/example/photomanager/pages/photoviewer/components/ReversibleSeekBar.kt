@@ -60,7 +60,6 @@ internal class ReversibleSeekBar(context: Context) : SeekBar(context) {
         splitTrack = false
         background = null
         setPadding(pixels(10), 0, pixels(10), 0)
-        contentDescription = "阅读进度"
         setOnSeekBarChangeListener(object : OnSeekBarChangeListener {
             override fun onStartTrackingTouch(seekBar: SeekBar) {
                 isTracking = true

@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -87,8 +88,8 @@ fun PhotoViewerControls(
                 containerColor = Color(0xFFBDBDBD),
                 contentColor = Color(0xFF303030)
             ) {
-                if (isPlaying) Icon(painterResource(R.drawable.ic_pause), "暂停自动播放")
-                else Icon(Icons.Default.PlayArrow, "开始自动播放")
+                if (isPlaying) Icon(painterResource(R.drawable.ic_pause), stringResource(R.string.viewer_pause_auto_play))
+                else Icon(Icons.Default.PlayArrow, stringResource(R.string.viewer_start_auto_play))
             }
         }
         AnimatedVisibility(
@@ -109,7 +110,7 @@ fun PhotoViewerControls(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        "${(if (isDragging) draggedPage else currentPage) + 1}",
+                        stringResource(R.string.viewer_page_number, (if (isDragging) draggedPage else currentPage) + 1),
                         color = Color.White,
                         fontSize = 14.sp,
                         maxLines = 1,
@@ -127,7 +128,7 @@ fun PhotoViewerControls(
                         modifier = Modifier.weight(1f)
                     )
                     Text(
-                        "$pageCount",
+                        stringResource(R.string.viewer_page_number, pageCount),
                         color = Color.White,
                         fontSize = 14.sp,
                         maxLines = 1,
