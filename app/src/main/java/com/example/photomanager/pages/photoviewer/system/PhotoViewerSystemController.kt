@@ -144,6 +144,7 @@ class PhotoViewerSystemController(private val activity: MainActivity) {
         WindowCompat.getInsetsController(window, window.decorView).systemBarsBehavior =
             WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
         activity.requestedOrientation = originalOrientation
+        showSystemBars()
     }
 
     /** 控制栏收起时恢复全屏，不改变持久化配置。 */
