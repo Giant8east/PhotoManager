@@ -130,7 +130,7 @@ class PhotoViewerSystemController(private val activity: MainActivity) {
         return true
     }
 
-    /** 离开阅读页时关闭常亮，并恢复进入前的其他窗口配置。 */
+    /** 离开阅读页时关闭常亮，并恢复阅读页修改过的窗口配置。 */
     fun restore() {
         volumeKeyPagingEnabled = false
         onNextPage = null
@@ -140,7 +140,9 @@ class PhotoViewerSystemController(private val activity: MainActivity) {
             screenBrightness = originalBrightness
             layoutInDisplayCutoutMode = originalCutoutMode
         }
-        showSystemBars()
+        // 退出后不再需要阅读页的临时系统栏行为，恢复应用默认值。
+        WindowCompat.getInsetsController(window, window.decorView).systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
         activity.requestedOrientation = originalOrientation
     }
 
