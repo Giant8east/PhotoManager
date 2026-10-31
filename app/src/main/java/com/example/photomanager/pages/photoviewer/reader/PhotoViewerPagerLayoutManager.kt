@@ -75,13 +75,6 @@ internal class PhotoViewerPagerLayoutManager(
         if (index == pagerState.currentPage) flingJob?.cancel()
     }
 
-    /** 落页完成后旧页已离屏，直接复原，避免依赖布局可见性通知的时序。 */
-    private fun resetInactiveImages() {
-        images.forEach { (index, image) ->
-            if (index != pagerState.currentPage) image.reset()
-        }
-    }
-
     private val scrollDirection get() = if (readingDirection == ReadingDirection.RIGHT_TO_LEFT) 1f else -1f
 
     private val isPageAligned get() = abs(pagerState.currentPageOffsetFraction) < 0.0001f
@@ -224,7 +217,6 @@ internal class PhotoViewerPagerLayoutManager(
             return
         }
         pagerState.scrollToPage(index)
-        resetInactiveImages()
     }
 
     /** 跳页接管旧手势和动画；停止边缘拉动后只释放效果，不清空其回缩状态。 */
@@ -262,7 +254,6 @@ internal class PhotoViewerPagerLayoutManager(
                 settlePage(this, startPage, touchSlop)
                 if (canFling) startImageFling(releaseVelocity)
             }
-            resetInactiveImages()
         }
     }
 
@@ -280,6 +271,7 @@ internal class PhotoViewerPagerLayoutManager(
         zoomAnimation?.cancel()
         edgeAnimation?.cancel()
         edges.values.forEach { it.dispose() }
+        images.clear()
     }
 
     /** 图片惯性不分发给 Pager；一轴撞边后停止，另一轴继续减速。 */
