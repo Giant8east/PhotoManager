@@ -18,6 +18,10 @@ internal abstract class PhotoViewerLayoutManager<Input>(scope: CoroutineScope) {
     abstract val currentPage: Int
     abstract val settledPage: Int
     abstract val pageCount: Int
+    /** 连续纵向阅读才有的能力，分页布局使用默认值，避免调用方向下转型。 */
+    open val isContinuous: Boolean get() = false
+    open val currentItemOffset: Int get() = 0
+    open val unscaledItemOffset: Int get() = 0
     abstract fun isPageVisible(index: Int): Boolean
     abstract fun resizeViewport(size: IntSize)
     abstract fun onDown(position: Offset, touchSlop: Float)
