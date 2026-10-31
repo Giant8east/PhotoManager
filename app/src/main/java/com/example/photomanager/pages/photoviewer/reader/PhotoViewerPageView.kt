@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -29,6 +30,7 @@ import android.graphics.drawable.Animatable
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import com.example.photomanager.R
 import com.example.photomanager.data.PageScale
 import com.example.photomanager.data.database.PhotoEntity
 
@@ -54,14 +56,16 @@ internal fun PhotoViewerPageView(
     val request = remember(photo, context) {
         val metrics = context.resources.displayMetrics
         val screenSize = IntSize(metrics.widthPixels, metrics.heightPixels)
-        val initialViewport = Size(screenSize.width.toFloat(), screenSize.height.toFloat())
         val size = readerDecodeSize(
-            transform.viewport.takeIf { it.width > 0f && it.height > 0f } ?: initialViewport,
+            Size(screenSize.width.toFloat(), screenSize.height.toFloat()),
             screenSize
         )
         ImageRequest.Builder(context).data(photo.contentUri)
             .scale(Scale.FIT)
-            .memoryCacheKey("${photo.contentUri}|${photo.modifiedAt}|${photo.sizeBytes}|reader")
+            .memoryCacheKey(
+                "${photo.contentUri}|${photo.modifiedAt}|${photo.sizeBytes}|reader|" +
+                    "${size.width}x${size.height}"
+            )
             .size(size.width, size.height)
             .build()
     }
@@ -139,9 +143,11 @@ internal fun PhotoViewerPageView(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("图片加载失败", color = Color.White)
-                Text("第 ${index + 1} 张", color = Color.White)
-                TextButton(onClick = { retryCount++ }) { Text("重试", color = Color.White) }
+                Text(stringResource(R.string.viewer_image_load_failed), color = Color.White)
+                Text(stringResource(R.string.viewer_image_index, index + 1), color = Color.White)
+                TextButton(onClick = { retryCount++ }) {
+                    Text(stringResource(R.string.page_retry), color = Color.White)
+                }
             }
 
             else -> CircularProgressIndicator()
