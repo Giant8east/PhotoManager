@@ -19,12 +19,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import com.example.photomanager.R
 import com.example.photomanager.data.ReadingDirection
 import kotlinx.coroutines.delay
@@ -49,13 +52,16 @@ fun PhotoViewerControls(
     var draggedPage by remember { mutableIntStateOf(0) }
     val nextPage by rememberUpdatedState(onNextPage)
     val changeVisibility by rememberUpdatedState(onVisibilityChanged)
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
 
-    // 自动播放
-    LaunchedEffect(isPlaying, intervalSeconds, isMenuVisible, isDragging) {
+    // 自动播放只在前台运行，退到后台时暂停；返回前台后从当前页继续。
+    LaunchedEffect(isPlaying, intervalSeconds, isMenuVisible, isDragging, lifecycle) {
         if (!isPlaying || isMenuVisible || isDragging) return@LaunchedEffect
-        while (isActive) {
-            delay(intervalSeconds * 1000L)
-            nextPage()
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (isActive) {
+                delay(intervalSeconds * 1000L)
+                nextPage()
+            }
         }
     }
     // 自动隐藏控制组件
