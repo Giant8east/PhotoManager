@@ -6,6 +6,7 @@ import com.example.photomanager.R
 import dagger.hilt.android.qualifiers.ApplicationContext
 import androidx.room.withTransaction
 import androidx.sqlite.db.SimpleSQLiteQuery
+import com.example.photomanager.data.database.AlbumDetailRecord
 import com.example.photomanager.data.database.AlbumEntity
 import com.example.photomanager.data.database.PhotoDatabase
 import com.example.photomanager.data.database.PhotoEntity
@@ -14,6 +15,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.io.File
 import javax.inject.Inject
@@ -79,9 +81,11 @@ class AlbumData @Inject constructor(
     fun observePhotos(albumId: Long): Flow<List<PhotoEntity>> =
         database.photoDao().observePhotosQuery(albumId).distinctUntilChanged()
 
-    /** 持续观察单个相册实体。 */
-    fun observeAlbum(albumId: Long): Flow<AlbumEntity?> =
-        database.albumDao().observeAlbumByIdQuery(albumId).distinctUntilChanged()
+    /** 持续观察相册及其完整图片索引，单个事务查询保证相册与图片来自同一快照。 */
+    fun observeAlbumDetail(albumId: Long): Flow<AlbumDetailRecord?> =
+        database.albumDao().observeAlbumDetailQuery(albumId)
+            .map { record -> record?.copy(photos = record.photos.sortedBy { it.name }) }
+            .distinctUntilChanged()
 
     /** 遍历同步整个根目录，并对数据库已有但未在本次遍历中发现的旧路径进行补充对账。 */
     suspend fun syncDirectory(rootPath: String) = withContext(Dispatchers.IO) {

@@ -5,14 +5,16 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.RawQuery
+import androidx.room.Transaction
 import androidx.room.Update
 import androidx.sqlite.db.SupportSQLiteQuery
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface AlbumDao {
+    @Transaction
     @Query("SELECT * FROM albums WHERE id = :albumId")
-    fun observeAlbumByIdQuery(albumId: Long): Flow<AlbumEntity?>
+    fun observeAlbumDetailQuery(albumId: Long): Flow<AlbumDetailRecord?>
 
     @RawQuery(observedEntities = [AlbumEntity::class])
     fun observeAlbumQuery(query: SupportSQLiteQuery): Flow<List<AlbumEntity>>
