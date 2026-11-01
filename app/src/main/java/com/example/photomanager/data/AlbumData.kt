@@ -146,7 +146,7 @@ class AlbumData @Inject constructor(
                 albumPath = scanned.path,
                 modifiedAt = scanned.modifiedAt,
                 photoCount = scanned.photos.size,
-                coverPath = scanned.photos.firstOrNull()?.contentUri,
+                coverPath = scanned.photos.first().contentUri,
                 totalSizeBytes = scanned.totalSizeBytes,
                 sortOrder = System.currentTimeMillis()
             )
@@ -184,7 +184,7 @@ class AlbumData @Inject constructor(
             name = scanned.name,
             modifiedAt = scanned.modifiedAt,
             photoCount = scanned.photos.size,
-            coverPath = scanned.photos.firstOrNull()?.contentUri,
+            coverPath = scanned.photos.first().contentUri,
             totalSizeBytes = scanned.totalSizeBytes,
             lastViewedPhotoIndex = updatedProgress
         )

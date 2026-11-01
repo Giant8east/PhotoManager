@@ -29,7 +29,8 @@ data class AlbumEntity(
     val totalSizeBytes: Long? = null,
     /** 上次浏览到的图片下标，从 0 开始。 */
     val lastViewedPhotoIndex: Int = 0,
-    val coverPath: String? = null,
+    /** 首张图片的内容 URI；相册至少包含一张图片。 */
+    val coverPath: String,
     val albumPath: String,
     /** 自定义排序值，数值越小越靠前。 */
     val sortOrder: Long = 0,
