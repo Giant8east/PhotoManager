@@ -8,7 +8,12 @@ import androidx.lifecycle.HasDefaultViewModelProviderFactory
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.animation.AnimatedContent
@@ -34,6 +39,8 @@ class AppNavigator(
 
     private val pages = mutableStateListOf<PageEntry>() // 页面栈,类型是 Compose 能观察到变化的可变列表
     private var nextPageId = 0L
+    private var isTransitioning by mutableStateOf(false)
+    private var pendingPop = false
 
     init {
         pages += PageEntry(nextPageId++, true, HorizontalPageTransition) { initialPage(this) }
@@ -44,11 +51,19 @@ class AppNavigator(
         transition: PageTransition = HorizontalPageTransition,
         page: @Composable () -> Unit
     ) {
+        if (isTransitioning) return
+        isTransitioning = true
         pages += PageEntry(nextPageId++, useSafeArea, transition, page)
     }
 
     fun pop() {
-        if (pages.size > 1) pages.removeLast()
+        if (isTransitioning) {
+            pendingPop = true
+            return
+        }
+        if (pages.size <= 1) return
+        isTransitioning = true
+        pages.removeLast()
     }
 
     @SuppressLint("ReturnFromAwaitPointerEventScope")
@@ -72,6 +87,21 @@ class AppNavigator(
             label = "页面转场"
         ) { page ->
             Box(Modifier.fillMaxSize()) {
+                LaunchedEffect(transition) {
+                    var sawRunning = false
+                    snapshotFlow { transition.currentState != transition.targetState }
+                        .collect { running ->
+                            if (running) sawRunning = true
+                            if (sawRunning && !running) {
+                                isTransitioning = false
+                                if (pendingPop) {
+                                    pendingPop = false
+                                    pop()
+                                }
+                            }
+                        }
+                }
+
                 val owner = remember(page, parentOwner) {
                     object : ViewModelStoreOwner, HasDefaultViewModelProviderFactory {
                         override val viewModelStore = page.viewModelStore
