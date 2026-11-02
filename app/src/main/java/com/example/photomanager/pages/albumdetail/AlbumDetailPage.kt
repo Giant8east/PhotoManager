@@ -140,16 +140,28 @@ private fun PhotoThumbnail(photo: PhotoEntity) {
             .build()
     }
     var contentScale by remember(request) { mutableStateOf(ContentScale.Fit) }
-    AsyncImage(request, null,
+    Box(
         Modifier
             .fillMaxWidth()
-            .aspectRatio(2 / 3f),
-        contentScale = contentScale,
-        onSuccess = { result ->
-            val drawable = result.result.drawable
-            contentScale = galleryThumbnailScale(drawable.intrinsicWidth, drawable.intrinsicHeight)
-        }
-    )
+            .aspectRatio(2 / 3f)
+    ) {
+        AsyncImage(
+            request,
+            null,
+            Modifier.fillMaxSize(),
+            contentScale = contentScale,
+            onSuccess = { result ->
+                val drawable = result.result.drawable
+                contentScale = galleryThumbnailScale(drawable.intrinsicWidth, drawable.intrinsicHeight)
+            }
+        )
+        PhotoFormatBadge(
+            format = photo.format,
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(6.dp)
+        )
+    }
 }
 
 @Composable
