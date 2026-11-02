@@ -24,12 +24,11 @@
     <string name="album_delete_success">删除成功</string>
     <string name="album_refresh_success">刷新成功</string>
     <string name="album_record_removed">相册记录已移除</string>
-    <string name="album_detail_more">更多操作</string>
     <string name="album_detail_refresh">刷新</string>
     <string name="album_detail_local">本地相册</string>
+    <string name="album_detail_deleting">正在删除…</string>
     <string name="album_detail_delete">删除</string>
     <string name="album_detail_read">阅读</string>
-    <string name="album_detail_unknown_size">容量未知，请刷新</string>
     <string name="album_detail_no_tags">暂无标签</string>
     <string name="album_detail_delete_title">删除相册？</string>
     <string name="album_detail_cancel">取消</string>
@@ -42,7 +41,6 @@
     <plurals name="album_detail_photo_count">
         <item quantity="other">全部 %1$d 张</item>
     </plurals>
-    <string name="page_loading">加载中</string>
     <string name="page_retry">重试</string>
     <string name="page_albums_load_failed">相册加载失败</string>
     <string name="page_detail_load_failed">相册详情加载失败</string>
@@ -68,8 +66,6 @@
     <string name="viewer_custom_brightness">自定义屏幕亮度</string>
     <string name="viewer_confirm">确定</string>
     <string name="viewer_cancel">取消</string>
-    <string name="viewer_pause_auto_play">暂停自动播放</string>
-    <string name="viewer_start_auto_play">开始自动播放</string>
     <string name="viewer_page_number">%1$d</string>
     <string name="viewer_image_load_failed">图片加载失败</string>
     <string name="viewer_image_index">第 %1$d 张</string>
