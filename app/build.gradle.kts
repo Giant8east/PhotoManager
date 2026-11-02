@@ -12,8 +12,8 @@ android {
 
     defaultConfig {
         applicationId = "com.example.photomanager"
-        // 阅读页使用 Android 9 的刘海屏窗口 API，应用最低版本与该能力保持一致。
-        minSdk = 28
+        // 相册按真实目录路径扫描，最低 Android 11，统一使用“所有文件访问”权限。
+        minSdk = 30
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
@@ -71,17 +71,14 @@ dependencies {
     implementation(libs.androidx.hilt.navigation.compose)
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
-    implementation(libs.androidx.room.paging)
-    implementation(libs.androidx.room.paging)
     implementation(libs.coil.compose)
-    implementation(libs.androidx.paging.runtime)
-    implementation(libs.androidx.paging.compose)
-    implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.coil.gif)
     implementation(libs.androidx.datastore.preferences)
     coreLibraryDesugaring(libs.android.desugarJdkLibs)
     kapt(libs.hilt.compiler)
     kapt(libs.androidx.room.compiler)
     testImplementation(libs.junit)
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
