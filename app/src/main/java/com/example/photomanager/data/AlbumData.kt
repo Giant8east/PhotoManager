@@ -36,15 +36,24 @@ class AlbumData @Inject constructor(
         val nullOrder = if (query.sortField == AlbumSortField.MODIFIED_AT) {
             "julianday(modifiedAt) IS NULL ASC, "
         } else ""
+        val groupClause = when (query.groupFilter) {
+            AlbumGroupFilter.All -> ""
+            AlbumGroupFilter.Ungrouped -> "AND groupId IS NULL"
+            is AlbumGroupFilter.Group -> "AND groupId = ?"
+        }
+        val groupArgs: Array<Any?> = when (val filter = query.groupFilter) {
+            AlbumGroupFilter.All, AlbumGroupFilter.Ungrouped -> emptyArray()
+            is AlbumGroupFilter.Group -> arrayOf(filter.id)
+        }
         val sql = """
             SELECT * FROM albums
-            WHERE (? IS NULL OR groupId = ?)
-              AND name LIKE ? ESCAPE '\' COLLATE NOCASE
+            WHERE name LIKE ? ESCAPE '\' COLLATE NOCASE
+            $groupClause
             ORDER BY $nullOrder${query.sortField.sqlExpression} $direction, albumPath ASC
         """.trimIndent()
         return SimpleSQLiteQuery(
             sql,
-            arrayOf(query.groupId, query.groupId, searchPattern(query.keyword))
+            arrayOf<Any?>(searchPattern(query.keyword), *groupArgs)
         )
     }
 
@@ -59,7 +68,7 @@ class AlbumData @Inject constructor(
     private fun childPathPrefix(normalizedPath: String): String =
         if (normalizedPath == "/") "/" else "$normalizedPath/"
 
-    /** 批量移动相册到目标分组。 */
+    /** 批量移动相册到目标分组；null 表示默认相册。 */
     suspend fun move(albums: List<AlbumEntity>, groupId: Long?) =
         database.albumDao().updateAlbums(albums.map { it.copy(groupId = groupId) })
 
