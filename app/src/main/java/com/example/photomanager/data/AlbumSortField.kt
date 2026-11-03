@@ -3,7 +3,9 @@ package com.example.photomanager.data
 
 import com.example.photomanager.R
 import androidx.annotation.StringRes
+import kotlinx.serialization.Serializable
 
+@Serializable
 enum class AlbumSortField(@get:StringRes val titleRes: Int, internal val sqlExpression: String) {
     CUSTOM(R.string.sort_custom, "sortOrder"),
     ID(R.string.sort_id, "id"),
