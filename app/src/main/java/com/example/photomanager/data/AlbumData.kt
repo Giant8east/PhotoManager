@@ -36,14 +36,15 @@ class AlbumData @Inject constructor(
         val nullOrder = if (query.sortField == AlbumSortField.MODIFIED_AT) {
             "julianday(modifiedAt) IS NULL ASC, "
         } else ""
-        val groupClause = when (query.groupFilter) {
-            AlbumGroupFilter.All -> ""
-            AlbumGroupFilter.Ungrouped -> "AND groupId IS NULL"
-            is AlbumGroupFilter.Group -> "AND groupId = ?"
+        val groupClause = if (query.groupId == null) {
+            "AND groupId IS NULL"
+        } else {
+            "AND groupId = ?"
         }
-        val groupArgs: Array<Any?> = when (val filter = query.groupFilter) {
-            AlbumGroupFilter.All, AlbumGroupFilter.Ungrouped -> emptyArray()
-            is AlbumGroupFilter.Group -> arrayOf(filter.id)
+        val groupArgs: Array<Any?> = if (query.groupId == null) {
+            emptyArray()
+        } else {
+            arrayOf<Any?>(query.groupId)
         }
         val sql = """
             SELECT * FROM albums
