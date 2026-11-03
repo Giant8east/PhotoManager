@@ -8,7 +8,7 @@ import androidx.room.PrimaryKey
 data class GroupEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
-    /** 分组创建时间，使用 UTC ISO 8601 字符串；无法读取时为空。 */
-    val createdAt: String? = null,
-    val name: String
+    val name: String,
+    /** 分组在侧边栏中的显示顺序，数值越小越靠前。 */
+    val sortOrder: Long = 0
 )
