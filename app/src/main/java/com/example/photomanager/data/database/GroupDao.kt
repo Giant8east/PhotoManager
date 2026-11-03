@@ -12,11 +12,20 @@ interface GroupDao {
     @Insert
     suspend fun insertGroup(group: GroupEntity): Long
 
-    @Query("SELECT * FROM groups ORDER BY name ASC")
+    @Query("SELECT * FROM groups ORDER BY sortOrder ASC, name ASC")
     fun observeGroupQuery(): Flow<List<GroupEntity>>
+
+    @Query("SELECT * FROM groups ORDER BY sortOrder ASC, name ASC")
+    suspend fun queryGroups(): List<GroupEntity>
+
+    @Query("SELECT COALESCE(MAX(sortOrder), -1) FROM groups")
+    suspend fun queryMaxSortOrder(): Long
 
     @Update
     suspend fun updateGroup(group: GroupEntity)
+
+    @Update
+    suspend fun updateGroups(groups: List<GroupEntity>)
 
     @Query("DELETE FROM groups WHERE id = :groupId")
     suspend fun deleteGroup(groupId: Long)
