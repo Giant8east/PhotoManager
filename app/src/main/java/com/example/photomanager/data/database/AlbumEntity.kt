@@ -1,7 +1,6 @@
 /** 相册数据库实体，保存目录相册的展示信息、路径和所属分组。 */
 package com.example.photomanager.data.database
 
-import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -14,7 +13,7 @@ import androidx.room.PrimaryKey
             entity = GroupEntity::class,
             parentColumns = ["id"],
             childColumns = ["groupId"],
-            onDelete = ForeignKey.SET_DEFAULT
+            onDelete = ForeignKey.SET_NULL
         )
     ],
     indices = [Index("groupId"), Index(value = ["albumPath"], unique = true)]
@@ -35,7 +34,6 @@ data class AlbumEntity(
     val albumPath: String,
     /** 自定义排序值，数值越小越靠前。 */
     val sortOrder: Long = 0,
-    /** 相册所属分组；0 是默认分组。 */
-    @ColumnInfo(defaultValue = "0")
-    val groupId: Long = 0
+    /** 相册所属分组；null 表示默认相册。 */
+    val groupId: Long? = null
 )
