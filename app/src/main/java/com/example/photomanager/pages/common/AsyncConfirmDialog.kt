@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
@@ -19,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
+import com.example.photomanager.ui.theme.appColors
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
@@ -27,7 +29,6 @@ fun AsyncConfirmDialog(
     title: String,
     message: String,
     confirmLabel: String,
-    cancelLabel: String,
     loadingMessage: String,
     onDismiss: () -> Unit,
     onConfirm: suspend () -> Unit,
@@ -39,6 +40,9 @@ fun AsyncConfirmDialog(
 
     AlertDialog(
         onDismissRequest = { if (!isSubmitting) onDismiss() },
+        shape = RoundedCornerShape(4.dp),
+        containerColor = appColors.dialogBackground,
+        tonalElevation = 0.dp,
         properties = DialogProperties(
             dismissOnBackPress = !isSubmitting,
             dismissOnClickOutside = !isSubmitting
@@ -82,13 +86,5 @@ fun AsyncConfirmDialog(
                 Text(if (isSubmitting) loadingMessage else confirmLabel)
             }
         },
-        dismissButton = {
-            TextButton(
-                enabled = !isSubmitting,
-                onClick = onDismiss
-            ) {
-                Text(cancelLabel)
-            }
-        }
     )
 }

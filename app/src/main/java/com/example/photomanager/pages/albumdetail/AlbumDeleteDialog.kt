@@ -23,7 +23,6 @@ internal fun AlbumDeleteDialog(
         title = stringResource(R.string.album_detail_delete_title),
         message = stringResource(R.string.album_detail_delete_message, album.name),
         confirmLabel = stringResource(R.string.album_detail_delete),
-        cancelLabel = stringResource(R.string.album_detail_cancel),
         loadingMessage = stringResource(R.string.album_detail_deleting),
         onDismiss = { dialogs.pop() },
         onConfirm = { viewModel.delete(album) },
