@@ -41,6 +41,7 @@ import com.example.photomanager.data.database.AlbumEntity
 import com.example.photomanager.navigation.AppNavigator
 import com.example.photomanager.pages.albumdetail.AlbumDetailPage
 import com.example.photomanager.ui.format.rememberAlbumModifiedTimeText
+import com.example.photomanager.ui.theme.appColors
 
 // 对齐 EhViewer 的 TextView：常规字重、自然行高，并保留字体上下留白。
 private val CardTitleStyle = TextStyle(
@@ -80,8 +81,8 @@ internal fun AlbumListCard(
         ),
         shape = RoundedCornerShape(2.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer
-            else MaterialTheme.colorScheme.surfaceVariant
+            containerColor = if (selected) appColors.selectedCardBackground
+            else appColors.cardBackground
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
