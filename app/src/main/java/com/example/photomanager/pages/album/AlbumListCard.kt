@@ -66,26 +66,31 @@ internal fun AlbumListCard(
         ImageRequest.Builder(context).data(album.coverPath).build()
     }
     var coverScale by remember(coverRequest) { mutableStateOf(ContentScale.Fit) }
-    Card(modifier = Modifier
-        .fillMaxWidth()
-        .padding(2.dp)
-        .combinedClickable(
-            onClick = {
-                if (selection.isSelectionMode) {
-                    selection.toggle(album.id)
-                } else {
-                    navigator.pushTo { AlbumDetailPage(navigator, album) }
-                }
-            },
-            onLongClick = { selection.enter(album.id) }
-        ),
-        shape = RoundedCornerShape(2.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (selected) appColors.selectedCardBackground
-            else appColors.cardBackground
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = {
+                    if (selection.isSelectionMode) {
+                        selection.toggle(album.id)
+                    } else {
+                        navigator.pushTo { AlbumDetailPage(navigator, album) }
+                    }
+                },
+                onLongClick = { selection.enter(album.id) }
+            )
     ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(2.dp),
+            shape = RoundedCornerShape(2.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = if (selected) appColors.selectedCardBackground
+                else appColors.cardBackground
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
         Row {
             AsyncImage(
                 model = coverRequest,
@@ -163,5 +168,6 @@ internal fun AlbumListCard(
                 }
             }
         }
+    }
     }
 }
