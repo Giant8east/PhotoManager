@@ -1,6 +1,7 @@
 /** 相册多选操作 FAB，交互对齐 EhViewer 下载页的批量操作入口。 */
 package com.example.photomanager.pages.album
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
@@ -54,6 +55,10 @@ internal fun AlbumActionFab(
     val albumIds = viewModel.albums.map { it.id }.toSet()
     val hasSelection = selection.selectedIds.isNotEmpty()
     val isExpanded = selection.isSelectionMode
+
+    BackHandler(enabled = isExpanded) {
+        selection.clear()
+    }
 
     val dialogs = rememberDialogStack()
     val showDelete: () -> Unit = {
