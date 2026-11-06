@@ -23,11 +23,13 @@ import com.example.photomanager.ui.theme.appColors
 @Composable
 fun AppDialog(
     title: String,
-    buttons: (@Composable RowScope.() -> Unit)? = null,
-    content: @Composable ColumnScope.() -> Unit
+    buttons: (@Composable RowScope.(close: () -> Unit) -> Unit)? = null,
+    content: @Composable ColumnScope.(close: () -> Unit) -> Unit
 ) {
     val dialogs = LocalDialogStack.current
-    Dialog(onDismissRequest = dialogs::pop) {
+    val close: () -> Unit = { dialogs.pop() }
+
+    Dialog(onDismissRequest = close) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = MaterialTheme.shapes.extraSmall,
@@ -54,9 +56,10 @@ fun AppDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(max = 360.dp)
-                        .padding(horizontal = 24.dp),
-                    content = content
-                )
+                        .padding(horizontal = 24.dp)
+                ) {
+                    content(this, close)
+                }
                 buttons?.let { actions ->
                     Row(
                         modifier = Modifier
@@ -64,7 +67,7 @@ fun AppDialog(
                             .padding(horizontal = 16.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.End
                     ) {
-                        actions()
+                        actions(this, close)
                     }
                 }
             }
