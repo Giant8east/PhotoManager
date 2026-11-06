@@ -30,16 +30,18 @@ fun AsyncConfirmDialog(
     message: String,
     confirmLabel: String,
     loadingMessage: String,
-    onDismiss: () -> Unit,
     onConfirm: suspend () -> Unit,
     onSuccess: () -> Unit,
     onError: (Exception) -> Unit
 ) {
     var isSubmitting by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val dialogs = LocalDialogStack.current
 
     AlertDialog(
-        onDismissRequest = { if (!isSubmitting) onDismiss() },
+        onDismissRequest = {
+            if (!isSubmitting) dialogs.pop()
+        },
         shape = RoundedCornerShape(4.dp),
         containerColor = appColors.dialogBackground,
         tonalElevation = 0.dp,
@@ -73,6 +75,7 @@ fun AsyncConfirmDialog(
                     scope.launch {
                         try {
                             onConfirm()
+                            dialogs.pop()
                             onSuccess()
                         } catch (error: CancellationException) {
                             throw error

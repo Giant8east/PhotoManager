@@ -23,11 +23,11 @@ import com.example.photomanager.ui.theme.appColors
 @Composable
 fun AppDialog(
     title: String,
-    onDismiss: () -> Unit,
     buttons: (@Composable RowScope.() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Dialog(onDismissRequest = onDismiss) {
+    val dialogs = LocalDialogStack.current
+    Dialog(onDismissRequest = dialogs::pop) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = MaterialTheme.shapes.extraSmall,
