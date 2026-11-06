@@ -5,18 +5,24 @@ import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.photomanager.R
 import com.example.photomanager.data.database.AlbumEntity
 import com.example.photomanager.navigation.AppNavigator
 import com.example.photomanager.pages.common.AsyncConfirmDialog
-import com.example.photomanager.pages.common.DialogStack
 
 @Composable
 internal fun AlbumDeleteDialog(
     album: AlbumEntity,
-    viewModel: AlbumDetailViewModel,
     navigator: AppNavigator,
-    dialogs: DialogStack
+    viewModel: AlbumDetailViewModel = hiltViewModel<
+        AlbumDetailViewModel,
+        AlbumDetailViewModel.Factory
+        >(
+        creationCallback = {
+            it.create(album.id, album.albumPath)
+        }
+    )
 ) {
     val context = LocalContext.current
     AsyncConfirmDialog(
@@ -24,7 +30,6 @@ internal fun AlbumDeleteDialog(
         message = stringResource(R.string.album_detail_delete_message, album.name),
         confirmLabel = stringResource(R.string.album_detail_delete),
         loadingMessage = stringResource(R.string.album_detail_deleting),
-        onDismiss = { dialogs.pop() },
         onConfirm = { viewModel.delete(album) },
         onSuccess = {
             Toast.makeText(
@@ -32,7 +37,6 @@ internal fun AlbumDeleteDialog(
                 R.string.album_delete_success,
                 Toast.LENGTH_SHORT
             ).show()
-            dialogs.pop()
             navigator.pop()
         },
         onError = {
