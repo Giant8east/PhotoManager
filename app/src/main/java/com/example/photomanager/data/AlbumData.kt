@@ -29,6 +29,10 @@ class AlbumData @Inject constructor(
     fun observeAlbums(query: AlbumQuery): Flow<List<AlbumEntity>> =
         database.albumDao().observeAlbumQuery(buildAlbumQuery(query))
 
+    /** 持续观察未分组相册数量。 */
+    fun observeUngroupedAlbumCount(): Flow<Int> =
+        database.groupDao().observeUngroupedAlbumCount()
+
     /** 将查询条件转换为排序与筛选 SQL；列名来自枚举，不拼接外部输入。 */
     private fun buildAlbumQuery(query: AlbumQuery): SimpleSQLiteQuery {
         val direction = if (query.isDescending) "DESC" else "ASC"
