@@ -8,25 +8,17 @@ import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SmallFloatingActionButton
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -38,19 +30,17 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.photomanager.R
-import com.example.photomanager.pages.common.AppDialog
 import com.example.photomanager.pages.common.DialogHost
 import com.example.photomanager.pages.common.rememberDialogStack
 import com.example.photomanager.ui.theme.appColors
 
 @Composable
 internal fun AlbumActionFab(
-    viewModel: AlbumViewModel,
-    selection: AlbumSelectionState
+    selection: AlbumSelectionState,
+    viewModel: AlbumViewModel = hiltViewModel()
 ) {
     val albumIds = viewModel.albums.map { it.id }.toSet()
     val hasSelection = selection.selectedIds.isNotEmpty()
@@ -63,63 +53,12 @@ internal fun AlbumActionFab(
     val dialogs = rememberDialogStack()
     val showDelete: () -> Unit = {
         dialogs.show {
-            AppDialog(
-                title = stringResource(R.string.album_delete_title),
-                onDismiss = { dialogs.pop() },
-                buttons = {
-                    TextButton(
-                        onClick = {
-                            viewModel.delete(selection.selectedIds)
-                            selection.clear()
-                            dialogs.pop()
-                        },
-                        colors = ButtonDefaults.textButtonColors(
-                            contentColor = appColors.actionText
-                        )
-                    ) { Text(stringResource(R.string.album_action_delete)) }
-                }
-            ) {
-                Text(
-                    stringResource(
-                        R.string.album_delete_selected_message,
-                        selection.selectedIds.size
-                    ),
-                    style = MaterialTheme.typography.bodyLarge.copy(
-                        letterSpacing = 0.sp
-                    )
-                )
-            }
+            AlbumDeleteDialog(selection = selection)
         }
     }
     val showGroups: () -> Unit = {
         dialogs.show {
-            AppDialog(
-                title = stringResource(R.string.album_action_move),
-                onDismiss = { dialogs.pop() }
-            ) {
-                LazyColumn(Modifier.fillMaxWidth()) {
-                    item {
-                        MoveRow(
-                            label = stringResource(R.string.album_group_default_short),
-                            onClick = {
-                                viewModel.move(selection.selectedIds, null)
-                                selection.clear()
-                                dialogs.pop()
-                            }
-                        )
-                    }
-                    items(viewModel.groups, key = { it.id }) { group ->
-                        MoveRow(
-                            label = group.name,
-                            onClick = {
-                                viewModel.move(selection.selectedIds, group.id)
-                                selection.clear()
-                                dialogs.pop()
-                            }
-                        )
-                    }
-                }
-            }
+            AlbumMoveDialog(selection = selection)
         }
     }
 
@@ -223,25 +162,6 @@ internal fun AlbumActionFab(
         }
     }
     DialogHost(dialogs)
-}
-
-@Composable
-private fun MoveRow(
-    label: String,
-    onClick: () -> Unit
-) {
-    Text(
-        label,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 16.dp),
-        style = MaterialTheme.typography.bodyLarge.copy(
-            fontSize = 16.sp,
-            lineHeight = 24.sp,
-            letterSpacing = 0.sp
-        )
-    )
 }
 
 @Composable
