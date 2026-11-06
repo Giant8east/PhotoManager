@@ -15,40 +15,23 @@ val LocalSheetStack = staticCompositionLocalOf<SheetStack> {
 
 /** 页面作用域的弹窗栈，只呈现栈顶；页面离开组合后一起释放。 */
 class SheetStack {
-    private data class Entry(
-        val title: String?,
-        val onClose: (() -> Unit)?,
-        val content: @Composable () -> Unit
-    )
+    private val sheets = mutableStateListOf<@Composable () -> Unit>()
 
-    private val sheets = mutableStateListOf<Entry>()
-
-    /**
-     * 入栈并显示一个底部弹窗。
-     *
-     * [onClose] 在弹窗因遮罩、返回键或下滑关闭时调用，用于清理调用方的临时状态。
-     */
-    fun show(
-        title: String? = null,
-        onClose: (() -> Unit)? = null,
-        content: @Composable () -> Unit
-    ) {
-        sheets += Entry(title, onClose, content)
+    /** 入栈并显示一个底部弹窗。 */
+    fun show(content: @Composable () -> Unit) {
+        sheets += content
     }
 
     /** 关闭栈顶弹窗；没有弹窗时忽略。 */
     fun pop() {
-        if (sheets.isEmpty()) return
-        sheets.removeAt(sheets.lastIndex).onClose?.invoke()
+        if (sheets.isNotEmpty()) sheets.removeAt(sheets.lastIndex)
     }
 
     @Composable
     internal fun render() {
         val sheet = sheets.lastOrNull() ?: return
         CompositionLocalProvider(LocalSheetStack provides this) {
-            SheetFrame(title = sheet.title) {
-                key(sheet) { sheet.content() }
-            }
+            key(sheet) { sheet() }
         }
     }
 }
