@@ -1,6 +1,7 @@
 /** 相册详情整页滚动，画廊使用完整图片索引，缩略图由惰性网格按需加载。 */
 package com.example.photomanager.pages.albumdetail
 
+import android.annotation.SuppressLint
 import com.example.photomanager.ui.state.PageContent
 import android.text.format.Formatter
 import com.example.photomanager.R
@@ -31,7 +32,6 @@ import com.example.photomanager.data.database.AlbumEntity
 import com.example.photomanager.data.database.PhotoEntity
 import com.example.photomanager.navigation.AppNavigator
 import com.example.photomanager.pages.common.DialogHost
-import com.example.photomanager.pages.common.DialogStack
 import com.example.photomanager.pages.common.DropdownMenuButton
 import com.example.photomanager.pages.common.rememberDialogStack
 import com.example.photomanager.ui.format.rememberAlbumModifiedTimeText
@@ -48,15 +48,23 @@ fun AlbumDetailPage(
 ) {
     BackHandler { navigator.pop() }
     PageContent(viewModel.state, onRetry = viewModel::retryLoad) {
-        content -> AlbumDetailBody(navigator, content, viewModel)
+        content -> AlbumDetailBody(navigator, content)
     }
 }
 
+@SuppressLint("UnusedBoxWithConstraintsScope")
 @Composable
 private fun AlbumDetailBody(
     navigator: AppNavigator,
     content: AlbumDetailUiState,
-    viewModel: AlbumDetailViewModel,
+    viewModel: AlbumDetailViewModel = hiltViewModel<
+        AlbumDetailViewModel,
+        AlbumDetailViewModel.Factory
+        >(
+        creationCallback = {
+            it.create(content.album.id, content.album.albumPath)
+        }
+    )
 ) {
     val currentAlbum = content.album
     val photos = content.photos
@@ -84,8 +92,19 @@ private fun AlbumDetailBody(
 
             LazyColumn(Modifier.fillMaxSize()) {
                 item(key = "header") {
-                    AlbumDetailHeader(album = currentAlbum, navigator = navigator,
-                        viewModel = viewModel, dialogs = dialogs)
+                    AlbumDetailHeader(
+                        album = currentAlbum,
+                        navigator = navigator,
+                        onRefreshDirectory = viewModel::refreshDirectory,
+                        onDelete = {
+                            dialogs.show {
+                                AlbumDeleteDialog(
+                                    album = currentAlbum,
+                                    navigator = navigator
+                                )
+                            }
+                        }
+                    )
                 }
 
                 photoGridRows(items = photos, columns = columns, itemKey = { it.id }
@@ -168,12 +187,10 @@ private fun PhotoThumbnail(photo: PhotoEntity) {
 private fun AlbumDetailHeader(
     album: AlbumEntity,
     navigator: AppNavigator,
-    viewModel: AlbumDetailViewModel,
-    dialogs: DialogStack,
+    onRefreshDirectory: ((Boolean) -> Unit) -> Unit,
+    onDelete: () -> Unit,
 ) {
     val lastViewedIndex = album.lastViewedPhotoIndex
-    val context = LocalContext.current
-    val colors = MaterialTheme.colorScheme
 
     Column {
         Box {
@@ -210,17 +227,13 @@ private fun AlbumDetailHeader(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         TextButton(
-                            onClick = { dialogs.show { AlbumDeleteDialog(
-                                album = album, viewModel = viewModel,
-                                navigator = navigator, dialogs = dialogs)
-                                }
-                            },
+                            onClick = onDelete,
                             modifier = Modifier.weight(1f).fillMaxHeight()
                         ) {
                             Text(stringResource(R.string.album_detail_delete),
                                 color = appColors.actionText, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         }
-                        Box(Modifier.width(1.dp).height(32.dp).background(colors.outlineVariant))
+                        Box(Modifier.width(1.dp).height(32.dp).background(MaterialTheme.colorScheme.outlineVariant))
                         TextButton(
                             onClick = {
                                 navigator.pushTo(useSafeArea = false) {
@@ -242,7 +255,7 @@ private fun AlbumDetailHeader(
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.album_detail_refresh)) },
                     onClick = { dismiss()
-                        viewModel.refreshDirectory { isAlbumAvailable ->
+                        onRefreshDirectory { isAlbumAvailable ->
                             if (!isAlbumAvailable) navigator.pop()
                         }
                     }
@@ -264,7 +277,7 @@ private fun AlbumDetailHeader(
                 album.photoCount
                 )
             )
-            Text(Formatter.formatFileSize(context, album.totalSizeBytes))
+            Text(Formatter.formatFileSize(LocalContext.current, album.totalSizeBytes))
         }
         Text(stringResource(
                 R.string.album_detail_modified,
