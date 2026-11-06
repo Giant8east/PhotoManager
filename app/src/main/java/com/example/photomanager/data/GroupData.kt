@@ -3,6 +3,7 @@ package com.example.photomanager.data
 
 import androidx.room.withTransaction
 import com.example.photomanager.data.database.GroupEntity
+import com.example.photomanager.data.database.GroupWithAlbumCount
 import com.example.photomanager.data.database.PhotoDatabase
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
@@ -12,6 +13,10 @@ class GroupData @Inject constructor(
 ) {
     /** 持续观察分组列表。 */
     val groups: Flow<List<GroupEntity>> = database.groupDao().observeGroupQuery()
+
+    /** 持续观察分组列表及其相册数量。 */
+    val groupsWithAlbumCounts: Flow<List<GroupWithAlbumCount>> =
+        database.groupDao().observeGroupCountQuery()
 
     /** 创建一个分组记录，追加到当前顺序末尾。 */
     suspend fun createGroup(name: String) {
