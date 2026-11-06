@@ -49,7 +49,11 @@ fun PhotoViewerPage(
             contentAlignment = Alignment.Center
         ) {
             PageContent(viewModel.state, viewModel::retry) { content ->
-                PhotoViewerReader(viewModel, content.photos, initialIndex, content.settings)
+                PhotoViewerReader(
+                    photos = content.photos,
+                    initialIndex = initialIndex,
+                    settings = content.settings
+                )
             }
         }
     }
@@ -57,10 +61,10 @@ fun PhotoViewerPage(
 
 @Composable
 private fun PhotoViewerReader(
-    viewModel: PhotoViewerViewModel,
     photos: List<PhotoEntity>,
     initialIndex: Int,
-    settings: PhotoViewerSettings
+    settings: PhotoViewerSettings,
+    viewModel: PhotoViewerViewModel = hiltViewModel()
 ) {
     val pagerScope = rememberCoroutineScope()
     var isMenuVisible by remember { mutableStateOf(false) }
