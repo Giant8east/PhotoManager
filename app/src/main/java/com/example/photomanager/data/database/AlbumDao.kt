@@ -22,6 +22,12 @@ interface AlbumDao {
     @Query("SELECT COUNT(*) FROM albums WHERE photoCount > 0")
     fun observeValidAlbumCount(): Flow<Int>
 
+    @Query("SELECT id FROM albums")
+    fun observeAlbumIds(): Flow<List<Long>>
+
+    @Query("SELECT * FROM albums WHERE id IN (:ids)")
+    suspend fun queryAlbumsByIds(ids: List<Long>): List<AlbumEntity>
+
     @Query("SELECT * FROM albums WHERE albumPath = :path LIMIT 1")
     suspend fun queryAlbumByPath(path: String): AlbumEntity?
 

@@ -29,6 +29,13 @@ class AlbumData @Inject constructor(
     fun observeAlbums(query: AlbumQuery): Flow<List<AlbumEntity>> =
         database.albumDao().observeAlbumQuery(buildAlbumQuery(query))
 
+    /** 持续观察全部相册 ID，用于跨筛选保留多选状态。 */
+    fun observeAllAlbumIds(): Flow<List<Long>> = database.albumDao().observeAlbumIds()
+
+    /** 按 ID 读取相册，供跨筛选的批量操作使用。 */
+    suspend fun queryAlbumsByIds(ids: Set<Long>): List<AlbumEntity> =
+        if (ids.isEmpty()) emptyList() else database.albumDao().queryAlbumsByIds(ids.toList())
+
     /** 将查询条件转换为排序与筛选 SQL；列名来自枚举，不拼接外部输入。 */
     private fun buildAlbumQuery(query: AlbumQuery): SimpleSQLiteQuery {
         val direction = if (query.isDescending) "DESC" else "ASC"
@@ -44,7 +51,7 @@ class AlbumData @Inject constructor(
         val groupArgs: Array<Any?> = if (query.groupId == null) {
             emptyArray()
         } else {
-            arrayOf<Any?>(query.groupId)
+            arrayOf(query.groupId)
         }
         val sql = """
             SELECT * FROM albums
@@ -54,7 +61,7 @@ class AlbumData @Inject constructor(
         """.trimIndent()
         return SimpleSQLiteQuery(
             sql,
-            arrayOf<Any?>(searchPattern(query.keyword), *groupArgs)
+            arrayOf(searchPattern(query.keyword), *groupArgs)
         )
     }
 
