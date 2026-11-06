@@ -22,20 +22,20 @@ import androidx.compose.ui.unit.sp
 /**
  * 底部弹窗的通用外观外壳。
  *
- * 是否显示由 [SheetHost] 控制；点击遮罩、返回键或下滑都会调用 [onDismiss]。
+ * 是否显示由 [SheetHost] 控制；点击遮罩、返回键或下滑都会关闭当前弹窗。
  * [title] 可选，不传时显示顶部拖拽横线。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SheetFrame(
-    onDismiss: () -> Unit,
     title: String? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val sheets = LocalSheetStack.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        onDismissRequest = sheets::pop,
         sheetState = sheetState,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
         containerColor = MaterialTheme.colorScheme.surface,

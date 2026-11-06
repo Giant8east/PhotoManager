@@ -2,9 +2,16 @@
 package com.example.photomanager.pages.common
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
+
+/** 当前页面底部弹窗栈；弹窗内容必须由 SheetStack 渲染。 */
+val LocalSheetStack = staticCompositionLocalOf<SheetStack> {
+    error("Sheet content must be rendered by SheetStack")
+}
 
 /** 页面作用域的弹窗栈，只呈现栈顶；页面离开组合后一起释放。 */
 class SheetStack {
@@ -38,11 +45,10 @@ class SheetStack {
     @Composable
     internal fun render() {
         val sheet = sheets.lastOrNull() ?: return
-        SheetFrame(
-            onDismiss = ::pop,
-            title = sheet.title
-        ) {
-            key(sheet) { sheet.content() }
+        CompositionLocalProvider(LocalSheetStack provides this) {
+            SheetFrame(title = sheet.title) {
+                key(sheet) { sheet.content() }
+            }
         }
     }
 }
