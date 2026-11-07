@@ -1,172 +1,117 @@
+/** 相册库主页内容：顶部搜索、相册列表和批量操作 FAB；分组抽屉由 AlbumRoot 承载。 */
 package com.example.photomanager.pages.album
 
-import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-
-
-import coil.compose.AsyncImage
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.photomanager.data.database.AlbumEntity
 import com.example.photomanager.navigation.AppNavigator
+import com.example.photomanager.pages.common.DrawerHost
+import com.example.photomanager.pages.common.SheetHost
+import com.example.photomanager.pages.common.rememberSheetStack
+import com.example.photomanager.pages.groupmanager.GroupManagePage
 import com.example.photomanager.pages.setting.SettingPage
-import com.example.photomanager.pages.albumdetail.AlbumDetailPage
-import androidx.compose.foundation.layout.Spacer
+import com.example.photomanager.ui.state.PageContent
+import com.example.photomanager.ui.state.PageState
 
-/** 相册库主页，提供搜索、分组筛选、排序入口和相册列表。 */
 @Composable
-fun AlbumPage(
+internal fun AlbumPage(
     navigator: AppNavigator,
     viewModel: AlbumViewModel = hiltViewModel()
 ) {
-    var isActionFabExpanded by remember { mutableStateOf(false) }
-    BackHandler(enabled = isActionFabExpanded) {
-        isActionFabExpanded = false
-        viewModel.clearSelection()
-    }
-    AlbumGroupDrawer(
-        groups = viewModel.groups,
-        selectedGroupId = viewModel.selectedGroupId,
-        onGroupSelected = viewModel::selectGroup,
-//        gesturesEnabled = !isActionFabExpanded
-    ) {
-        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-            Column {
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.secondary)
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = viewModel.searchKeyword,
-                        onValueChange = viewModel::updateSearchKeyword,
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        placeholder = { Text("搜索相册标题") },
+    val selection = remember { AlbumSelectionState() }
 
-                        trailingIcon = if (viewModel.searchKeyword.isNotEmpty()) {
-                            {
-                                IconButton(onClick = { viewModel.updateSearchKeyword("") }) {
-                                    Icon(Icons.Default.Clear, contentDescription = "清空搜索", tint = MaterialTheme.colorScheme.onSecondary)
-                                }
-                            }
-                        } else null
+    LaunchedEffect(viewModel.state) {
+        when (val state = viewModel.state) {
+            is PageState.Content -> selection.retain(
+                state.value.albums.map { it.id }.toSet()
+            )
+            is PageState.Loading -> Unit
+            is PageState.Message -> Unit
+        }
+    }
+
+    val sheets = rememberSheetStack()
+
+    DrawerHost(
+        gesturesEnabled = !selection.isSelectionMode,
+        drawerContent = { closeDrawer ->
+            AlbumGroupDrawer(
+                groups = viewModel.groupItems,
+                ungroupedAlbumCount = viewModel.ungroupedAlbumCount,
+                selectedGroupId = viewModel.selectedGroupId,
+                onGroupSelected = viewModel::selectGroup,
+                onManageGroups = {
+                    navigator.pushTo { GroupManagePage(navigator) }
+                },
+                onCloseDrawer = closeDrawer
+            )
+        }
+    ) {
+        Box(Modifier.fillMaxSize()) {
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
+            ) {
+                AlbumTopBar(
+                    searchInput = viewModel.searchInput,
+                    onSearchInputChange = viewModel::onSearchInputChange,
+                    searchEnabled = !selection.isSelectionMode,
+                    sheetStack = sheets,
+                    onOpenSettings = { navigator.pushTo { SettingPage(navigator) } }
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                PageContent(
+                    state = viewModel.state,
+                    onRetry = viewModel::retry,
+                    modifier = Modifier.weight(1f)
+                ) { content ->
+                    AlbumList(
+                        albums = content.albums,
+                        selection = selection,
+                        navigator = navigator
                     )
-                    IconButton(onClick = { navigator.pushTo { SettingPage(navigator) } }) {
-                        Icon(Icons.Default.Settings, contentDescription = "目录导入管理", tint = MaterialTheme.colorScheme.onSecondary)
-                    }
-                }
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        "${viewModel.groupName} · ${viewModel.albums.size} 个",
-                        style = MaterialTheme.typography.labelLarge
-                    )
-                    AlbumSortButton(
-                        currentField = viewModel.sortField,
-                        isDescending = viewModel.isDescending,
-                        onSortSelected = viewModel::sort
-                    )
-                }
-                LazyColumn(Modifier.fillMaxSize()) {
-                    items(viewModel.albums, key = { it.id }) { album ->
-                        AlbumCard(album, navigator, onLongClick = {
-                            viewModel.toggleAlbumSelection(it)
-                            isActionFabExpanded = true
-                        })
-                    }
                 }
             }
-            AlbumActionFab(
-                isAllSelected = viewModel.isAllSelected,
-                hasSelection = viewModel.selectedAlbumIds.isNotEmpty(),
-                groups = viewModel.groups,
-                onSelectAll = viewModel::selectAllVisible,
-                onDelete = viewModel::deleteSelected,
-                onMoveToGroup = viewModel::moveSelectedToGroup,
-                isExpanded = isActionFabExpanded,
-                onExpandedChange = { expanded ->
-                    isActionFabExpanded = expanded
-                    if (!expanded) viewModel.clearSelection()
-                },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(20.dp)
+
+            AlbumActionFab(selection = selection)
+        }
+
+        SheetHost(sheets)
+    }
+}
+
+@Composable
+private fun AlbumList(
+    albums: List<AlbumEntity>,
+    selection: AlbumSelectionState,
+    navigator: AppNavigator
+) {
+    LazyColumn(
+        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 10.dp),
+        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxSize()
+    ) {
+        items(albums, key = { it.id }) { album ->
+            AlbumListCard(
+                album = album,
+                selection = selection,
+                navigator = navigator
             )
         }
     }
 }
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun AlbumCard(
-    album: AlbumEntity,
-    navigator: AppNavigator,
-    onLongClick: (Long) -> Unit,
-    onClick: (() -> Unit)? = null
-) {
-    val clickAction = onClick ?: {
-        navigator.pushTo { AlbumDetailPage(navigator, album) }
-    }
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .combinedClickable(onClick = clickAction, onLongClick = { onLongClick(album.id) })
-            .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        AsyncImage(
-            model = album.coverPath,
-            contentDescription = album.name,
-            modifier = Modifier
-                .width(96.dp)
-                .height(128.dp),
-            contentScale = androidx.compose.ui.layout.ContentScale.Crop
-        )
-        Spacer(Modifier.width(12.dp))
-        Text(
-            album.name,
-            modifier = Modifier.weight(1f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-        Text("${album.photoCount} 张", style = MaterialTheme.typography.labelMedium)
-    }
-}
-
