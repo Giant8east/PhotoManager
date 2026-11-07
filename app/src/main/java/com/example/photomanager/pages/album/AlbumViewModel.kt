@@ -35,7 +35,7 @@ class AlbumViewModel @Inject constructor(
     private val albumData: AlbumData,
     private val groupData: GroupData,
     private val settingsData: AlbumListSettingsData,
-    @get:ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
     var state by mutableStateOf<PageState<AlbumContent>>(PageState.Loading)
         private set
