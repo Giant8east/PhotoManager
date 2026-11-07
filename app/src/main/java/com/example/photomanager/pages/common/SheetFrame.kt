@@ -4,8 +4,11 @@ package com.example.photomanager.pages.common
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -45,7 +48,7 @@ fun SheetFrame(
             null
         }
     ) {
-        Column(Modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.navigationBars)) {
             if (title != null) {
                 SheetHeader(title)
             }
