@@ -7,7 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -89,9 +89,9 @@ private fun SortRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 56.dp)
+            .height(56.dp)
             .clickable(onClick = onSelect)
-            .padding(horizontal = 20.dp, vertical = 10.dp),
+            .padding(horizontal = 20.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         RadioButton(
@@ -168,7 +168,7 @@ private fun DirectionOption(
 ) {
     Box(
         modifier = Modifier
-            .size(32.dp)
+            .size(24.dp)
             .clip(CircleShape)
             .background(
                 if (active) MaterialTheme.colorScheme.surface
