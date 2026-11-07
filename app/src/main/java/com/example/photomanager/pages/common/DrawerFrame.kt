@@ -39,21 +39,28 @@ fun DrawerFrame(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        Row(
+        Box(
             Modifier
                 .fillMaxWidth()
-                .height(56.dp)
+                .height(64.dp)
                 .background(appColors.toolbarBackground)
-                .padding(start = 16.dp, end = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = title,
-                modifier = Modifier.weight(1f),
-                fontSize = 20.sp,
-                color = appColors.toolbarContent
-            )
-            headerActions()
+            Row(
+                Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = title,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 10.dp),
+                    fontSize = 20.sp,
+                    color = appColors.toolbarContent
+                )
+                headerActions()
+            }
         }
 
         Box(Modifier.weight(1f)) {
