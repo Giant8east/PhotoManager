@@ -3,7 +3,6 @@ package com.example.photomanager
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.graphics.Color
-import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
 import android.provider.Settings
@@ -16,7 +15,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -28,7 +26,6 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,12 +33,11 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
-import com.example.photomanager.navigation.AppNavigator
-import com.example.photomanager.pages.album.AlbumPage
 import com.example.photomanager.pages.photoviewer.system.PhotoViewerSystemController
 import com.example.photomanager.ui.theme.LocalStatusBarColor
 import com.example.photomanager.ui.theme.PhotoManagerTheme
 import dagger.hilt.android.AndroidEntryPoint
+import androidx.core.net.toUri
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -81,15 +77,11 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 if (hasStorageAccess) {
-                    // 创建导航器时，把 AlbumPage 作为根页面放进去,构造时初始化
-                    val navigator = remember {
-                        AppNavigator { navigator -> AlbumPage(navigator) }
-                    }
-                    // 页面内的返回处理优先；根页面交回桌面，保留当前任务。
+                    // 根页面交回桌面，保留当前任务。
                     BackHandler { moveTaskToBack(true) }
-                    // 导航宿主始终占满窗口，具体页面在自身条目内部处理安全区。
+                    // 分组抽屉位于导航宿主外，详情页不会承载抽屉状态。
                     CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
-                        Box(Modifier.fillMaxSize()) { navigator.render() }
+                        AppRoot()
                     }
                 } else {
                     Column(
@@ -129,7 +121,7 @@ class MainActivity : ComponentActivity() {
     private fun openAllFilesAccessSettings() {
         val appSpecificIntent = Intent(
             Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
-            Uri.parse("package:$packageName")
+            "package:$packageName".toUri()
         )
         if (startActivityQuietly(appSpecificIntent)) return
 
@@ -139,9 +131,9 @@ class MainActivity : ComponentActivity() {
     private fun startActivityQuietly(intent: Intent): Boolean = try {
         startActivity(intent)
         true
-    } catch (ignored: ActivityNotFoundException) {
+    } catch (_: ActivityNotFoundException) {
         false
-    } catch (ignored: SecurityException) {
+    } catch (_: SecurityException) {
         false
     }
 }
