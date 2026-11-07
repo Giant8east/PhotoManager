@@ -63,11 +63,10 @@ class AppNavigator(
         }
         if (pages.size <= 1) return
         isTransitioning = true
-        pages.removeLast()
+        pages.removeAt(pages.lastIndex)
     }
 
     @SuppressLint("ReturnFromAwaitPointerEventScope")
-    @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
     @Composable
     fun render() {
         val currentPage = pages.last()
@@ -83,8 +82,7 @@ class AppNavigator(
                 val isPush = targetState.id > initialState.id
                 val transition = if (isPush) targetState.transition else initialState.transition
                 transition.create(this, isPush)
-            },
-            label = "页面转场"
+            }
         ) { page ->
             Box(Modifier.fillMaxSize()) {
                 LaunchedEffect(transition) {
