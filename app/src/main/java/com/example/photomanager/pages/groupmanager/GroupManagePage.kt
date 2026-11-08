@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -47,6 +48,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.photomanager.R
 import com.example.photomanager.data.database.GroupEntity
 import com.example.photomanager.navigation.AppNavigator
+import com.example.photomanager.pages.common.AppLazyColumnScrollbar
 import com.example.photomanager.pages.common.DialogHost
 import com.example.photomanager.pages.common.TopBarShadow
 import com.example.photomanager.pages.common.rememberDialogStack
@@ -121,11 +123,12 @@ fun GroupManagePage(
                     Text(stringResource(R.string.album_group_empty))
                 }
             } else {
-                LazyColumn(
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                    state = lazyListState,
-                    modifier = Modifier.fillMaxSize()
-                ) {
+                AppLazyColumnScrollbar(state = lazyListState) {
+                    LazyColumn(
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        state = lazyListState,
+                        modifier = Modifier.fillMaxSize()
+                    ) {
                 itemsIndexed(localGroups, key = { _, group -> group.id }) { _, group ->
                     ReorderableItem(reorderableState, key = group.id) { isDragging ->
                         Column(
@@ -134,10 +137,12 @@ fun GroupManagePage(
                                 .zIndex(if (isDragging) 1f else 0f)
                                 .shadow(
                                     elevation = if (isDragging) 8.dp else 2.dp,
+                                    shape = RoundedCornerShape(2.dp),
                                     clip = false
                                 )
                                 .background(
                                     color = appColors.cardBackground,
+                                    shape = RoundedCornerShape(2.dp)
                                 )
                         ) {
                             Row(
@@ -196,7 +201,8 @@ fun GroupManagePage(
                 }
             }
         }
-            TopBarShadow(Modifier.align(Alignment.TopCenter))
+        }
+        TopBarShadow(Modifier.align(Alignment.TopCenter))
         }
     }
 
