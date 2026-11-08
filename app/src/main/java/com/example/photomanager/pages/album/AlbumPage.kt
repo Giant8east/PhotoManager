@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -18,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.photomanager.data.database.AlbumEntity
 import com.example.photomanager.navigation.AppNavigator
+import com.example.photomanager.pages.common.AppLazyColumnScrollbar
 import com.example.photomanager.pages.common.DrawerHost
 import com.example.photomanager.pages.common.SheetHost
 import com.example.photomanager.pages.common.TopBarShadow
@@ -103,17 +105,21 @@ private fun AlbumList(
     selection: AlbumSelectionState,
     navigator: AppNavigator
 ) {
-    LazyColumn(
-        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 10.dp),
-        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
-        modifier = Modifier.fillMaxSize()
-    ) {
-        items(albums, key = { it.id }) { album ->
-            AlbumListCard(
-                album = album,
-                selection = selection,
-                navigator = navigator
-            )
+    val listState = rememberLazyListState()
+    AppLazyColumnScrollbar(state = listState) {
+        LazyColumn(
+            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 10.dp),
+            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+            state = listState,
+            modifier = Modifier.fillMaxSize()
+        ) {
+            items(albums, key = { it.id }) { album ->
+                AlbumListCard(
+                    album = album,
+                    selection = selection,
+                    navigator = navigator
+                )
+            }
         }
     }
 }

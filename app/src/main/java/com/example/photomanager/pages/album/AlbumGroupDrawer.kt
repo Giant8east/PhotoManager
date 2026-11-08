@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.HorizontalDivider
@@ -26,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import com.example.photomanager.R
 import com.example.photomanager.data.database.GroupWithAlbumCount
 import com.example.photomanager.pages.common.DrawerFrame
+import com.example.photomanager.pages.common.AppLazyColumnScrollbar
 import com.example.photomanager.ui.theme.appColors
 
 @Composable
@@ -54,34 +56,37 @@ internal fun AlbumGroupDrawer(
             }
         }
     ) {
-        LazyColumn(Modifier.fillMaxSize()) {
-            item {
-                Column {
-                    DrawerRow(
-                        label = stringResource(R.string.album_group_ungrouped),
-                        count = ungroupedAlbumCount,
-                        selected = selectedGroupId == null,
-                        onClick = {
-                            onGroupSelected(null)
-                            onCloseDrawer()
-                        }
-                    )
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        val listState = rememberLazyListState()
+        AppLazyColumnScrollbar(state = listState) {
+            LazyColumn(Modifier.fillMaxSize(), state = listState) {
+                item {
+                    Column {
+                        DrawerRow(
+                            label = stringResource(R.string.album_group_ungrouped),
+                            count = ungroupedAlbumCount,
+                            selected = selectedGroupId == null,
+                            onClick = {
+                                onGroupSelected(null)
+                                onCloseDrawer()
+                            }
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    }
                 }
-            }
-            items(groups, key = { it.group.id }) { groupWithCount ->
-                val group = groupWithCount.group
-                Column {
-                    DrawerRow(
-                        label = group.name,
-                        count = groupWithCount.albumCount,
-                        selected = group.id == selectedGroupId,
-                        onClick = {
-                            onGroupSelected(group.id)
-                            onCloseDrawer()
-                        }
-                    )
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                items(groups, key = { it.group.id }) { groupWithCount ->
+                    val group = groupWithCount.group
+                    Column {
+                        DrawerRow(
+                            label = group.name,
+                            count = groupWithCount.albumCount,
+                            selected = group.id == selectedGroupId,
+                            onClick = {
+                                onGroupSelected(group.id)
+                                onCloseDrawer()
+                            }
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    }
                 }
             }
         }

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -18,6 +19,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.photomanager.R
 import com.example.photomanager.pages.common.AppDialog
+import com.example.photomanager.pages.common.AppLazyColumnScrollbar
 import com.example.photomanager.ui.theme.appColors
 
 @Composable
@@ -60,26 +62,29 @@ internal fun AlbumMoveDialog(
     AppDialog(
         title = stringResource(R.string.album_action_move)
     ) { close ->
-        LazyColumn(Modifier.fillMaxWidth()) {
-            item {
-                MoveRow(
-                    label = stringResource(R.string.album_group_default_short),
-                    onClick = {
-                        viewModel.move(selection.selectedIds, null)
-                        selection.clear()
-                        close()
-                    }
-                )
-            }
-            items(viewModel.groups, key = { it.id }) { group ->
-                MoveRow(
-                    label = group.name,
-                    onClick = {
-                        viewModel.move(selection.selectedIds, group.id)
-                        selection.clear()
-                        close()
-                    }
-                )
+        val listState = rememberLazyListState()
+        AppLazyColumnScrollbar(state = listState) {
+            LazyColumn(Modifier.fillMaxWidth(), state = listState) {
+                item {
+                    MoveRow(
+                        label = stringResource(R.string.album_group_default_short),
+                        onClick = {
+                            viewModel.move(selection.selectedIds, null)
+                            selection.clear()
+                            close()
+                        }
+                    )
+                }
+                items(viewModel.groups, key = { it.id }) { group ->
+                    MoveRow(
+                        label = group.name,
+                        onClick = {
+                            viewModel.move(selection.selectedIds, group.id)
+                            selection.clear()
+                            close()
+                        }
+                    )
+                }
             }
         }
     }

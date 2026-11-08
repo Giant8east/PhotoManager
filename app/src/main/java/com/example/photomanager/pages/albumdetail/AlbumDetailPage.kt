@@ -13,6 +13,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -35,6 +36,7 @@ import com.example.photomanager.pages.common.DialogHost
 import com.example.photomanager.pages.common.DropdownMenuButton
 import com.example.photomanager.pages.common.rememberDialogStack
 import com.example.photomanager.ui.format.rememberAlbumModifiedTimeText
+import com.example.photomanager.pages.common.AppLazyColumnScrollbar
 import com.example.photomanager.ui.theme.appColors
 import com.example.photomanager.pages.photoviewer.PhotoViewerPage
 
@@ -90,36 +92,39 @@ private fun AlbumDetailBody(
                 )
             }
 
-            LazyColumn(Modifier.fillMaxSize()) {
-                item(key = "header") {
-                    AlbumDetailHeader(
-                        album = currentAlbum,
-                        navigator = navigator,
-                        onRefreshDirectory = viewModel::refreshDirectory,
-                        onDelete = {
-                            dialogs.show {
-                                AlbumDeleteDialog(
-                                    album = currentAlbum,
-                                    navigator = navigator
-                                )
+            val listState = rememberLazyListState()
+            AppLazyColumnScrollbar(state = listState) {
+                LazyColumn(Modifier.fillMaxSize(), state = listState) {
+                    item(key = "header") {
+                        AlbumDetailHeader(
+                            album = currentAlbum,
+                            navigator = navigator,
+                            onRefreshDirectory = viewModel::refreshDirectory,
+                            onDelete = {
+                                dialogs.show {
+                                    AlbumDeleteDialog(
+                                        album = currentAlbum,
+                                        navigator = navigator
+                                    )
+                                }
                             }
-                        }
-                    )
-                }
-
-                photoGridRows(items = photos, columns = columns, itemKey = { it.id }
-                ) { index, photo ->
-                    Column(
-                        Modifier.clickable { navigator.pushTo(useSafeArea = false) {
-                            PhotoViewerPage(navigator, currentAlbum.id, index)
-                        } },
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        PhotoThumbnail(photo)
-                        Text(
-                            stringResource(R.string.album_detail_photo_index, index + 1),
-                            color = colors.onBackground, fontSize = 14.sp, lineHeight = 20.sp
                         )
+                    }
+
+                    photoGridRows(items = photos, columns = columns, itemKey = { it.id }
+                    ) { index, photo ->
+                        Column(
+                            Modifier.clickable { navigator.pushTo(useSafeArea = false) {
+                                PhotoViewerPage(navigator, currentAlbum.id, index)
+                            } },
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            PhotoThumbnail(photo)
+                            Text(
+                                stringResource(R.string.album_detail_photo_index, index + 1),
+                                color = colors.onBackground, fontSize = 14.sp, lineHeight = 20.sp
+                            )
+                        }
                     }
                 }
             }
