@@ -59,6 +59,7 @@ internal fun AlbumListCard(
     album: AlbumEntity,
     selection: AlbumSelectionState,
     navigator: AppNavigator,
+    modifier: Modifier = Modifier,
 ) {
     val selected = album.id in selection.selectedIds
     val context = LocalContext.current
@@ -67,7 +68,7 @@ internal fun AlbumListCard(
     }
     var coverScale by remember(coverRequest) { mutableStateOf(ContentScale.Fit) }
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .combinedClickable(
                 onClick = {
