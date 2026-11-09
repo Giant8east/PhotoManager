@@ -17,7 +17,6 @@ import com.example.photomanager.data.GroupData
 import com.example.photomanager.data.database.AlbumEntity
 import com.example.photomanager.data.database.GroupWithAlbumCount
 import com.example.photomanager.ui.state.PageState
-import com.example.photomanager.ui.state.UiText
 import com.example.photomanager.ui.state.asPageStates
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -163,7 +162,10 @@ class AlbumViewModel @Inject constructor(
 
     private fun observeAlbums() {
         albumQueryJob?.cancel()
-        state = PageState.Loading
+        // 已有内容时保留旧列表，避免分组切换出现整页 Loading 和列表重建。
+        if (state !is PageState.Content) {
+            state = PageState.Loading
+        }
         // 查询参数在启动前确定，旧任务不能读取下一次查询参数。
         val groupId = selectedGroupId
         val keyword = searchInput
@@ -173,15 +175,15 @@ class AlbumViewModel @Inject constructor(
         albumQueryJob = viewModelScope.launch {
             albumData.observeAlbums(query)
                 .asPageStates(R.string.page_albums_load_failed) { albums ->
-                    if (albums.isEmpty()) {
-                        val message = if (keyword.isNotBlank() || groupId != null)
-                            R.string.page_no_matching_albums else R.string.page_no_albums
-                        PageState.Message(UiText.Resource(message))
-                    } else {
-                        PageState.Content(AlbumContent(albums))
-                    }
+                    PageState.Content(AlbumContent(albums))
                 }
-                .collect { state = it }
+                .collect { nextState ->
+                    // asPageStates 每次重新订阅都会先发 Loading；已有内容时忽略它。
+                    if (nextState is PageState.Loading && state is PageState.Content) {
+                        return@collect
+                    }
+                    state = nextState
+                }
         }
     }
 
