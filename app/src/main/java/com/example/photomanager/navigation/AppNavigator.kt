@@ -16,6 +16,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Box
@@ -71,6 +72,7 @@ class AppNavigator(
     fun render() {
         val currentPage = pages.last()
         val parentOwner = checkNotNull(LocalViewModelStoreOwner.current)
+        val saveableStateHolder = rememberSaveableStateHolder()
         DisposableEffect(this) {
             onDispose { pages.forEach { it.viewModelStore.clear() } }
         }
@@ -110,10 +112,19 @@ class AppNavigator(
                 }
                 DisposableEffect(page) {
                     // 入栈覆盖时保留实例，出栈转场结束后才清理任务。
-                    onDispose { if (page !in pages) page.viewModelStore.clear() }
+                    onDispose {
+                        if (page !in pages) {
+                            page.viewModelStore.clear()
+                            saveableStateHolder.removeState(page.id)
+                        }
+                    }
                 }
                 CompositionLocalProvider(LocalViewModelStoreOwner provides owner) {
-                    PageContainer(useSafeArea = page.useSafeArea) { page.content() }
+                    // 页面离开 composition 时保存 rememberSaveable 状态，
+                    // 返回该页面时恢复 LazyListState 的滚动位置。
+                    saveableStateHolder.SaveableStateProvider(page.id) {
+                        PageContainer(useSafeArea = page.useSafeArea) { page.content() }
+                    }
                 }
                 if (transition.currentState != transition.targetState) {
                     // 只消费指针事件，不使用 clickable，避免转场期间出现水波纹。
