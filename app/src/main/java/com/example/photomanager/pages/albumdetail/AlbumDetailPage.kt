@@ -18,6 +18,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -201,7 +202,13 @@ private fun AlbumDetailHeader(
         Box {
             Column(Modifier.matchParentSize()
             ) {
-                Spacer(Modifier.fillMaxWidth().weight(1f).background(appColors.headerBackground))
+                Spacer(
+                    Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .shadow(elevation = 4.dp, clip = false)
+                        .background(appColors.headerBackground)
+                )
                 Spacer(Modifier.height(24.dp))
             }
             Column { Row(Modifier.fillMaxWidth().padding(16.dp)
@@ -223,7 +230,7 @@ private fun AlbumDetailHeader(
                         )
                     }
                 }
-                Card(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 3.dp),
+                Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                     shape = RoundedCornerShape(2.dp),
                     colors = CardDefaults.cardColors(containerColor = appColors.cardBackground),
                     elevation = CardDefaults.cardElevation(2.dp)
