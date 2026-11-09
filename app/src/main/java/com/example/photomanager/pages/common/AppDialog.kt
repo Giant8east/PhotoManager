@@ -4,6 +4,7 @@ package com.example.photomanager.pages.common
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,6 +16,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -24,6 +26,9 @@ import com.example.photomanager.ui.theme.appColors
 fun AppDialog(
     title: String,
     buttons: (@Composable RowScope.(close: () -> Unit) -> Unit)? = null,
+    contentPadding: PaddingValues = PaddingValues(horizontal = 24.dp),
+    /** `Dp.Unspecified` 表示不限制内容高度，由 Dialog 窗口约束。 */
+    contentMaxHeight: Dp = 360.dp,
     content: @Composable ColumnScope.(close: () -> Unit) -> Unit
 ) {
     val dialogs = LocalDialogStack.current
@@ -31,7 +36,9 @@ fun AppDialog(
 
     Dialog(onDismissRequest = close) {
         Surface(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 24.dp),
             shape = MaterialTheme.shapes.extraSmall,
             color = appColors.dialogBackground,
             tonalElevation = 0.dp
@@ -55,8 +62,8 @@ fun AppDialog(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 360.dp)
-                        .padding(horizontal = 24.dp)
+                        .heightIn(max = contentMaxHeight)
+                        .padding(contentPadding)
                 ) {
                     content(this, close)
                 }
