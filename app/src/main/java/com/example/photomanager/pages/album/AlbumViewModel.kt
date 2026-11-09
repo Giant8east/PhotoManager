@@ -53,6 +53,10 @@ class AlbumViewModel @Inject constructor(
         private set
     var isDescending by mutableStateOf(false)
         private set
+    var suppressPlacementAnimation by mutableStateOf(false)
+        private set
+    var sortCompletionToken by mutableIntStateOf(0)
+        private set
 
     private var albumQueryJob: Job? = null
     private var searchJob: Job? = null
@@ -106,6 +110,7 @@ class AlbumViewModel @Inject constructor(
     fun selectSortField(field: AlbumSortField) {
         if (sortField == field) return
         searchJob?.cancel()
+        suppressPlacementAnimation = true
         sortField = field
         isDescending = field.defaultDescending
         persistSettings()
@@ -114,9 +119,15 @@ class AlbumViewModel @Inject constructor(
 
     fun setSortDescending(descending: Boolean) {
         if (sortField == AlbumSortField.CUSTOM || isDescending == descending) return
+        suppressPlacementAnimation = true
         isDescending = descending
         persistSettings()
         observeAlbums()
+    }
+
+    /** 排序结果完成一帧布局后恢复后续删除/移动的补位动画。 */
+    fun clearSortPlacementSuppression() {
+        suppressPlacementAnimation = false
     }
 
     fun move(ids: Set<Long>, groupId: Long?) = perform {
@@ -183,6 +194,10 @@ class AlbumViewModel @Inject constructor(
                         return@collect
                     }
                     state = nextState
+                    if (nextState is PageState.Content && suppressPlacementAnimation) {
+                        // 即使排序结果与旧列表相等，也要通知页面解除动画抑制。
+                        sortCompletionToken++
+                    }
                 }
         }
     }

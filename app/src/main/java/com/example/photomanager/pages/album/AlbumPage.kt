@@ -15,6 +15,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -48,6 +49,20 @@ internal fun AlbumPage(
             )
             is PageState.Loading -> Unit
             is PageState.Message -> Unit
+        }
+    }
+
+    LaunchedEffect(viewModel.state, viewModel.sortCompletionToken) {
+        if (viewModel.suppressPlacementAnimation) {
+            when (viewModel.state) {
+                is PageState.Content -> {
+                    // 先让排序后的列表完成一帧布局，再恢复后续删除/移动的补位动画。
+                    withFrameNanos { }
+                    viewModel.clearSortPlacementSuppression()
+                }
+                is PageState.Message -> viewModel.clearSortPlacementSuppression()
+                PageState.Loading -> Unit
+            }
         }
     }
 
@@ -91,7 +106,8 @@ internal fun AlbumPage(
                             AlbumList(
                                 albums = content.albums,
                                 selection = selection,
-                                navigator = navigator
+                                navigator = navigator,
+                                suppressPlacementAnimation = viewModel.suppressPlacementAnimation
                             )
                             if (content.albums.isEmpty()) {
                                 Text(
@@ -128,7 +144,8 @@ internal fun AlbumPage(
 private fun AlbumList(
     albums: List<AlbumEntity>,
     selection: AlbumSelectionState,
-    navigator: AppNavigator
+    navigator: AppNavigator,
+    suppressPlacementAnimation: Boolean
 ) {
     val listState = rememberLazyListState()
     AppLazyColumnScrollbar(state = listState) {
@@ -143,7 +160,15 @@ private fun AlbumList(
                     album = album,
                     selection = selection,
                     navigator = navigator,
-                    modifier = Modifier.animateItem()
+                    modifier = if (suppressPlacementAnimation) {
+                        Modifier.animateItem(
+                            fadeInSpec = null,
+                            placementSpec = null,
+                            fadeOutSpec = null
+                        )
+                    } else {
+                        Modifier.animateItem()
+                    }
                 )
             }
         }
