@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.photomanager.R
 
@@ -32,7 +33,11 @@ fun <T> PageContent(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(state.message.resolve(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                Text(
+                    state.message.resolve(),
+                    textAlign = TextAlign.Center,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
                 if (state.canRetry) TextButton(onClick = onRetry) {
                     Text(stringResource(R.string.page_retry))
                 }
