@@ -11,13 +11,18 @@ import com.example.photomanager.data.database.AlbumEntity
 import com.example.photomanager.data.database.PhotoDatabase
 import com.example.photomanager.data.database.PhotoEntity
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 
 class AlbumData @Inject constructor(
@@ -101,28 +106,49 @@ class AlbumData @Inject constructor(
             .map { record -> record?.copy(photos = record.photos.sortedBy { it.name }) }
             .distinctUntilChanged()
 
-    /** 遍历同步整个根目录，并对数据库已有但未在本次遍历中发现的旧路径进行补充对账。 */
+    /** 遍历同步整个根目录；目录扫描最多并行 [MAX_CONCURRENT_DIRECTORIES] 个。 */
     suspend fun syncDirectory(rootPath: String) = withContext(Dispatchers.IO) {
         val normalizedRoot = DirectoryScanner.normalizePath(rootPath)
-        val remainingPaths = database.albumDao()
-            .queryAlbumPathsUnderPath(normalizedRoot, childPathPrefix(normalizedRoot))
-            .toMutableSet()
-        val pending = ArrayDeque<String>()
-        pending.add(normalizedRoot)
+        val remainingPaths = ConcurrentHashMap.newKeySet<String>().apply {
+            addAll(
+                database.albumDao().queryAlbumPathsUnderPath(
+                    normalizedRoot,
+                    childPathPrefix(normalizedRoot)
+                )
+            )
+        }
+        val visitedPaths = ConcurrentHashMap.newKeySet<String>()
+        val limiter = Semaphore(MAX_CONCURRENT_DIRECTORIES)
 
-        while (pending.isNotEmpty()) {
-            currentCoroutineContext().ensureActive()
-            val currentPath = pending.removeFirst()
-            val scanned = refreshDirectory(currentPath)
-            remainingPaths.remove(currentPath)
-            if (scanned != null) {
-                pending.addAll(scanned.children.map { DirectoryScanner.normalizePath(it.path) })
+        coroutineScope {
+            val scope = this
+
+            fun schedule(path: String) {
+                if (!visitedPaths.add(path)) return
+                scope.launch {
+                    limiter.withPermit {
+                        currentCoroutineContext().ensureActive()
+                        val scanned = refreshDirectory(path)
+                        remainingPaths.remove(path)
+                        scanned?.children?.forEach { child ->
+                            schedule(DirectoryScanner.normalizePath(child.path))
+                        }
+                    }
+                }
             }
+
+            schedule(normalizedRoot)
         }
 
-        for (stalePath in remainingPaths) {
-            currentCoroutineContext().ensureActive()
-            refreshDirectory(stalePath)
+        coroutineScope {
+            remainingPaths.forEach { stalePath ->
+                launch {
+                    limiter.withPermit {
+                        currentCoroutineContext().ensureActive()
+                        refreshDirectory(stalePath)
+                    }
+                }
+            }
         }
     }
 
@@ -223,6 +249,9 @@ class AlbumData @Inject constructor(
     }
 
     companion object {
+        /** 同时进行的目录扫描上限，避免大量子目录同时占用 IO 和 Room 事务。 */
+        private const val MAX_CONCURRENT_DIRECTORIES = 4
+
         /** 比较文件元数据是否一致，保留数据库已有 ID 与图片记录。 */
         internal fun samePhotoMetadata(old: PhotoEntity, new: PhotoEntity): Boolean =
             old.sizeBytes == new.sizeBytes && old.modifiedAt == new.modifiedAt
