@@ -2,18 +2,22 @@
 package com.example.photomanager.pages.album
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -60,30 +64,37 @@ internal fun AlbumMoveDialog(
     viewModel: AlbumViewModel = hiltViewModel()
 ) {
     AppDialog(
-        title = stringResource(R.string.album_action_move)
+        title = stringResource(R.string.album_action_move),
+        contentPadding = PaddingValues(0.dp),
+        contentMaxHeight = Dp.Unspecified
     ) { close ->
         val listState = rememberLazyListState()
-        AppLazyColumnScrollbar(state = listState) {
-            LazyColumn(Modifier.fillMaxWidth(), state = listState) {
-                item {
-                    MoveRow(
-                        label = stringResource(R.string.album_group_default_short),
-                        onClick = {
-                            viewModel.move(selection.selectedIds, null)
-                            selection.clear()
-                            close()
-                        }
-                    )
-                }
-                items(viewModel.groups, key = { it.id }) { group ->
-                    MoveRow(
-                        label = group.name,
-                        onClick = {
-                            viewModel.move(selection.selectedIds, group.id)
-                            selection.clear()
-                            close()
-                        }
-                    )
+        Column(Modifier.fillMaxWidth()) {
+            if (listState.canScrollBackward) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
+            AppLazyColumnScrollbar(state = listState) {
+                LazyColumn(Modifier.fillMaxWidth(), state = listState) {
+                    item {
+                        MoveRow(
+                            label = stringResource(R.string.album_group_default_short),
+                            onClick = {
+                                viewModel.move(selection.selectedIds, null)
+                                selection.clear()
+                                close()
+                            }
+                        )
+                    }
+                    items(viewModel.groups, key = { it.id }) { group ->
+                        MoveRow(
+                            label = group.name,
+                            onClick = {
+                                viewModel.move(selection.selectedIds, group.id)
+                                selection.clear()
+                                close()
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -100,7 +111,7 @@ private fun MoveRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(vertical = 16.dp),
+            .padding(horizontal = 24.dp, vertical = 12.dp),
         style = MaterialTheme.typography.bodyLarge.copy(
             fontSize = 16.sp,
             lineHeight = 24.sp,
