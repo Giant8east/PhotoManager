@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
@@ -41,6 +42,8 @@ internal fun AlbumPage(
     viewModel: AlbumViewModel = hiltViewModel()
 ) {
     val selection = remember { AlbumSelectionState() }
+    // 提升到 DrawerHost 外层，确保 LazyListState 处于页面级 SaveableStateProvider 作用域内。
+    val albumListState = rememberLazyListState()
 
     LaunchedEffect(viewModel.state) {
         when (val state = viewModel.state) {
@@ -107,6 +110,7 @@ internal fun AlbumPage(
                                 albums = content.albums,
                                 selection = selection,
                                 navigator = navigator,
+                                listState = albumListState,
                                 suppressPlacementAnimation = viewModel.suppressPlacementAnimation
                             )
                             if (content.albums.isEmpty()) {
@@ -145,9 +149,9 @@ private fun AlbumList(
     albums: List<AlbumEntity>,
     selection: AlbumSelectionState,
     navigator: AppNavigator,
+    listState: LazyListState,
     suppressPlacementAnimation: Boolean
 ) {
-    val listState = rememberLazyListState()
     AppLazyColumnScrollbar(state = listState) {
         LazyColumn(
             contentPadding = PaddingValues(horizontal = 6.dp, vertical = 10.dp),
