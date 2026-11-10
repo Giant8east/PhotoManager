@@ -4,7 +4,6 @@ package com.example.photomanager.data
 import android.content.Context
 import com.example.photomanager.R
 import dagger.hilt.android.qualifiers.ApplicationContext
-import javax.inject.Provider
 import android.net.Uri
 import android.os.Environment
 import android.provider.DocumentsContract
@@ -71,8 +70,10 @@ class DirectoryScanner @Inject constructor(
     /** 扫描已规范化绝对路径的单个目录，包含隐藏项；明确不存在时返回 null。 */
     internal suspend fun scanAlbum(directory: File): ScannedAlbum? {
         val attributes = try {
-            Files.readAttributes(directory.toPath(), BasicFileAttributes::class.java)
-        } catch (missing: NoSuchFileException) {
+            withContext(Dispatchers.IO) {
+                Files.readAttributes(directory.toPath(), BasicFileAttributes::class.java)
+            }
+        } catch (_: NoSuchFileException) {
             return null
         }
         check(attributes.isDirectory) { context.getString(R.string.path_not_directory, directory.path) }
@@ -126,7 +127,10 @@ class DirectoryScanner @Inject constructor(
         fun isSameOrSubPath(parent: String, child: String): Boolean {
             val p = normalizePath(parent)
             val c = normalizePath(child)
-            return c == p || (p == "/" && c.startsWith("/")) || c.startsWith("$p/")
+            val separator = File.separator
+            return c == p ||
+                (p == separator && c.startsWith(separator)) ||
+                c.startsWith("$p$separator")
         }
 
         /** 扫描只按扩展名识别类型，不预解码或过滤零字节、损坏及透明图片。 */
