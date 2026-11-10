@@ -49,8 +49,9 @@ fun PhotoViewerControls(
     onNextPage: suspend () -> Unit,
     onPageSelected: (Int) -> Unit
 ) {
-    var isDragging by remember { mutableStateOf(false) }
-    var draggedPage by remember { mutableIntStateOf(0) }
+    // 拖动预览页由页面持有，进度条本身不保存状态；为空表示未在拖动。
+    var draggedPage by remember { mutableStateOf<Int?>(null) }
+    val isDragging = draggedPage != null
     val nextPage by rememberUpdatedState(onNextPage)
     val changeVisibility by rememberUpdatedState(onVisibilityChanged)
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -117,7 +118,7 @@ fun PhotoViewerControls(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        stringResource(R.string.viewer_page_number, (if (isDragging) draggedPage else currentPage) + 1),
+                        stringResource(R.string.viewer_page_number, (draggedPage ?: currentPage) + 1),
                         color = Color.White,
                         fontSize = 14.sp,
                         maxLines = 1,
@@ -129,8 +130,8 @@ fun PhotoViewerControls(
                         currentPage = currentPage,
                         pageCount = pageCount,
                         reversed = readingDirection == ReadingDirection.RIGHT_TO_LEFT,
-                        onPreviewPageChanged = { draggedPage = it },
-                        onTrackingChanged = { isDragging = it },
+                        draggedPage = draggedPage,
+                        onDraggedPageChanged = { draggedPage = it },
                         onPageSelected = onPageSelected,
                         modifier = Modifier.weight(1f)
                     )
