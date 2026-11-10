@@ -1,6 +1,7 @@
 /** 相册多选的批量删除与移动分组弹窗。 */
 package com.example.photomanager.pages.album
 
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -15,15 +16,25 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.photomanager.R
+import com.example.photomanager.data.DeleteResult
 import com.example.photomanager.pages.common.AppDialog
 import com.example.photomanager.pages.common.AppLazyColumnScrollbar
+import com.example.photomanager.pages.common.DeleteProgressDialog
+import com.example.photomanager.pages.common.LocalDialogStack
 import com.example.photomanager.ui.theme.appColors
 
 @Composable
@@ -31,30 +42,57 @@ internal fun AlbumDeleteDialog(
     selection: AlbumSelectionState,
     viewModel: AlbumViewModel = hiltViewModel()
 ) {
-    AppDialog(
-        title = stringResource(R.string.album_delete_title),
-        buttons = { close ->
-            TextButton(
-                onClick = {
-                    viewModel.delete(selection.selectedIds)
-                    selection.clear()
-                    close()
-                },
-                colors = ButtonDefaults.textButtonColors(
-                    contentColor = appColors.actionText
+    val context = LocalContext.current
+    val dialogs = LocalDialogStack.current
+    val deleteState by viewModel.deleteState.collectAsState()
+    var started by remember { mutableStateOf(false) }
+
+    if (!started) {
+        AppDialog(
+            title = stringResource(R.string.album_delete_title),
+            buttons = { close ->
+                TextButton(
+                    onClick = {
+                        started = true
+                        viewModel.delete(selection.selectedIds)
+                    },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = appColors.actionText
+                    )
+                ) { Text(stringResource(R.string.album_action_delete)) }
+                TextButton(onClick = close) {
+                    Text(stringResource(R.string.album_cancel))
+                }
+            }
+        ) {
+            Text(
+                stringResource(
+                    R.string.album_delete_selected_message,
+                    selection.selectedIds.size
+                ),
+                style = MaterialTheme.typography.bodyLarge.copy(
+                    letterSpacing = 0.sp
                 )
-            ) { Text(stringResource(R.string.album_action_delete)) }
-        }
-    ) {
-        Text(
-            stringResource(
-                R.string.album_delete_selected_message,
-                selection.selectedIds.size
-            ),
-            style = MaterialTheme.typography.bodyLarge.copy(
-                letterSpacing = 0.sp
             )
+        }
+    } else {
+        DeleteProgressDialog(
+            state = deleteState,
+            onRetry = { viewModel.delete(selection.selectedIds) },
+            onClose = {
+                selection.clear()
+                dialogs.pop()
+            }
         )
+    }
+
+    LaunchedEffect(started, deleteState.result) {
+        if (!started) return@LaunchedEffect
+        if (deleteState.result is DeleteResult.Success) {
+            selection.clear()
+            Toast.makeText(context, R.string.album_delete_success, Toast.LENGTH_SHORT).show()
+            dialogs.pop()
+        }
     }
 }
 
