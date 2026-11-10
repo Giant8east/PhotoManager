@@ -16,6 +16,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -33,9 +34,9 @@ import com.example.photomanager.data.PageScale
 import com.example.photomanager.data.database.PhotoEntity
 
 /** 解码预算不随长图项高度或整列缩放增加；单张请求最多约四百万像素。 */
-internal fun readerDecodeSize(viewport: Size, screen: IntSize): IntSize = IntSize(
-    minOf(viewport.width.toInt(), screen.width, 2048).coerceAtLeast(1),
-    minOf(viewport.height.toInt(), screen.height, 2048).coerceAtLeast(1)
+internal fun readerDecodeSize(screen: IntSize): IntSize = IntSize(
+    minOf(screen.width, 2048).coerceAtLeast(1),
+    minOf(screen.height, 2048).coerceAtLeast(1)
 )
 
 @Composable
@@ -51,13 +52,14 @@ internal fun PhotoViewerPageView(
     val transform = remember(photo.id, effectivePageScale) { PhotoTransform(effectivePageScale) }
     var retryCount by remember(photo) { mutableIntStateOf(0) }
     val context = LocalContext.current
-    val request = remember(photo, context) {
+    // 活动声明了 configChanges，旋转不会重建页面，因此用配置变化驱动解码尺寸刷新。
+    val configuration = LocalConfiguration.current
+    val screenSize = remember(configuration) {
         val metrics = context.resources.displayMetrics
-        val screenSize = IntSize(metrics.widthPixels, metrics.heightPixels)
-        val size = readerDecodeSize(
-            Size(screenSize.width.toFloat(), screenSize.height.toFloat()),
-            screenSize
-        )
+        IntSize(metrics.widthPixels, metrics.heightPixels)
+    }
+    val request = remember(photo, screenSize) {
+        val size = readerDecodeSize(screenSize)
         ImageRequest.Builder(context).data(photo.contentUri)
             .scale(Scale.FIT)
             .memoryCacheKey(
@@ -89,10 +91,7 @@ internal fun PhotoViewerPageView(
         viewerPager.attachImage(index, transform)
         onDispose { viewerPager.detachImage(index, transform) }
     }
-    // 确保状态在组合阶段被读取，不用by委托
-    val isVisible = remember(viewerPager, index) {
-        derivedStateOf { viewerPager.isPageVisible(index) }
-    }.value
+    val isVisible = viewerPager.isPageVisible(index)
     // 检查解码结果是否支持播放控制
     val animation = success?.result?.drawable as? Animatable
     if (animation != null) {

@@ -17,6 +17,9 @@ import com.example.photomanager.data.PageScale
 private const val MinScale = 0.1f
 private const val MaxScale = 10f
 
+/** 双击档位比较时视为同一档的比例容差。 */
+private const val ScaleEpsilon = 0.01f
+
 /** 负责计算图片应该多大、在哪里 */
 internal class PhotoTransform(private val pageScale: PageScale) {
     var scale by mutableFloatStateOf(1f)
@@ -44,9 +47,9 @@ internal class PhotoTransform(private val pageScale: PageScale) {
     private val actualScale get() = initialScale * scale
 
     val canPanHorizontally get() = hasImageGeometry &&
-        imageSize.width * actualScale > viewport.width + 0.01f
+        imageSize.width * actualScale > viewport.width + Epsilon
     val canPanVertically get() = hasImageGeometry &&
-        imageSize.height * actualScale > viewport.height + 0.01f
+        imageSize.height * actualScale > viewport.height + Epsilon
 
     /** 档位按实际比例排序，返回值换算为绘制使用的相对倍数。 */
     fun nextDoubleTapScale(): Float {
@@ -55,7 +58,7 @@ internal class PhotoTransform(private val pageScale: PageScale) {
         val heightScale = viewport.height / imageSize.height
         val candidates = floatArrayOf(1f, widthScale, heightScale, maxOf(widthScale, heightScale) * 2f)
             .map { it.coerceIn(MinScale, MaxScale) }.sorted()
-        val target = candidates.firstOrNull { actualScale < it - 0.01f } ?: candidates.first()
+        val target = candidates.firstOrNull { actualScale < it - ScaleEpsilon } ?: candidates.first()
         return target / initialScale
     }
 
@@ -101,7 +104,7 @@ internal class PhotoTransform(private val pageScale: PageScale) {
         return offset - previous
     }
 
-    /** 先变换完整图片，再求可见交集；源区域始终相对于完整解码图片。 */
+    /** 先变换完整图片，再求可见交集；绘制只需完整图片矩形与裁剪区域。 */
     fun drawRegion(): PhotoDrawRegion? {
         if (!hasImageGeometry) return null
         val width = imageSize.width * actualScale
@@ -111,18 +114,12 @@ internal class PhotoTransform(private val pageScale: PageScale) {
         val image = Rect(left, top, left + width, top + height)
         val visible = image.intersect(Rect(Offset.Zero, viewport))
         if (visible.isEmpty) return null
-        val source = Rect(
-            (visible.left - left) / width * imageSize.width,
-            (visible.top - top) / height * imageSize.height,
-            (visible.right - left) / width * imageSize.width,
-            (visible.bottom - top) / height * imageSize.height
-        )
-        return PhotoDrawRegion(image, source, visible)
+        return PhotoDrawRegion(image, visible)
     }
 
 }
 
-internal data class PhotoDrawRegion(val image: Rect, val source: Rect, val destination: Rect)
+internal data class PhotoDrawRegion(val image: Rect, val destination: Rect)
 
 @Composable
 internal fun PhotoViewerImage(painter: Painter, transform: PhotoTransform) {

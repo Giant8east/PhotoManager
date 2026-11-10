@@ -7,7 +7,6 @@ import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateDecay
 import androidx.compose.animation.core.exponentialDecay
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.gestures.ScrollScope
 import androidx.compose.foundation.layout.Arrangement
@@ -62,7 +61,7 @@ internal class PhotoViewerScrollLayoutManager(
     private val onEndReached: () -> Unit,
     private val minimumVelocity: Float,
     private val maximumVelocity: Float
-) : PhotoViewerLayoutManager<PhotoViewerScrollLayoutManager.Input>(scope) {
+) : PhotoViewerLayoutManager(scope) {
     private data class ReadingAnchor(val index: Int, val top: Int)
 
     /** 以稳定的 PhotoEntity.id 为键保存已解码宽高比，不受索引变化影响。 */
@@ -74,8 +73,7 @@ internal class PhotoViewerScrollLayoutManager(
     private var gapPixels = 0f
     private var isScrollingBackward = false
     private var gesture: Job? = null
-    private var zoomAnimation: Job? = null
-    private var edgeAnimation: Job? = null
+    private var inputs: Channel<Input>? = null
     private var remeasurement: Remeasurement? = null
     private val measurement = object : RemeasurementModifier {
         override fun onRemeasurementAvailable(remeasurement: Remeasurement) {
@@ -83,8 +81,13 @@ internal class PhotoViewerScrollLayoutManager(
         }
     }
 
+    override fun closeInputs() {
+        inputs?.close()
+        inputs = null
+    }
+
     /** 连续阅读布局接收到的一次手势输入。 */
-    sealed interface Input {
+    private sealed interface Input {
         data class Drag(val delta: Offset) : Input
         data class Scale(val focus: Offset, val factor: Float, val pan: Offset) : Input
     }
@@ -266,7 +269,7 @@ internal class PhotoViewerScrollLayoutManager(
 
     /** 将未消费的纵向距离交给顶部或底部边缘。 */
     private fun pull(remaining: Float) {
-        if (abs(remaining) <= 0.01f) return
+        if (abs(remaining) <= Epsilon) return
         edges.getValue(verticalEdgeFor(remaining)).pull(abs(remaining))
     }
 
@@ -305,7 +308,7 @@ internal class PhotoViewerScrollLayoutManager(
                 animate(
                     start,
                     target,
-                    animationSpec = tween(300, easing = LinearOutSlowInEasing)
+                    animationSpec = tween(ZoomMillis, easing = LinearOutSlowInEasing)
                 ) { value, _ ->
                     scale(this, focus, value, Offset.Zero)
                 }
@@ -330,7 +333,7 @@ internal class PhotoViewerScrollLayoutManager(
                 offsetX = clampX(offsetX + delta)
                 offsetX - oldX
             }
-            if (abs(delta - consumed) > 0.01f) {
+            if (abs(delta - consumed) > Epsilon) {
                 if (vertical) {
                     edges.getValue(verticalEdgeFor(initial))
                         .absorb(abs(initial), viewport.height.toFloat())
@@ -343,9 +346,9 @@ internal class PhotoViewerScrollLayoutManager(
     /** 停止旧交互并直接定位目标项，由单页异步加载后更新高度；保留整列缩放，越过末页时通知停止播放。 */
     override suspend fun goToPage(index: Int) {
         cancelMotion()
-        edges.values.forEach { it.release() }
+        releaseEdges()
         if (index !in 0 until pageCount) {
-            boundary(index >= pageCount)
+            showBoundary(index >= pageCount)
             if (index >= pageCount) onEndReached()
             return
         }
@@ -357,31 +360,20 @@ internal class PhotoViewerScrollLayoutManager(
     override suspend fun previousPage() = goToPage(currentPage - 1)
 
     /** 为主动越界模拟一次纵向拉动，随后交由边缘效果自然回缩。 */
-    private fun boundary(isEnd: Boolean) {
+    private fun showBoundary(isEnd: Boolean) {
         edgeAnimation?.cancel()
-        val edge = edges.getValue(if (isEnd) PhotoViewerEdge.BOTTOM else PhotoViewerEdge.TOP)
-        edge.moveTo(Offset(viewport.width / 2f, viewport.height / 2f))
-        edge.begin()
-        val start = edge.distance
-        edgeAnimation = scope.launch {
-            animate(
-                start,
-                maxOf(start, viewport.height / 7f),
-                animationSpec = tween(300)
-            ) { value, _ ->
-                edge.pull(value - edge.distance)
-            }
-            edge.release()
-        }
+        val edge = if (isEnd) PhotoViewerEdge.BOTTOM else PhotoViewerEdge.TOP
+        edgeAnimation = edges.getValue(edge).simulatePull(
+            scope,
+            Offset(viewport.width / 2f, viewport.height / 2f),
+            viewport.height
+        )
     }
 
     /** 取消旧输入、手势惯性和动画并清零释放速度，不重置整列缩放与位置。 */
     private fun cancelMotion() {
-        closeInputs()
         gesture?.cancel()
-        zoomAnimation?.cancel()
-        edgeAnimation?.cancel()
-        releaseVelocity = Velocity.Zero
+        cancelAnimations()
         isScrollingBackward = false
     }
 

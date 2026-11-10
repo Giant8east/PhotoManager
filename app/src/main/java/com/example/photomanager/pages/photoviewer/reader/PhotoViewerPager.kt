@@ -2,7 +2,6 @@
 package com.example.photomanager.pages.photoviewer.reader
 
 import android.view.ViewConfiguration
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
@@ -32,7 +31,7 @@ import com.example.photomanager.data.database.PhotoEntity
 import com.example.photomanager.pages.photoviewer.edge.PhotoViewerEdgeView
 
 internal class PhotoViewerPager(
-    private val layout: PhotoViewerLayoutManager<*>
+    private val layout: PhotoViewerLayoutManager
 ) {
     private val gestures = PhotoViewerGestureRecognizer(
         layout::onDown, layout::onPosition, layout::onDrag,
@@ -42,7 +41,6 @@ internal class PhotoViewerPager(
     val settledPage get() = layout.settledPage
     val pageCount get() = layout.pageCount
     val isContinuous get() = layout.isContinuous
-    val currentItemOffset get() = layout.currentItemOffset
 
     fun isPageVisible(index: Int) = layout.isPageVisible(index)
     fun attachImage(index: Int, transform: PhotoTransform) = layout.attachImage(index, transform)
@@ -85,7 +83,6 @@ internal class PhotoViewerPager(
 
 private class ReaderPositionMemory(var index: Int, var verticalOffset: Int = 0)
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun rememberPhotoViewerPager(
     initialIndex: Int,
@@ -103,7 +100,7 @@ internal fun rememberPhotoViewerPager(
     val currentOnEndReached by rememberUpdatedState(onEndReached)
     val currentPhotos by rememberUpdatedState(photos)
     return key(readingDirection) {
-        val layout: PhotoViewerLayoutManager<*> =
+        val layout: PhotoViewerLayoutManager =
             if (readingDirection == ReadingDirection.TOP_TO_BOTTOM) {
                 val listState = rememberLazyListState(memory.index, memory.verticalOffset)
                 remember(listState) {
@@ -124,8 +121,8 @@ internal fun rememberPhotoViewerPager(
                         pagerState = pagerState,
                         readingDirection = readingDirection,
                         animationScope = animationScope,
-                        minimumFlingVelocity = minFlingVelocity,
-                        maximumFlingVelocity = maxFlingVelocity,
+                        minimumVelocity = minFlingVelocity,
+                        maximumVelocity = maxFlingVelocity,
                         onEndReached = { currentOnEndReached() }
                     )
                 }
