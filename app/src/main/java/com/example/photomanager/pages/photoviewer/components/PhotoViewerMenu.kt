@@ -1,18 +1,27 @@
 /** 图片浏览设置菜单，负责临时编辑阅读配置并提交用户确认的结果。 */
 package com.example.photomanager.pages.photoviewer.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.example.photomanager.R
 import com.example.photomanager.data.*
+import kotlin.math.roundToInt
 
+/** Slider 的 thumb 与 track 槽统一高度，两个槽的内容都在槽内垂直居中，避免圆点相对轨道偏移。 */
+private val SliderSlotHeight = 16.dp
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PhotoViewerMenu(
     settings: PhotoViewerSettings,
@@ -48,13 +57,58 @@ fun PhotoViewerMenu(
                     ) { editingSettings = editingSettings.copy(pageScale = it) }
                 }
                 Text(stringResource(R.string.viewer_auto_page_interval, editingSettings.autoPageSeconds))
+                // 与阅读页进度条同一种外观：2dp 细轨道加 12dp 圆点，只替换 thumb 和 track 两个槽。
                 Slider(
                     value = editingSettings.autoPageSeconds.toFloat(),
                     onValueChange = {
-                        editingSettings = editingSettings.copy(autoPageSeconds = it.toInt())
+                        editingSettings = editingSettings.copy(
+                            autoPageSeconds = it.roundToInt()
+                        )
                     },
                     valueRange = 1f..60f,
-                    steps = 58
+                    thumb = {
+                        // 与 track 槽保持同一高度，圆点在槽内居中，两者中线才会重合。
+                        Box(Modifier.height(SliderSlotHeight), contentAlignment = Alignment.Center) {
+                            Box(
+                                Modifier
+                                    .size(12.dp)
+                                    .background(MaterialTheme.colorScheme.primary, CircleShape)
+                            )
+                        }
+                    },
+                    track = { state ->
+                        val range = state.valueRange
+                        val span = range.endInclusive - range.start
+                        val fraction =
+                            if (span <= 0f) 0f else ((state.value - range.start) / span).coerceIn(0f, 1f)
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .height(SliderSlotHeight),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(2.dp)
+                                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.24f))
+                            ) {
+                                Box(
+                                    Modifier
+                                        .align(
+                                            if (LocalLayoutDirection.current == LayoutDirection.Rtl) {
+                                                Alignment.CenterEnd
+                                            } else {
+                                                Alignment.CenterStart
+                                            }
+                                        )
+                                        .fillMaxWidth(fraction)
+                                        .fillMaxHeight()
+                                        .background(MaterialTheme.colorScheme.primary)
+                                )
+                            }
+                        }
+                    }
                 )
                 SettingSwitch(stringResource(R.string.viewer_keep_screen_on), editingSettings.keepScreenOn) {
                     editingSettings = editingSettings.copy(keepScreenOn = it)
