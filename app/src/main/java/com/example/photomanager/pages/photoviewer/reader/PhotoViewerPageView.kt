@@ -27,7 +27,7 @@ import coil.size.Scale
 import android.graphics.drawable.Animatable
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.photomanager.R
 import com.example.photomanager.data.PageScale
 import com.example.photomanager.data.database.PhotoEntity
