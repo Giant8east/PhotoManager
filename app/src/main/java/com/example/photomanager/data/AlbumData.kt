@@ -1,9 +1,6 @@
 /** 相册数据入口，基于规范化本地文件路径负责目录扫描同步、差分持久化、排序查询与目录删除。 */
 package com.example.photomanager.data
 
-import android.content.Context
-import com.example.photomanager.R
-import dagger.hilt.android.qualifiers.ApplicationContext
 import androidx.room.withTransaction
 import androidx.sqlite.db.SimpleSQLiteQuery
 import com.example.photomanager.data.database.AlbumDetailRecord
@@ -24,11 +21,13 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
+import javax.inject.Singleton
 
+@Singleton
 class AlbumData @Inject constructor(
     private val database: PhotoDatabase,
     private val directoryScanner: DirectoryScanner,
-    @ApplicationContext private val context: Context
+    private val deletionGate: DeletionGate
 ) {
     /** 构造相册查询并持续观察数据库变化。 */
     fun observeAlbums(query: AlbumQuery): Flow<List<AlbumEntity>> =
@@ -90,10 +89,20 @@ class AlbumData @Inject constructor(
     suspend fun updateReadingProgress(albumId: Long, photoIndex: Int) =
         database.albumDao().updateAlbumReadingProgress(albumId, photoIndex)
 
+    /** 删除指定扫描目录下由调用方确认的相册记录；文件删除由更高层协调器负责。 */
+    suspend fun deleteAlbumsByIds(ids: List<Long>) = withContext(Dispatchers.IO) {
+        database.withTransaction {
+            ids.forEach { database.albumDao().deleteAlbum(it) }
+        }
+    }
+
     /** 删除指定扫描目录及其子目录对应的相册记录。 */
     suspend fun deleteAlbumsUnderPath(path: String) = withContext(Dispatchers.IO) {
         val normalized = DirectoryScanner.normalizePath(path)
-        database.albumDao().deleteAlbumsUnderPath(normalized, childPathPrefix(normalized))
+        val ticket = deletionGate.beginRefresh(normalized) ?: return@withContext
+        deletionGate.commit(ticket) {
+            database.albumDao().deleteAlbumsUnderPath(normalized, childPathPrefix(normalized))
+        }
     }
 
     /** 持续观察相册的完整图片索引。 */
@@ -128,10 +137,12 @@ class AlbumData @Inject constructor(
                 scope.launch {
                     limiter.withPermit {
                         currentCoroutineContext().ensureActive()
-                        val scanned = refreshDirectory(path)
+                        val outcome = refreshDirectory(path)
                         remainingPaths.remove(path)
-                        scanned?.children?.forEach { child ->
-                            schedule(DirectoryScanner.normalizePath(child.path))
+                        if (outcome is RefreshOutcome.Scanned) {
+                            outcome.album?.children?.forEach { child ->
+                                schedule(DirectoryScanner.normalizePath(child.path))
+                            }
                         }
                     }
                 }
@@ -152,20 +163,27 @@ class AlbumData @Inject constructor(
         }
     }
 
-    /** 单相册刷新入口：返回刷新后目录是否仍有图片，扫描细节不跨层暴露。 */
+    /** 单相册刷新入口：返回刷新后目录是否仍有图片；删除中的路径不产生数据库写入。 */
     suspend fun refreshAlbum(path: String): Boolean = withContext(Dispatchers.IO) {
-        refreshDirectory(DirectoryScanner.normalizePath(path))?.photos?.isNotEmpty() == true
+        when (val outcome = refreshDirectory(DirectoryScanner.normalizePath(path))) {
+            is RefreshOutcome.Scanned -> outcome.album?.photos?.isNotEmpty() == true
+            RefreshOutcome.Skipped -> true
+        }
     }
 
-    /** 扫描单个目录；目录不存在或没有图片时清理对应记录。 */
-    private suspend fun refreshDirectory(path: String): ScannedAlbum? {
-        val scanned = directoryScanner.scanAlbum(File(path))
-        if (scanned == null || scanned.photos.isEmpty()) {
-            database.albumDao().deleteAlbumByPath(path)
-        } else {
-            saveScannedAlbum(scanned)
+    /** 扫描单个目录并提交；删除屏障命中时返回 Skipped，不删除也不写入记录。 */
+    private suspend fun refreshDirectory(path: String): RefreshOutcome {
+        val normalized = DirectoryScanner.normalizePath(path)
+        val ticket = deletionGate.beginRefresh(normalized) ?: return RefreshOutcome.Skipped
+        val scanned = directoryScanner.scanAlbum(File(normalized))
+        val committed = deletionGate.commit(ticket) {
+            if (scanned == null || scanned.photos.isEmpty()) {
+                database.albumDao().deleteAlbumByPath(normalized)
+            } else {
+                saveScannedAlbum(scanned)
+            }
         }
-        return scanned
+        return if (committed) RefreshOutcome.Scanned(scanned) else RefreshOutcome.Skipped
     }
 
     /** 在同一事务中确定新增或差分更新，避免重复导入创建第二条相册记录并保持图片 ID 稳定。 */
@@ -233,19 +251,10 @@ class AlbumData @Inject constructor(
         }
     }
 
-    /** 先删除真实本地目录及其文件，再清理 Room 相册记录。 */
-    suspend fun delete(albums: List<AlbumEntity>) = withContext(Dispatchers.IO) {
-        albums.forEach { album ->
-            val directory = File(DirectoryScanner.normalizePath(album.albumPath))
-            if (directory.exists()) {
-                check(directory.deleteRecursively()) {
-                    context.getString(R.string.directory_delete_failed, directory.path)
-                }
-            }
-        }
-        database.withTransaction {
-            albums.forEach { database.albumDao().deleteAlbum(it.id) }
-        }
+    /** 扫描完成但被删除屏障拒绝写入时的内部结果。 */
+    private sealed interface RefreshOutcome {
+        data class Scanned(val album: ScannedAlbum?) : RefreshOutcome
+        data object Skipped : RefreshOutcome
     }
 
     companion object {
