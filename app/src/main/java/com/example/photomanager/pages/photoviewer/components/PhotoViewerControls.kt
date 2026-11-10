@@ -19,7 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.LayoutDirection
@@ -32,6 +32,7 @@ import com.example.photomanager.R
 import com.example.photomanager.data.ReadingDirection
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -59,7 +60,7 @@ fun PhotoViewerControls(
         if (!isPlaying || isMenuVisible || isDragging) return@LaunchedEffect
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             while (isActive) {
-                delay(intervalSeconds * 1000L)
+                delay((intervalSeconds * 1000L).milliseconds)
                 nextPage()
             }
         }
@@ -67,7 +68,7 @@ fun PhotoViewerControls(
     // 自动隐藏控制组件
     LaunchedEffect(isVisible, isDragging) {
         if (!isVisible || isDragging) return@LaunchedEffect
-        delay(3000L)
+        delay(3000L.milliseconds)
         changeVisibility(false)
     }
 
