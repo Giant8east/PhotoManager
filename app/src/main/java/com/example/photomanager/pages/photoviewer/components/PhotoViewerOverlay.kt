@@ -17,7 +17,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.Placeable
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
@@ -29,6 +29,7 @@ import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
 fun PhotoViewerOverlay(settings: PhotoViewerSettings, currentPage: Int, pageCount: Int) {
@@ -63,7 +64,7 @@ private fun rememberCurrentTime(): State<String> {
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             while (true) {
                 value = formatter.format(Date())
-                delay(1_000L)
+                delay(1_000L.milliseconds)
             }
         }
     }
@@ -83,7 +84,7 @@ private fun rememberBatteryStatus(): State<BatteryStatus> {
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             while (true) {
                 value = batteryManager.readBatteryStatus()
-                delay(1_000L)
+                delay(1_000L.milliseconds)
             }
         }
     }
@@ -107,7 +108,7 @@ private fun BatteryIndicator(battery: BatteryStatus, textStyle: TextStyle) {
             lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 while (true) {
                     value = if (value >= 100) 0 else value + 2
-                    delay(200L)
+                    delay(200L.milliseconds)
                 }
             }
         }
