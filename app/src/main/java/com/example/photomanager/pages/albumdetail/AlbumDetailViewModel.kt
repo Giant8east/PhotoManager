@@ -1,4 +1,4 @@
-/** 相册详情观察完整图片索引、目录摘要与删除动作，图片像素由网格按需加载。 */
+/** 相册详情观察完整图片索引和目录摘要，负责刷新目录；删除由相册库统一管理。 */
 package com.example.photomanager.pages.albumdetail
 
 import android.content.Context
@@ -15,9 +15,7 @@ import com.example.photomanager.data.AlbumData
 import com.example.photomanager.data.database.AlbumEntity
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
@@ -85,13 +83,6 @@ class AlbumDetailViewModel @AssistedInject constructor(
                 ).show()
             }
         }
-    }
-
-    /** 删除相册目录和数据库记录；由确认弹窗等待完成并决定导航。 */
-    suspend fun delete(album: AlbumEntity) {
-        refreshJob?.cancel()
-        // 文件删除和数据库清理必须成对完成，弹窗取消也不能停在中间状态。
-        withContext(NonCancellable) { albumData.delete(listOf(album)) }
     }
 }
 

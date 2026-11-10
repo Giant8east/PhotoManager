@@ -18,6 +18,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
@@ -33,11 +34,8 @@ import coil.request.ImageRequest
 import com.example.photomanager.data.database.AlbumEntity
 import com.example.photomanager.data.database.PhotoEntity
 import com.example.photomanager.navigation.AppNavigator
-import com.example.photomanager.pages.common.DialogHost
-import com.example.photomanager.pages.common.DropdownMenuButton
-import com.example.photomanager.pages.common.rememberDialogStack
-import com.example.photomanager.ui.format.rememberAlbumModifiedTimeText
 import com.example.photomanager.pages.common.AppLazyColumnScrollbar
+import com.example.photomanager.ui.format.rememberAlbumModifiedTimeText
 import com.example.photomanager.ui.theme.appColors
 import com.example.photomanager.pages.photoviewer.PhotoViewerPage
 
@@ -72,7 +70,6 @@ private fun AlbumDetailBody(
     val currentAlbum = content.album
     val photos = content.photos
     val colors = MaterialTheme.colorScheme
-    val dialogs = rememberDialogStack()
 
     // 普通正文不继承宿主或按钮的文字颜色；标题栏与操作区域再按背景覆盖。
     CompositionLocalProvider(
@@ -100,15 +97,7 @@ private fun AlbumDetailBody(
                         AlbumDetailHeader(
                             album = currentAlbum,
                             navigator = navigator,
-                            onRefreshDirectory = viewModel::refreshDirectory,
-                            onDelete = {
-                                dialogs.show {
-                                    AlbumDeleteDialog(
-                                        album = currentAlbum,
-                                        navigator = navigator
-                                    )
-                                }
-                            }
+                            onRefreshDirectory = viewModel::refreshDirectory
                         )
                     }
 
@@ -131,7 +120,6 @@ private fun AlbumDetailBody(
             }
         }
     }
-    DialogHost(dialogs)
 }
 
 @Composable
@@ -194,7 +182,6 @@ private fun AlbumDetailHeader(
     album: AlbumEntity,
     navigator: AppNavigator,
     onRefreshDirectory: ((Boolean) -> Unit) -> Unit,
-    onDelete: () -> Unit,
 ) {
     val lastViewedIndex = album.lastViewedPhotoIndex
 
@@ -235,14 +222,24 @@ private fun AlbumDetailHeader(
                     colors = CardDefaults.cardColors(containerColor = appColors.cardBackground),
                     elevation = CardDefaults.cardElevation(2.dp)
                 ) {
-                    Row(Modifier.fillMaxWidth().height(48.dp),
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .clip(RoundedCornerShape(2.dp)),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         TextButton(
-                            onClick = onDelete,
+                            onClick = {
+                                onRefreshDirectory { isAlbumAvailable ->
+                                    if (!isAlbumAvailable) navigator.pop()
+                                }
+                            },
+                            shape = RoundedCornerShape(0.dp),
+                            contentPadding = PaddingValues(0.dp),
                             modifier = Modifier.weight(1f).fillMaxHeight()
                         ) {
-                            Text(stringResource(R.string.album_detail_delete),
+                            Text(stringResource(R.string.album_detail_refresh),
                                 color = appColors.actionText, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         }
                         Box(Modifier.width(1.dp).height(32.dp).background(MaterialTheme.colorScheme.outlineVariant))
@@ -252,6 +249,8 @@ private fun AlbumDetailHeader(
                                     PhotoViewerPage(navigator, album.id, lastViewedIndex)
                                 }
                             },
+                            shape = RoundedCornerShape(0.dp),
+                            contentPadding = PaddingValues(0.dp),
                             modifier = Modifier.weight(1f).fillMaxHeight()
                         ) {
                             Text(stringResource(R.string.album_detail_read),
@@ -261,6 +260,7 @@ private fun AlbumDetailHeader(
                 }
             }
 
+            /*
             DropdownMenuButton(
                 modifier = Modifier.align(Alignment.TopEnd), tint = appColors.headerContent
             ) { dismiss ->
@@ -273,6 +273,7 @@ private fun AlbumDetailHeader(
                     }
                 )
             }
+            */
         }
         DetailDivider()
     }
