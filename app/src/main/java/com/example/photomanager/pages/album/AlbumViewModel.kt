@@ -13,6 +13,8 @@ import com.example.photomanager.data.AlbumListSettings
 import com.example.photomanager.data.AlbumListSettingsData
 import com.example.photomanager.data.AlbumQuery
 import com.example.photomanager.data.AlbumSortField
+import com.example.photomanager.data.DeleteManager
+import com.example.photomanager.data.DeleteState
 import com.example.photomanager.data.GroupData
 import com.example.photomanager.data.database.AlbumEntity
 import com.example.photomanager.data.database.GroupWithAlbumCount
@@ -24,6 +26,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -34,11 +37,13 @@ class AlbumViewModel @Inject constructor(
     private val albumData: AlbumData,
     private val groupData: GroupData,
     private val settingsData: AlbumListSettingsData,
+    private val deleteManager: DeleteManager,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
     var state by mutableStateOf<PageState<AlbumContent>>(PageState.Loading)
         private set
     val albums get() = (state as? PageState.Content)?.value?.albums.orEmpty()
+    val deleteState: StateFlow<DeleteState> = deleteManager.state
 
     var groupItems by mutableStateOf<List<GroupWithAlbumCount>>(emptyList())
         private set
@@ -134,8 +139,13 @@ class AlbumViewModel @Inject constructor(
         albumData.move(albums.filter { it.id in ids }, groupId)
     }
 
-    fun delete(ids: Set<Long>) = perform {
-        albumData.delete(albums.filter { it.id in ids })
+    fun delete(ids: Set<Long>) {
+        val selected = albums.filter { it.id in ids }
+        if (selected.isEmpty()) return
+        deleteManager.prepare(selected)
+        viewModelScope.launch {
+            deleteManager.delete(selected)
+        }
     }
 
     private fun observeUngroupedAlbumCount() {
