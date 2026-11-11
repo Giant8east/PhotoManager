@@ -3,6 +3,7 @@ package com.example.photomanager.pages.album
 
 import android.text.format.Formatter
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -11,10 +12,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -41,6 +47,7 @@ import com.example.photomanager.data.database.AlbumEntity
 import com.example.photomanager.navigation.AppNavigator
 import com.example.photomanager.pages.albumdetail.AlbumDetailPage
 import com.example.photomanager.ui.format.rememberAlbumModifiedTimeText
+import com.example.photomanager.ui.theme.FavoriteRed
 import com.example.photomanager.ui.theme.appColors
 
 // 对齐 EhViewer 的 TextView：常规字重、自然行高，并保留字体上下留白。
@@ -59,6 +66,7 @@ internal fun AlbumListCard(
     album: AlbumEntity,
     selection: AlbumSelectionState,
     navigator: AppNavigator,
+    onToggleFavorite: (AlbumEntity) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val selected = album.id in selection.selectedIds
@@ -123,7 +131,7 @@ internal fun AlbumListCard(
                     Modifier
                         .align(Alignment.TopStart)
                         .fillMaxWidth()
-                        .padding(start = 8.dp, top = 4.dp, end = 8.dp)
+                        .padding(start = 8.dp, top = 4.dp, end = 46.dp)
                 ) {
                     Text(
                         album.name,
@@ -131,6 +139,23 @@ internal fun AlbumListCard(
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
+                    )
+                }
+                // 收藏心形固定在卡片右侧垂直居中，点击只切换收藏，不进入详情。
+                Box(
+                    Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 6.dp)
+                        .size(40.dp)
+                        .clickable { onToggleFavorite(album) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (album.isFavorite) Icons.Filled.Favorite
+                        else Icons.Filled.FavoriteBorder,
+                        contentDescription = null,
+                        tint = if (album.isFavorite) FavoriteRed
+                        else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 Column(
