@@ -45,28 +45,30 @@ class AlbumViewModel @Inject constructor(
     val albums get() = (state as? PageState.Content)?.value?.albums.orEmpty()
     val deleteState: StateFlow<DeleteState> = deleteManager.state
 
-    var groupItems by mutableStateOf<List<GroupWithAlbumCount>>(emptyList())
+    /** 分组及其相册数量，抽屉与移动分组弹窗共用这一份事实来源。 */
+    var groupsWithCounts by mutableStateOf<List<GroupWithAlbumCount>>(emptyList())
         private set
-    val groups get() = groupItems.map { it.group }
     var ungroupedAlbumCount by mutableIntStateOf(0)
+        private set
+    var favoriteCount by mutableIntStateOf(0)
         private set
     var searchInput by mutableStateOf("")
         private set
     var selectedGroupId by mutableStateOf<Long?>(null)
         private set
+    /** 收藏视图与分组视图互斥，选中其一时清空另一个。 */
+    var favoritesOnly by mutableStateOf(false)
+        private set
     var sortField by mutableStateOf(AlbumSortField.CUSTOM)
         private set
     var isDescending by mutableStateOf(false)
-        private set
-    var suppressPlacementAnimation by mutableStateOf(false)
-        private set
-    var sortCompletionToken by mutableIntStateOf(0)
         private set
 
     private var albumQueryJob: Job? = null
     private var searchJob: Job? = null
     private var groupJob: Job? = null
     private var ungroupedCountJob: Job? = null
+    private var favoriteCountJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -79,6 +81,7 @@ class AlbumViewModel @Inject constructor(
             }
             observeGroups()
             observeUngroupedAlbumCount()
+            observeFavoriteCount()
             observeAlbums()
         }
     }
@@ -96,43 +99,117 @@ class AlbumViewModel @Inject constructor(
         observeAlbums()
     }
 
+    /**
+     * 关键词变化等同切换筛选：防抖结束后先进入 Loading，让列表整体让位，
+     * 新结果到达后再一次性重建，避免剩余项向上补位的动画。
+     */
     fun onSearchInputChange(value: String) {
+        if (searchInput == value) return
         searchInput = value
         searchJob?.cancel()
+        // 停掉在途查询，避免旧关键词的结果在防抖窗口里抢先上屏。
+        albumQueryJob?.cancel()
         searchJob = viewModelScope.launch {
             if (value.isNotBlank()) delay(300.milliseconds)
+            state = PageState.Loading
             observeAlbums()
         }
     }
 
     fun selectGroup(groupId: Long?) {
-        if (selectedGroupId == groupId) return
+        // 搜索是全局的，切换视图时要先清空关键词，否则点了分组列表看起来没反应。
+        val isSameView = selectedGroupId == groupId && !favoritesOnly
+        if (isSameView && searchInput.isEmpty()) return
+        // 从搜索结果退回分组列表同样是一次筛选切换，走 Loading 而不是逐项补位。
+        val leavingSearch = searchInput.isNotEmpty()
         selectedGroupId = groupId
+        favoritesOnly = false
+        searchInput = ""
         searchJob?.cancel()
+        albumQueryJob?.cancel()
+        if (leavingSearch) state = PageState.Loading
         observeAlbums()
     }
 
+    /** 切换到收藏视图，与分组筛选互斥；同样清空全局搜索关键词。 */
+    fun selectFavorites() {
+        if (favoritesOnly && searchInput.isEmpty()) return
+        val leavingSearch = searchInput.isNotEmpty()
+        favoritesOnly = true
+        selectedGroupId = null
+        searchInput = ""
+        searchJob?.cancel()
+        albumQueryJob?.cancel()
+        if (leavingSearch) state = PageState.Loading
+        observeAlbums()
+    }
+
+    /** 切换收藏状态；收藏视图下取消收藏时该行会随查询结果消失。 */
+    fun toggleFavorite(album: AlbumEntity) = perform {
+        albumData.setFavorite(album.id, !album.isFavorite)
+    }
+
+    /**
+     * 保存拖拽后的自定义顺序。首次在其他排序下拖拽时，先把当前顺序物化为 `sortOrder`
+     * 再切到自定义排序，列表因此不会重排。
+     */
+    fun reorderAlbums(albums: List<AlbumEntity>) {
+        if (albums.isEmpty()) return
+        val needsAdopt = sortField != AlbumSortField.CUSTOM
+        // 收藏视图和分组视图各自维护一套顺序，写入前固定作用域。
+        val favoritesView = favoritesOnly
+        viewModelScope.launch {
+            try {
+                albumData.reorder(albums, favoritesView)
+                if (needsAdopt) {
+                    // 先持久化再改内存状态：保存失败时 UI 与查询仍停在原排序，不会半切换。
+                    settingsData.save(
+                        AlbumListSettings(
+                            sortField = AlbumSortField.CUSTOM,
+                            isDescending = AlbumSortField.CUSTOM.defaultDescending
+                        )
+                    )
+                    sortField = AlbumSortField.CUSTOM
+                    isDescending = AlbumSortField.CUSTOM.defaultDescending
+                    observeAlbums()
+                    Toast.makeText(
+                        context,
+                        R.string.album_sort_switched_to_custom,
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                errorMessage(R.string.album_operation_failed)
+            }
+        }
+    }
+
+    /** 搜索结果是子集，重排会打散无关相册的相对顺序，因此拒绝拖拽并提示。 */
+    fun notifyReorderBlocked() {
+        Toast.makeText(context, R.string.album_reorder_blocked_by_search, Toast.LENGTH_SHORT).show()
+    }
+
+    /** 切换排序：先进入 Loading 让列表整体让位，新结果到达后一次性重建（对齐 EhViewer）。 */
     fun selectSortField(field: AlbumSortField) {
         if (sortField == field) return
         searchJob?.cancel()
-        suppressPlacementAnimation = true
         sortField = field
         isDescending = field.defaultDescending
+        state = PageState.Loading
         persistSettings()
         observeAlbums()
     }
 
     fun setSortDescending(descending: Boolean) {
         if (sortField == AlbumSortField.CUSTOM || isDescending == descending) return
-        suppressPlacementAnimation = true
+        // 与 selectSortField 一致：取消未到期的搜索防抖，避免排序后又被旧关键词查询一次。
+        searchJob?.cancel()
         isDescending = descending
+        state = PageState.Loading
         persistSettings()
         observeAlbums()
-    }
-
-    /** 排序结果完成一帧布局后恢复后续删除/移动的补位动画。 */
-    fun clearSortPlacementSuppression() {
-        suppressPlacementAnimation = false
     }
 
     fun move(ids: Set<Long>, groupId: Long?) = perform {
@@ -160,6 +237,18 @@ class AlbumViewModel @Inject constructor(
         }
     }
 
+    private fun observeFavoriteCount() {
+        favoriteCountJob?.cancel()
+        favoriteCountJob = viewModelScope.launch {
+            albumData.observeFavoriteCount()
+                .catch { error ->
+                    if (error is CancellationException) throw error
+                    favoriteCount = 0
+                }
+                .collect { favoriteCount = it }
+        }
+    }
+
     private fun observeGroups() {
         groupJob?.cancel()
         groupJob = viewModelScope.launch {
@@ -169,7 +258,7 @@ class AlbumViewModel @Inject constructor(
                     errorMessage(R.string.page_albums_load_failed)
                 }
                 .collect { updatedGroups ->
-                    groupItems = updatedGroups
+                    groupsWithCounts = updatedGroups
                     val currentGroupId = selectedGroupId
                     if (currentGroupId != null &&
                         updatedGroups.none { it.group.id == currentGroupId }
@@ -192,7 +281,8 @@ class AlbumViewModel @Inject constructor(
         val keyword = searchInput
         val field = sortField
         val descending = isDescending
-        val query = AlbumQuery(groupId, keyword, field, descending)
+        val onlyFavorites = favoritesOnly
+        val query = AlbumQuery(groupId, keyword, field, descending, onlyFavorites)
         albumQueryJob = viewModelScope.launch {
             albumData.observeAlbums(query)
                 .asPageStates(R.string.page_albums_load_failed) { albums ->
@@ -204,10 +294,6 @@ class AlbumViewModel @Inject constructor(
                         return@collect
                     }
                     state = nextState
-                    if (nextState is PageState.Content && suppressPlacementAnimation) {
-                        // 即使排序结果与旧列表相等，也要通知页面解除动画抑制。
-                        sortCompletionToken++
-                    }
                 }
         }
     }
