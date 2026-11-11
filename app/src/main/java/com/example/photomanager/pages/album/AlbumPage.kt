@@ -51,6 +51,8 @@ internal fun AlbumPage(
     val selection = remember { AlbumSelectionState() }
     // 提升到 DrawerHost 外层，确保 LazyListState 处于页面级 SaveableStateProvider 作用域内。
     val albumListState = rememberLazyListState()
+    // 拖拽顺序由页面持有：列表、FAB 的保存按钮、退出多选的确认弹窗共用同一份快照。
+    val dragState = remember { AlbumDragState() }
 
     // 排序切换后回到顶部：旧滚动索引在新顺序下没有意义。
     // 初始值取当前排序，首次组合与返回页面时都不滚动，避免破坏滚动位置恢复。
@@ -123,9 +125,9 @@ internal fun AlbumPage(
                                     listState = albumListState,
                                     // 搜索结果是子集，重排会打散无关相册，因此只允许在无关键词时拖拽。
                                     reorderEnabled = viewModel.searchInput.isBlank(),
+                                    dragState = dragState,
                                     onToggleFavorite = viewModel::toggleFavorite,
-                                    onReorderBlocked = viewModel::notifyReorderBlocked,
-                                    onReorderFinished = viewModel::reorderAlbums
+                                    onReorderBlocked = viewModel::notifyReorderBlocked
                                 )
                             }
                             if (content.albums.isEmpty()) {
@@ -153,7 +155,7 @@ internal fun AlbumPage(
                 }
             }
 
-            AlbumActionFab(selection = selection)
+            AlbumActionFab(selection = selection, dragState = dragState)
         }
 
         SheetHost(sheets)
@@ -168,12 +170,10 @@ private fun AlbumList(
     navigator: AppNavigator,
     listState: LazyListState,
     reorderEnabled: Boolean,
+    dragState: AlbumDragState,
     onToggleFavorite: (AlbumEntity) -> Unit,
-    onReorderBlocked: () -> Unit,
-    onReorderFinished: (List<AlbumEntity>) -> Unit
+    onReorderBlocked: () -> Unit
 ) {
-    // 拖拽顺序的三个来源（数据源 / 本地副本 / 松手待回流）收敛在 AlbumDragState 里。
-    val dragState = remember { AlbumDragState() }
     LaunchedEffect(albums) { dragState.onAlbumsChanged(albums) }
     val displayedAlbums = dragState.displayed(albums)
     val reorderableState = rememberReorderableLazyListState(listState) { from, to ->
@@ -206,7 +206,8 @@ private fun AlbumList(
                         dragHandleModifier = Modifier.draggableHandle(
                             // 从上一次拖拽的结果开始，而不是数据库里可能还没回流的旧顺序。
                             onDragStarted = { dragState.startDrag() },
-                            onDragStopped = { onReorderFinished(dragState.stopDrag()) }
+                            // 松手只留下待保存快照，写入数据库由 FAB 或退出多选时的弹窗触发。
+                            onDragStopped = { dragState.stopDrag() }
                         ),
                         reorderEnabled = reorderEnabled,
                         onReorderBlocked = onReorderBlocked

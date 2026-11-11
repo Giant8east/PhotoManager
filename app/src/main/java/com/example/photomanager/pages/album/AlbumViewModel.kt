@@ -151,7 +151,11 @@ class AlbumViewModel @Inject constructor(
 
     /**
      * 保存拖拽后的自定义顺序。首次在其他排序下拖拽时，先把当前顺序物化为 `sortOrder`
-     * 再切到自定义排序，列表因此不会重排。
+     * 再切到自定义排序。
+     *
+     * 切换排序的关键是"不把中间态交给界面"：先停掉旧排序的观察，写完顺序与设置后
+     * 再以自定义排序重新订阅。这样界面全程停留在拖拽结果上，既不会先弹回旧顺序，
+     * 也不会出现重建闪烁与随后的位移动画。
      */
     fun reorderAlbums(albums: List<AlbumEntity>) {
         if (albums.isEmpty()) return
@@ -160,8 +164,10 @@ class AlbumViewModel @Inject constructor(
         val favoritesView = favoritesOnly
         viewModelScope.launch {
             try {
-                albumData.reorder(albums, favoritesView)
                 if (needsAdopt) {
+                    // 暂停观察：写 sortOrder 会让旧排序的查询回流一次，界面不能看到它。
+                    albumQueryJob?.cancel()
+                    albumData.reorder(albums, favoritesView)
                     // 先持久化再改内存状态：保存失败时 UI 与查询仍停在原排序，不会半切换。
                     settingsData.save(
                         AlbumListSettings(
@@ -171,16 +177,22 @@ class AlbumViewModel @Inject constructor(
                     )
                     sortField = AlbumSortField.CUSTOM
                     isDescending = AlbumSortField.CUSTOM.defaultDescending
+                    // 保存是显式动作，和菜单换排序一致地走 Loading：一次性换成新顺序。
+                    state = PageState.Loading
                     observeAlbums()
                     Toast.makeText(
                         context,
                         R.string.album_sort_switched_to_custom,
                         Toast.LENGTH_SHORT
                     ).show()
+                } else {
+                    albumData.reorder(albums, favoritesView)
                 }
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {
+                // 观察已被取消时也要恢复，否则列表会停在拖拽结果上不再跟随数据库。
+                if (needsAdopt) observeAlbums()
                 errorMessage(R.string.album_operation_failed)
             }
         }
