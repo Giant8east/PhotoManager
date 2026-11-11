@@ -46,8 +46,12 @@ interface AlbumDao {
     @Query("UPDATE albums SET lastViewedPhotoIndex = :photoIndex WHERE id = :albumId")
     suspend fun updateAlbumReadingProgress(albumId: Long, photoIndex: Int)
 
-    @Query("UPDATE albums SET isFavorite = :favorite WHERE id = :albumId")
-    suspend fun updateAlbumFavorite(albumId: Long, favorite: Boolean)
+    /** 收藏并把相册追加到收藏视图末尾；[order] 由调用方取当前时间。 */
+    @Query("UPDATE albums SET isFavorite = 1, favoriteSortOrder = :order WHERE id = :albumId")
+    suspend fun favoriteAlbum(albumId: Long, order: Long)
+
+    @Query("UPDATE albums SET isFavorite = 0 WHERE id = :albumId")
+    suspend fun unfavoriteAlbum(albumId: Long)
 
     @Query("SELECT COUNT(*) FROM albums WHERE isFavorite = 1 AND photoCount > 0")
     fun observeFavoriteCountQuery(): Flow<Int>
