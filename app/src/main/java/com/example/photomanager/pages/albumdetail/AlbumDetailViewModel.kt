@@ -1,4 +1,4 @@
-/** 相册详情观察完整图片索引和目录摘要，负责刷新目录；删除由相册库统一管理。 */
+/** 相册详情观察完整图片索引和目录摘要，负责收藏切换；删除由相册库统一管理。 */
 package com.example.photomanager.pages.albumdetail
 
 import android.content.Context
@@ -81,6 +81,20 @@ class AlbumDetailViewModel @AssistedInject constructor(
                         ?: context.getString(R.string.album_detail_refresh_failed),
                     Toast.LENGTH_SHORT
                 ).show()
+            }
+        }
+    }
+
+    /** 切换收藏状态，收藏与分组互不影响。 */
+    fun toggleFavorite() {
+        val album = (state as? PageState.Content)?.value?.album ?: return
+        viewModelScope.launch {
+            try {
+                albumData.setFavorite(album.id, !album.isFavorite)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                Toast.makeText(context, R.string.album_operation_failed, Toast.LENGTH_SHORT).show()
             }
         }
     }

@@ -35,6 +35,7 @@ import com.example.photomanager.data.database.AlbumEntity
 import com.example.photomanager.data.database.PhotoEntity
 import com.example.photomanager.navigation.AppNavigator
 import com.example.photomanager.pages.common.AppLazyColumnScrollbar
+import com.example.photomanager.pages.common.DropdownMenuButton
 import com.example.photomanager.ui.format.rememberAlbumModifiedTimeText
 import com.example.photomanager.ui.theme.appColors
 import com.example.photomanager.pages.photoviewer.PhotoViewerPage
@@ -97,7 +98,9 @@ private fun AlbumDetailBody(
                         AlbumDetailHeader(
                             album = currentAlbum,
                             navigator = navigator,
-                            onRefreshDirectory = viewModel::refreshDirectory
+                            onRefreshDirectory = viewModel::refreshDirectory,
+                            onToggleFavorite = viewModel::toggleFavorite
+
                         )
                     }
 
@@ -182,6 +185,7 @@ private fun AlbumDetailHeader(
     album: AlbumEntity,
     navigator: AppNavigator,
     onRefreshDirectory: ((Boolean) -> Unit) -> Unit,
+    onToggleFavorite: () -> Unit,
 ) {
     val lastViewedIndex = album.lastViewedPhotoIndex
 
@@ -200,7 +204,7 @@ private fun AlbumDetailHeader(
             }
             Column { Row(Modifier.fillMaxWidth().padding(16.dp)
                 ) {
-                    AlbumThumbnail(album.coverPath,)
+                    AlbumThumbnail(album.coverPath)
                     Column(Modifier.weight(1f).padding(start = 16.dp)
                     ) {
                         Text(
@@ -230,17 +234,20 @@ private fun AlbumDetailHeader(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         TextButton(
-                            onClick = {
-                                onRefreshDirectory { isAlbumAvailable ->
-                                    if (!isAlbumAvailable) navigator.pop()
-                                }
-                            },
+                            onClick = onToggleFavorite,
                             shape = RoundedCornerShape(0.dp),
                             contentPadding = PaddingValues(0.dp),
                             modifier = Modifier.weight(1f).fillMaxHeight()
                         ) {
-                            Text(stringResource(R.string.album_detail_refresh),
-                                color = appColors.actionText, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                stringResource(
+                                    if (album.isFavorite) R.string.album_favorite_remove
+                                    else R.string.album_favorite_add
+                                ),
+                                color = appColors.actionText,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                         Box(Modifier.width(1.dp).height(32.dp).background(MaterialTheme.colorScheme.outlineVariant))
                         TextButton(
@@ -260,7 +267,7 @@ private fun AlbumDetailHeader(
                 }
             }
 
-            /*
+
             DropdownMenuButton(
                 modifier = Modifier.align(Alignment.TopEnd), tint = appColors.headerContent
             ) { dismiss ->
@@ -273,7 +280,7 @@ private fun AlbumDetailHeader(
                     }
                 )
             }
-            */
+
         }
         DetailDivider()
     }
