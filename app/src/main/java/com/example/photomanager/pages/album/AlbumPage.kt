@@ -15,8 +15,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -24,6 +24,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.photomanager.R
+import com.example.photomanager.data.AlbumSortField
 import com.example.photomanager.data.database.AlbumEntity
 import com.example.photomanager.navigation.AppNavigator
 import com.example.photomanager.pages.common.AppLazyColumnScrollbar
@@ -55,20 +56,6 @@ internal fun AlbumPage(
         }
     }
 
-    LaunchedEffect(viewModel.state, viewModel.sortCompletionToken) {
-        if (viewModel.suppressPlacementAnimation) {
-            when (viewModel.state) {
-                is PageState.Content -> {
-                    // 先让排序后的列表完成一帧布局，再恢复后续删除/移动的补位动画。
-                    withFrameNanos { }
-                    viewModel.clearSortPlacementSuppression()
-                }
-                is PageState.Message -> viewModel.clearSortPlacementSuppression()
-                PageState.Loading -> Unit
-            }
-        }
-    }
-
     val sheets = rememberSheetStack()
 
     DrawerHost(
@@ -77,8 +64,11 @@ internal fun AlbumPage(
             AlbumGroupDrawer(
                 groups = viewModel.groupItems,
                 ungroupedAlbumCount = viewModel.ungroupedAlbumCount,
+                favoriteCount = viewModel.favoriteCount,
                 selectedGroupId = viewModel.selectedGroupId,
+                favoritesSelected = viewModel.favoritesOnly,
                 onGroupSelected = viewModel::selectGroup,
+                onFavoritesSelected = viewModel::selectFavorites,
                 onManageGroups = {
                     navigator.pushTo { GroupManagePage(navigator) }
                 },
@@ -111,7 +101,8 @@ internal fun AlbumPage(
                                 selection = selection,
                                 navigator = navigator,
                                 listState = albumListState,
-                                suppressPlacementAnimation = viewModel.suppressPlacementAnimation
+                                sortField = viewModel.sortField,
+                                isDescending = viewModel.isDescending
                             )
                             if (content.albums.isEmpty()) {
                                 Text(
@@ -150,30 +141,27 @@ private fun AlbumList(
     selection: AlbumSelectionState,
     navigator: AppNavigator,
     listState: LazyListState,
-    suppressPlacementAnimation: Boolean
+    sortField: AlbumSortField,
+    isDescending: Boolean
 ) {
     AppLazyColumnScrollbar(state = listState) {
-        LazyColumn(
-            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 10.dp),
-            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
-            state = listState,
-            modifier = Modifier.fillMaxSize()
-        ) {
-            items(albums, key = { it.id }) { album ->
-                AlbumListCard(
-                    album = album,
-                    selection = selection,
-                    navigator = navigator,
-                    modifier = if (suppressPlacementAnimation) {
-                        Modifier.animateItem(
-                            fadeInSpec = null,
-                            placementSpec = null,
-                            fadeOutSpec = null
-                        )
-                    } else {
-                        Modifier.animateItem()
-                    }
-                )
+        // 排序条件变化时整棵列表重建，等价于 EhViewer 换适配器：一次性换成新顺序，
+        // 不做逐项差分与位移动画，避免可见项被复用后新旧状态混杂。
+        key(sortField, isDescending) {
+            LazyColumn(
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 10.dp),
+                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                state = listState,
+                modifier = Modifier.fillMaxSize()
+            ) {
+                items(albums, key = { it.id }) { album ->
+                    AlbumListCard(
+                        album = album,
+                        selection = selection,
+                        navigator = navigator,
+                        modifier = Modifier.animateItem()
+                    )
+                }
             }
         }
     }
