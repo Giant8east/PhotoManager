@@ -157,3 +157,38 @@ private fun MoveRow(
         )
     )
 }
+
+/** 退出多选时确认是否把拖拽结果保存为默认排序。 */
+@Composable
+internal fun AlbumSaveOrderDialog(
+    dragState: AlbumDragState,
+    selection: AlbumSelectionState,
+    viewModel: AlbumViewModel = hiltViewModel()
+) {
+    AppDialog(
+        title = stringResource(R.string.album_save_order_title),
+        buttons = { close ->
+            TextButton(
+                onClick = {
+                    // 只提交顺序，不在这里丢弃快照：数据库回流且顺序一致后会自动清空。
+                    dragState.pendingOrder()?.let(viewModel::reorderAlbums)
+                    selection.clear()
+                    close()
+                },
+                colors = ButtonDefaults.textButtonColors(contentColor = appColors.actionText)
+            ) { Text(stringResource(R.string.album_save_order_confirm)) }
+            TextButton(
+                onClick = {
+                    dragState.discard()
+                    selection.clear()
+                    close()
+                }
+            ) { Text(stringResource(R.string.album_save_order_discard)) }
+        }
+    ) {
+        Text(
+            stringResource(R.string.album_save_order_message),
+            style = MaterialTheme.typography.bodyLarge.copy(letterSpacing = 0.sp)
+        )
+    }
+}
