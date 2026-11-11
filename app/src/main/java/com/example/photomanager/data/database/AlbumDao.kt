@@ -45,4 +45,10 @@ interface AlbumDao {
 
     @Query("UPDATE albums SET lastViewedPhotoIndex = :photoIndex WHERE id = :albumId")
     suspend fun updateAlbumReadingProgress(albumId: Long, photoIndex: Int)
+
+    @Query("UPDATE albums SET isFavorite = :favorite WHERE id = :albumId")
+    suspend fun updateAlbumFavorite(albumId: Long, favorite: Boolean)
+
+    @Query("SELECT COUNT(*) FROM albums WHERE isFavorite = 1 AND photoCount > 0")
+    fun observeFavoriteCountQuery(): Flow<Int>
 }
