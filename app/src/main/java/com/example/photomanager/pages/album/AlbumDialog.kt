@@ -123,11 +123,11 @@ internal fun AlbumMoveDialog(
                             }
                         )
                     }
-                    items(viewModel.groups, key = { it.id }) { group ->
+                    items(viewModel.groupsWithCounts, key = { it.group.id }) { groupWithCount ->
                         MoveRow(
-                            label = group.name,
+                            label = groupWithCount.group.name,
                             onClick = {
-                                viewModel.move(selection.selectedIds, group.id)
+                                viewModel.move(selection.selectedIds, groupWithCount.group.id)
                                 selection.clear()
                                 close()
                             }
