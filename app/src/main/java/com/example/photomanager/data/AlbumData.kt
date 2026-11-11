@@ -44,9 +44,15 @@ class AlbumData @Inject constructor(
         val nullOrder = if (query.sortField == AlbumSortField.MODIFIED_AT) {
             "julianday(modifiedAt) IS NULL ASC, "
         } else ""
+        // 有关键词时做全局搜索：忽略分组与收藏筛选，避免"明明有这个相册却搜不到"。
+        val hasKeyword = query.keyword.isNotBlank()
         val filterClause: String
         val filterArgs: Array<Any?>
         when {
+            hasKeyword -> {
+                filterClause = ""
+                filterArgs = emptyArray()
+            }
             // 收藏视图跨分组，不再叠加分组条件。
             query.favoritesOnly -> {
                 filterClause = "AND isFavorite = 1"
@@ -61,9 +67,9 @@ class AlbumData @Inject constructor(
                 filterArgs = arrayOf(query.groupId)
             }
         }
-        // 自定义排序是视图级的：收藏视图用自己的列，避免和分组序号互相覆盖。
+        // 自定义排序是视图级的：仅收藏视图使用自己的列，全局搜索结果仍按分组序号排序。
         val orderExpression = if (
-            query.sortField == AlbumSortField.CUSTOM && query.favoritesOnly
+            query.sortField == AlbumSortField.CUSTOM && query.favoritesOnly && !hasKeyword
         ) {
             "favoriteSortOrder"
         } else {
