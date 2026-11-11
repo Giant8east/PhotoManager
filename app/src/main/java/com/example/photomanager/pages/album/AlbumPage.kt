@@ -102,7 +102,8 @@ internal fun AlbumPage(
                                 navigator = navigator,
                                 listState = albumListState,
                                 sortField = viewModel.sortField,
-                                isDescending = viewModel.isDescending
+                                isDescending = viewModel.isDescending,
+                                onToggleFavorite = viewModel::toggleFavorite
                             )
                             if (content.albums.isEmpty()) {
                                 Text(
@@ -142,7 +143,8 @@ private fun AlbumList(
     navigator: AppNavigator,
     listState: LazyListState,
     sortField: AlbumSortField,
-    isDescending: Boolean
+    isDescending: Boolean,
+    onToggleFavorite: (AlbumEntity) -> Unit
 ) {
     AppLazyColumnScrollbar(state = listState) {
         // 排序条件变化时整棵列表重建，等价于 EhViewer 换适配器：一次性换成新顺序，
@@ -159,6 +161,7 @@ private fun AlbumList(
                         album = album,
                         selection = selection,
                         navigator = navigator,
+                        onToggleFavorite = onToggleFavorite,
                         modifier = Modifier.animateItem()
                     )
                 }
