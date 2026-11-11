@@ -44,25 +44,32 @@ class AlbumData @Inject constructor(
         val nullOrder = if (query.sortField == AlbumSortField.MODIFIED_AT) {
             "julianday(modifiedAt) IS NULL ASC, "
         } else ""
-        val groupClause = if (query.groupId == null) {
-            "AND groupId IS NULL"
-        } else {
-            "AND groupId = ?"
-        }
-        val groupArgs: Array<Any?> = if (query.groupId == null) {
-            emptyArray()
-        } else {
-            arrayOf(query.groupId)
+        val filterClause: String
+        val filterArgs: Array<Any?>
+        when {
+            // 收藏视图跨分组，不再叠加分组条件。
+            query.favoritesOnly -> {
+                filterClause = "AND isFavorite = 1"
+                filterArgs = emptyArray()
+            }
+            query.groupId == null -> {
+                filterClause = "AND groupId IS NULL"
+                filterArgs = emptyArray()
+            }
+            else -> {
+                filterClause = "AND groupId = ?"
+                filterArgs = arrayOf(query.groupId)
+            }
         }
         val sql = """
             SELECT * FROM albums
             WHERE name LIKE ? ESCAPE '\' COLLATE NOCASE
-            $groupClause
+            $filterClause
             ORDER BY $nullOrder${query.sortField.sqlExpression} $direction, albumPath ASC
         """.trimIndent()
         return SimpleSQLiteQuery(
             sql,
-            arrayOf(searchPattern(query.keyword), *groupArgs)
+            arrayOf(searchPattern(query.keyword), *filterArgs)
         )
     }
 
@@ -84,6 +91,13 @@ class AlbumData @Inject constructor(
     /** 持久化相册的自定义顺序。 */
     suspend fun reorder(albums: List<AlbumEntity>) = database.albumDao()
         .updateAlbums(albums.mapIndexed { index, album -> album.copy(sortOrder = index.toLong()) })
+
+    /** 切换单个相册的收藏状态，收藏与分组互不影响。 */
+    suspend fun setFavorite(albumId: Long, favorite: Boolean) =
+        database.albumDao().updateAlbumFavorite(albumId, favorite)
+
+    /** 持续观察已收藏且仍有图片的相册数量。 */
+    fun observeFavoriteCount(): Flow<Int> = database.albumDao().observeFavoriteCountQuery()
 
     /** 保存相册最近一次浏览到的图片位置。 */
     suspend fun updateReadingProgress(albumId: Long, photoIndex: Int) =
