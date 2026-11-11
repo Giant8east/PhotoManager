@@ -61,11 +61,19 @@ class AlbumData @Inject constructor(
                 filterArgs = arrayOf(query.groupId)
             }
         }
+        // 自定义排序是视图级的：收藏视图用自己的列，避免和分组序号互相覆盖。
+        val orderExpression = if (
+            query.sortField == AlbumSortField.CUSTOM && query.favoritesOnly
+        ) {
+            "favoriteSortOrder"
+        } else {
+            query.sortField.sqlExpression
+        }
         val sql = """
             SELECT * FROM albums
             WHERE name LIKE ? ESCAPE '\' COLLATE NOCASE
             $filterClause
-            ORDER BY $nullOrder${query.sortField.sqlExpression} $direction, albumPath ASC
+            ORDER BY $nullOrder$orderExpression $direction, albumPath ASC
         """.trimIndent()
         return SimpleSQLiteQuery(
             sql,
@@ -88,13 +96,30 @@ class AlbumData @Inject constructor(
     suspend fun move(albums: List<AlbumEntity>, groupId: Long?) =
         database.albumDao().updateAlbums(albums.map { it.copy(groupId = groupId) })
 
-    /** 持久化相册的自定义顺序。 */
-    suspend fun reorder(albums: List<AlbumEntity>) = database.albumDao()
-        .updateAlbums(albums.mapIndexed { index, album -> album.copy(sortOrder = index.toLong()) })
+    /**
+     * 保存当前视图的自定义顺序：分组/未分组视图写 [AlbumEntity.sortOrder]，
+     * 收藏视图写 [AlbumEntity.favoriteSortOrder]，两种列表因此各自独立。
+     */
+    suspend fun reorder(albums: List<AlbumEntity>, favoritesView: Boolean) = database.albumDao()
+        .updateAlbums(
+            albums.mapIndexed { index, album ->
+                if (favoritesView) {
+                    album.copy(favoriteSortOrder = index.toLong())
+                } else {
+                    album.copy(sortOrder = index.toLong())
+                }
+            }
+        )
 
-    /** 切换单个相册的收藏状态，收藏与分组互不影响。 */
-    suspend fun setFavorite(albumId: Long, favorite: Boolean) =
-        database.albumDao().updateAlbumFavorite(albumId, favorite)
+    /** 切换收藏状态；收藏时取当前时间作为收藏视图排序值，追加到列表末尾。 */
+    suspend fun setFavorite(albumId: Long, favorite: Boolean) {
+        val dao = database.albumDao()
+        if (favorite) {
+            dao.favoriteAlbum(albumId, System.currentTimeMillis())
+        } else {
+            dao.unfavoriteAlbum(albumId)
+        }
+    }
 
     /** 持续观察已收藏且仍有图片的相册数量。 */
     fun observeFavoriteCount(): Flow<Int> = database.albumDao().observeFavoriteCountQuery()
