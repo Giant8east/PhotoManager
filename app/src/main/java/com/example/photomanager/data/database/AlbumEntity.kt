@@ -34,6 +34,8 @@ data class AlbumEntity(
     val albumPath: String,
     /** 自定义排序值，数值越小越靠前。 */
     val sortOrder: Long = 0,
+    /** 收藏视图的自定义排序值，与 [sortOrder] 各自独立，收藏时取当前时间追加到末尾。 */
+    val favoriteSortOrder: Long = 0,
     /** 相册所属分组；null 表示默认相册。 */
     val groupId: Long? = null,
     /** 收藏标记，独立于分组，不与 groupId 互斥。 */
