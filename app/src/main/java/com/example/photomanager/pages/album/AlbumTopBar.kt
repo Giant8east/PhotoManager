@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
@@ -35,19 +36,26 @@ import com.example.photomanager.R
 import com.example.photomanager.pages.common.SheetStack
 import com.example.photomanager.ui.theme.appColors
 
+/**
+ * 占位文字与输入框必须共用同一份带显式行高的样式：Text 会继承 bodyLarge 的 24sp 行高，
+ * 而 BasicTextField 不给 lineHeight 时只有字体默认行高，两者行高不同会让空输入时光标偏上。
+ */
+private val SearchTextStyle = TextStyle(fontSize = 18.sp, lineHeight = 24.sp)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun AlbumTopBar(
     searchInput: String,
     onSearchInputChange: (String) -> Unit,
-    searchEnabled: Boolean,
+    // 搜索、排序和设置共用同一个可用状态：进入多选后全部禁用。
+    actionsEnabled: Boolean,
     sheetStack: SheetStack,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val focusManager = LocalFocusManager.current
-    LaunchedEffect(searchEnabled) {
-        if (!searchEnabled) focusManager.clearFocus()
+    LaunchedEffect(actionsEnabled) {
+        if (!actionsEnabled) focusManager.clearFocus()
     }
 
     CenterAlignedTopAppBar(
@@ -73,10 +81,21 @@ internal fun AlbumTopBar(
                         Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        AlbumSortButton(
-                            sheetStack = sheetStack,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        IconButton(
+                            enabled = actionsEnabled,
+                            onClick = {
+                                sheetStack.show {
+                                    AlbumSortSheet()
+                                }
+                            }
+                        ) {
+                            Icon(
+                                painterResource(R.drawable.ic_sort),
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    .copy(alpha = if (actionsEnabled) 1f else 0.38f)
+                            )
+                        }
 
                         BasicTextField(
                             value = searchInput,
@@ -84,32 +103,29 @@ internal fun AlbumTopBar(
                             modifier = Modifier
                                 .weight(1f)
                                 .padding(horizontal = 4.dp),
-                            enabled = searchEnabled,
+                            enabled = actionsEnabled,
                             singleLine = true,
-                            textStyle = TextStyle(
-                                fontSize = 18.sp,
+                            textStyle = SearchTextStyle.copy(
                                 color = MaterialTheme.colorScheme.onSurface
                             ),
                             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                             decorationBox = { innerTextField ->
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Box(Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        Modifier.weight(1f),
+                                        contentAlignment = Alignment.CenterStart
+                                    ) {
                                         if (searchInput.isEmpty()) {
                                             Text(
                                                 text = stringResource(R.string.album_search_hint),
-                                                fontSize = 18.sp,
+                                                style = SearchTextStyle,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
                                         innerTextField()
                                     }
-
-                                    if (searchEnabled && searchInput.isNotEmpty()) {
-                                        IconButton(
-                                            onClick = { onSearchInputChange("") }
-                                        ) {
+                                    if (actionsEnabled && searchInput.isNotEmpty()) {
+                                        IconButton(onClick = { onSearchInputChange("") }) {
                                             Icon(
                                                 Icons.Default.Clear,
                                                 contentDescription = null,
@@ -121,11 +137,12 @@ internal fun AlbumTopBar(
                             }
                         )
 
-                        IconButton(onClick = onOpenSettings) {
+                        IconButton(onClick = onOpenSettings, enabled = actionsEnabled) {
                             Icon(
                                 Icons.Default.Settings,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    .copy(alpha = if (actionsEnabled) 1f else 0.38f)
                             )
                         }
                     }
