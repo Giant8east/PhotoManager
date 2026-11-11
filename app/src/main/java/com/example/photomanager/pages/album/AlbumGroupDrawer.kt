@@ -32,7 +32,7 @@ import com.example.photomanager.ui.theme.appColors
 
 @Composable
 internal fun AlbumGroupDrawer(
-    groups: List<GroupWithAlbumCount>,
+    groupsWithCounts: List<GroupWithAlbumCount>,
     ungroupedAlbumCount: Int,
     favoriteCount: Int,
     selectedGroupId: Long?,
@@ -90,7 +90,7 @@ internal fun AlbumGroupDrawer(
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     }
                 }
-                items(groups, key = { it.group.id }) { groupWithCount ->
+                items(groupsWithCounts, key = { it.group.id }) { groupWithCount ->
                     val group = groupWithCount.group
                     Column {
                         DrawerRow(
