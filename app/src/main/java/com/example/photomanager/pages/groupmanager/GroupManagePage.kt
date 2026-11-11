@@ -9,8 +9,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -72,7 +74,12 @@ fun GroupManagePage(
         mutableStateListOf<GroupEntity>().apply { addAll(viewModel.groups) }
     }
     val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
-        localGroups.add(to.index, localGroups.removeAt(from.index))
+        // 列表第 0 项是不可拖拽的锚点占位，真实分组下标各减 1。
+        val source = from.index - 1
+        val target = (to.index - 1).coerceIn(0, localGroups.lastIndex)
+        if (source in localGroups.indices && source != target) {
+            localGroups.add(target, localGroups.removeAt(source))
+        }
     }
 
     LaunchedEffect(viewModel.groups) {
@@ -129,8 +136,17 @@ fun GroupManagePage(
                         state = lazyListState,
                         modifier = Modifier.fillMaxSize()
                     ) {
+                // 固定 key 的锚点：LazyList 会按"第一个可见项的 key"保持视口，
+                // 有了这一项，交换前两个分组时锚点 key 不变，视口就不会整体挪动。
+                item(key = "reorder-anchor") {
+                    Spacer(Modifier.height(1.dp))
+                }
                 itemsIndexed(localGroups, key = { _, group -> group.id }) { _, group ->
-                    ReorderableItem(reorderableState, key = group.id) { isDragging ->
+                    ReorderableItem(
+                        state = reorderableState,
+                        key = group.id,
+                        animateItemModifier = Modifier.animateItem()
+                    ) { isDragging ->
                         Column(
                             Modifier
                                 .fillMaxWidth()
