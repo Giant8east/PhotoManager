@@ -35,5 +35,7 @@ data class AlbumEntity(
     /** 自定义排序值，数值越小越靠前。 */
     val sortOrder: Long = 0,
     /** 相册所属分组；null 表示默认相册。 */
-    val groupId: Long? = null
+    val groupId: Long? = null,
+    /** 收藏标记，独立于分组，不与 groupId 互斥。 */
+    val isFavorite: Boolean = false
 )
