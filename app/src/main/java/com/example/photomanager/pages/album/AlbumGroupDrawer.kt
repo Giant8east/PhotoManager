@@ -34,8 +34,11 @@ import com.example.photomanager.ui.theme.appColors
 internal fun AlbumGroupDrawer(
     groups: List<GroupWithAlbumCount>,
     ungroupedAlbumCount: Int,
+    favoriteCount: Int,
     selectedGroupId: Long?,
+    favoritesSelected: Boolean,
     onGroupSelected: (Long?) -> Unit,
+    onFavoritesSelected: () -> Unit,
     onManageGroups: () -> Unit,
     onCloseDrawer: () -> Unit
 ) {
@@ -62,9 +65,23 @@ internal fun AlbumGroupDrawer(
                 item {
                     Column {
                         DrawerRow(
+                            label = stringResource(R.string.album_group_favorites),
+                            count = favoriteCount,
+                            selected = favoritesSelected,
+                            onClick = {
+                                onFavoritesSelected()
+                                onCloseDrawer()
+                            }
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    }
+                }
+                item {
+                    Column {
+                        DrawerRow(
                             label = stringResource(R.string.album_group_ungrouped),
                             count = ungroupedAlbumCount,
-                            selected = selectedGroupId == null,
+                            selected = selectedGroupId == null && !favoritesSelected,
                             onClick = {
                                 onGroupSelected(null)
                                 onCloseDrawer()
