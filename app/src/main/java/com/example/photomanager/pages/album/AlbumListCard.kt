@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material3.Card
@@ -67,6 +69,9 @@ internal fun AlbumListCard(
     selection: AlbumSelectionState,
     navigator: AppNavigator,
     onToggleFavorite: (AlbumEntity) -> Unit,
+    dragHandleModifier: Modifier,
+    reorderEnabled: Boolean,
+    onReorderBlocked: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val selected = album.id in selection.selectedIds
@@ -141,22 +146,47 @@ internal fun AlbumListCard(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                // 收藏心形固定在卡片右侧垂直居中，点击只切换收藏，不进入详情。
+                // 卡片右侧垂直居中：普通态是收藏开关，多选态在原地换成拖拽手柄。
                 Box(
                     Modifier
                         .align(Alignment.CenterEnd)
                         .padding(end = 6.dp)
-                        .size(40.dp)
-                        .clickable { onToggleFavorite(album) },
+                        .size(40.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = if (album.isFavorite) Icons.Filled.Favorite
-                        else Icons.Filled.FavoriteBorder,
-                        contentDescription = null,
-                        tint = if (album.isFavorite) FavoriteRed
-                        else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    if (selection.isSelectionMode) {
+                        Box(
+                            Modifier.fillMaxSize().then(
+                                if (reorderEnabled) {
+                                    dragHandleModifier
+                                } else {
+                                    Modifier.clickable(onClick = onReorderBlocked)
+                                }
+                            ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.DragHandle,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                    alpha = if (reorderEnabled) 1f else 0.38f
+                                )
+                            )
+                        }
+                    } else {
+                        Box(
+                            Modifier.fillMaxSize().clickable { onToggleFavorite(album) },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = if (album.isFavorite) Icons.Filled.Favorite
+                                else Icons.Filled.FavoriteBorder,
+                                contentDescription = null,
+                                tint = if (album.isFavorite) FavoriteRed
+                                else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
                 Column(
                     Modifier
