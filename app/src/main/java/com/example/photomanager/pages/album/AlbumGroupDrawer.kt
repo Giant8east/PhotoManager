@@ -40,7 +40,9 @@ internal fun AlbumGroupDrawer(
     onGroupSelected: (Long?) -> Unit,
     onFavoritesSelected: () -> Unit,
     onManageGroups: () -> Unit,
-    onCloseDrawer: () -> Unit
+    onCloseDrawer: () -> Unit,
+    // 远端设备不共享收藏视图，抽屉里也就不出现这一项。
+    showFavorites: Boolean = true
 ) {
     DrawerFrame(
         title = stringResource(R.string.album_group_title),
@@ -63,17 +65,19 @@ internal fun AlbumGroupDrawer(
         AppLazyColumnScrollbar(state = listState) {
             LazyColumn(Modifier.fillMaxSize(), state = listState) {
                 item {
-                    Column {
-                        DrawerRow(
-                            label = stringResource(R.string.album_group_favorites),
-                            count = favoriteCount,
-                            selected = favoritesSelected,
-                            onClick = {
-                                onFavoritesSelected()
-                                onCloseDrawer()
-                            }
-                        )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    if (showFavorites) {
+                        Column {
+                            DrawerRow(
+                                label = stringResource(R.string.album_group_favorites),
+                                count = favoriteCount,
+                                selected = favoritesSelected,
+                                onClick = {
+                                    onFavoritesSelected()
+                                    onCloseDrawer()
+                                }
+                            )
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        }
                     }
                 }
                 item {

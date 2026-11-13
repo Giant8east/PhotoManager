@@ -49,24 +49,34 @@ fun AlbumDetailPage(
     )
 ) {
     BackHandler { navigator.pop() }
-    PageContent(viewModel.state, onRetry = viewModel::retryLoad) {
-        content -> AlbumDetailBody(navigator, content)
+    PageContent(viewModel.state, onRetry = viewModel::retryLoad) { content ->
+        AlbumDetailContent(
+            navigator = navigator,
+            content = content,
+            onRefreshDirectory = viewModel::refreshDirectory,
+            onToggleFavorite = viewModel::toggleFavorite,
+            onOpenViewer = { index ->
+                navigator.pushTo(useSafeArea = false) {
+                    PhotoViewerPage(navigator, content.album.id, index)
+                }
+            }
+        )
     }
 }
 
+/**
+ * 详情页正文，本地与远端共用同一套布局：封面、标题、操作卡、统计、画廊网格。
+ * 远端相册只把数据换成在线地址，并通过 [actionsEnabled] 关闭收藏与刷新。
+ */
 @SuppressLint("UnusedBoxWithConstraintsScope")
 @Composable
-private fun AlbumDetailBody(
+internal fun AlbumDetailContent(
     navigator: AppNavigator,
     content: AlbumDetailUiState,
-    viewModel: AlbumDetailViewModel = hiltViewModel<
-        AlbumDetailViewModel,
-        AlbumDetailViewModel.Factory
-        >(
-        creationCallback = {
-            it.create(content.album.id, content.album.albumPath)
-        }
-    )
+    onRefreshDirectory: ((Boolean) -> Unit) -> Unit,
+    onToggleFavorite: () -> Unit,
+    onOpenViewer: (Int) -> Unit,
+    actionsEnabled: Boolean = true
 ) {
     val currentAlbum = content.album
     val photos = content.photos
@@ -98,18 +108,17 @@ private fun AlbumDetailBody(
                         AlbumDetailHeader(
                             album = currentAlbum,
                             navigator = navigator,
-                            onRefreshDirectory = viewModel::refreshDirectory,
-                            onToggleFavorite = viewModel::toggleFavorite
-
+                            onRefreshDirectory = onRefreshDirectory,
+                            onToggleFavorite = onToggleFavorite,
+                            onOpenViewer = onOpenViewer,
+                            actionsEnabled = actionsEnabled
                         )
                     }
 
                     photoGridRows(items = photos, columns = columns, itemKey = { it.id }
                     ) { index, photo ->
                         Column(
-                            Modifier.clickable { navigator.pushTo(useSafeArea = false) {
-                                PhotoViewerPage(navigator, currentAlbum.id, index)
-                            } },
+                            Modifier.clickable { onOpenViewer(index) },
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             PhotoThumbnail(photo)
@@ -186,6 +195,8 @@ private fun AlbumDetailHeader(
     navigator: AppNavigator,
     onRefreshDirectory: ((Boolean) -> Unit) -> Unit,
     onToggleFavorite: () -> Unit,
+    onOpenViewer: (Int) -> Unit,
+    actionsEnabled: Boolean
 ) {
     val lastViewedIndex = album.lastViewedPhotoIndex
 
@@ -208,7 +219,7 @@ private fun AlbumDetailHeader(
                     Column(Modifier.weight(1f).padding(start = 16.dp)
                     ) {
                         Text(
-                            album.name, Modifier.fillMaxWidth().padding(end = 48.dp),
+                            album.name, Modifier.fillMaxWidth().padding(end = 16.dp),
                             color = appColors.headerContent,
                             style = TextStyle(fontSize = 20.sp, lineHeight = 24.sp),
                             maxLines = 5, overflow = TextOverflow.Ellipsis
@@ -235,6 +246,7 @@ private fun AlbumDetailHeader(
                     ) {
                         TextButton(
                             onClick = onToggleFavorite,
+                            enabled = actionsEnabled,
                             shape = RoundedCornerShape(0.dp),
                             contentPadding = PaddingValues(0.dp),
                             modifier = Modifier.weight(1f).fillMaxHeight()
@@ -251,11 +263,7 @@ private fun AlbumDetailHeader(
                         }
                         Box(Modifier.width(1.dp).height(32.dp).background(MaterialTheme.colorScheme.outlineVariant))
                         TextButton(
-                            onClick = {
-                                navigator.pushTo(useSafeArea = false) {
-                                    PhotoViewerPage(navigator, album.id, lastViewedIndex)
-                                }
-                            },
+                            onClick = { onOpenViewer(lastViewedIndex) },
                             shape = RoundedCornerShape(0.dp),
                             contentPadding = PaddingValues(0.dp),
                             modifier = Modifier.weight(1f).fillMaxHeight()
@@ -268,17 +276,19 @@ private fun AlbumDetailHeader(
             }
 
 
-            DropdownMenuButton(
-                modifier = Modifier.align(Alignment.TopEnd), tint = appColors.headerContent
-            ) { dismiss ->
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.album_detail_refresh)) },
-                    onClick = { dismiss()
-                        onRefreshDirectory { isAlbumAvailable ->
-                            if (!isAlbumAvailable) navigator.pop()
+            if (actionsEnabled) {
+                DropdownMenuButton(
+                    modifier = Modifier.align(Alignment.TopEnd), tint = appColors.headerContent
+                ) { dismiss ->
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.album_detail_refresh)) },
+                        onClick = { dismiss()
+                            onRefreshDirectory { isAlbumAvailable ->
+                                if (!isAlbumAvailable) navigator.pop()
+                            }
                         }
-                    }
-                )
+                    )
+                }
             }
 
         }

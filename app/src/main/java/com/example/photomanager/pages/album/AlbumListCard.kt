@@ -73,6 +73,10 @@ internal fun AlbumListCard(
     reorderEnabled: Boolean,
     onReorderBlocked: () -> Unit,
     modifier: Modifier = Modifier,
+    // 远端相册复用同一张卡片：点击交给调用方，多选与收藏按需关闭。
+    onCardClick: (() -> Unit)? = null,
+    showFavorite: Boolean = true,
+    selectionEnabled: Boolean = true
 ) {
     val selected = album.id in selection.selectedIds
     val context = LocalContext.current
@@ -85,13 +89,13 @@ internal fun AlbumListCard(
             .fillMaxWidth()
             .combinedClickable(
                 onClick = {
-                    if (selection.isSelectionMode) {
-                        selection.toggle(album.id)
-                    } else {
-                        navigator.pushTo { AlbumDetailPage(navigator, album) }
+                    when {
+                        selectionEnabled && selection.isSelectionMode -> selection.toggle(album.id)
+                        onCardClick != null -> onCardClick()
+                        else -> navigator.pushTo { AlbumDetailPage(navigator, album) }
                     }
                 },
-                onLongClick = { selection.enter(album.id) }
+                onLongClick = { if (selectionEnabled) selection.enter(album.id) }
             )
     ) {
         Card(
@@ -154,7 +158,7 @@ internal fun AlbumListCard(
                         .size(40.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (selection.isSelectionMode) {
+                    if (selectionEnabled && selection.isSelectionMode) {
                         Box(
                             Modifier.fillMaxSize().then(
                                 if (reorderEnabled) {
@@ -173,7 +177,7 @@ internal fun AlbumListCard(
                                 )
                             )
                         }
-                    } else {
+                    } else if (showFavorite) {
                         Box(
                             Modifier.fillMaxSize().clickable { onToggleFavorite(album) },
                             contentAlignment = Alignment.Center
