@@ -21,5 +21,5 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "PhotoManager"
-include(":app")
+include(":app")
  
