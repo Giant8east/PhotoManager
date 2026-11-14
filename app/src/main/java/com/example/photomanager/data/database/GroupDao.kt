@@ -29,6 +29,21 @@ interface GroupDao {
     @Query("SELECT COUNT(*) FROM albums WHERE groupId IS NULL")
     fun observeUngroupedAlbumCount(): Flow<Int>
 
+    /** 共享视图的一次性分组统计 */
+    @Query(
+        """
+        SELECT g.*, COUNT(a.id) AS albumCount
+        FROM `groups` AS g
+        LEFT JOIN albums AS a ON a.groupId = g.id
+        GROUP BY g.id
+        ORDER BY g.sortOrder ASC, g.name ASC
+        """
+    )
+    suspend fun queryGroupWithAlbumCounts(): List<GroupWithAlbumCount>
+
+    @Query("SELECT COUNT(*) FROM albums WHERE groupId IS NULL")
+    suspend fun queryUngroupedAlbumCount(): Int
+
     @Query("SELECT * FROM groups ORDER BY sortOrder ASC, name ASC")
     suspend fun queryGroups(): List<GroupEntity>
 

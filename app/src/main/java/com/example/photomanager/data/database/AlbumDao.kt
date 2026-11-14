@@ -19,6 +19,10 @@ interface AlbumDao {
     @RawQuery(observedEntities = [AlbumEntity::class])
     fun observeAlbumQuery(query: SupportSQLiteQuery): Flow<List<AlbumEntity>>
 
+    /** 共享视图的一次性查询；SQL */
+    @RawQuery
+    suspend fun queryAlbums(query: SupportSQLiteQuery): List<AlbumEntity>
+
     @Query("SELECT COUNT(*) FROM albums WHERE photoCount > 0")
     fun observeValidAlbumCount(): Flow<Int>
 
