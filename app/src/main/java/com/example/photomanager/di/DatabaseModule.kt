@@ -22,5 +22,7 @@ object DatabaseModule {
         context,
         PhotoDatabase::class.java,
         "photo_manager.db"
-    ).build()
+    )
+        .addMigrations(PhotoDatabase.MIGRATION_10_11)
+        .build()
 }

@@ -5,6 +5,7 @@ import androidx.room.withTransaction
 import androidx.sqlite.db.SimpleSQLiteQuery
 import com.example.photomanager.data.database.AlbumDetailRecord
 import com.example.photomanager.data.database.AlbumEntity
+import com.example.photomanager.data.database.GroupWithAlbumCount
 import com.example.photomanager.data.database.PhotoDatabase
 import com.example.photomanager.data.database.PhotoEntity
 import kotlinx.coroutines.Dispatchers
@@ -49,6 +50,11 @@ class AlbumData @Inject constructor(
         val filterClause: String
         val filterArgs: Array<Any?>
         when {
+            // 共享视图：跨全部分组，不叠加任何筛选
+            query.allGroups -> {
+                filterClause = ""
+                filterArgs = emptyArray()
+            }
             hasKeyword -> {
                 filterClause = ""
                 filterArgs = emptyArray()
@@ -296,8 +302,42 @@ class AlbumData @Inject constructor(
         }
     }
 
-    /** 扫描完成但被删除屏障拒绝写入时的内部结果。 */
-    private sealed interface RefreshOutcome {
+    // ---- 局域网共享快照（一次性只读查询，不订阅数据库变化） ----
+
+    /**
+     * 共享视图的相册快照：跨全部分组，排序复用与本地列表相同的 SQL 构建。
+     * [sortField] 已由协议层把线上枚举转换成本地枚举。
+     */
+    suspend fun shareAlbums(sortField: AlbumSortField, descending: Boolean): List<AlbumEntity> =
+        database.albumDao().queryAlbums(
+            buildAlbumQuery(
+                AlbumQuery(
+                    groupId = null,
+                    keyword = "",
+                    sortField = sortField,
+                    isDescending = descending,
+                    allGroups = true
+                )
+            )
+        )
+
+    suspend fun shareAlbumPhotos(albumId: Long): List<PhotoEntity> =
+        database.photoDao().queryPhotosByAlbumId(albumId)
+
+    suspend fun sharePhoto(photoId: Long): PhotoEntity? =
+        database.photoDao().queryPhotoById(photoId)
+
+    /** 封面取文件名排序后的第一张，与本地相册卡片一致。 */
+    suspend fun shareAlbumCoverPhoto(albumId: Long): PhotoEntity? =
+        database.photoDao().queryAlbumCoverPhoto(albumId)
+
+    suspend fun shareGroups(): List<GroupWithAlbumCount> =
+        database.groupDao().queryGroupWithAlbumCounts()
+
+    suspend fun shareUngroupedAlbumCount(): Int =
+        database.groupDao().queryUngroupedAlbumCount()
+
+    /** 扫描完成但被删除屏障拒绝写入时的内部结果。 */    private sealed interface RefreshOutcome {
         data class Scanned(val album: ScannedAlbum?) : RefreshOutcome
         data object Skipped : RefreshOutcome
     }

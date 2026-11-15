@@ -1,4 +1,4 @@
-/** 相册列表查询参数，集中承载分组、收藏、关键词和排序条件，避免查询入口重复展开同一组参数。 */
+/** 相册列表的查询条件：分组、关键词、排序，以及共享视图的"全部分组"标记。 */
 package com.example.photomanager.data
 
 data class AlbumQuery(
@@ -7,5 +7,10 @@ data class AlbumQuery(
     val sortField: AlbumSortField,
     val isDescending: Boolean,
     /** 只返回已收藏相册；与 [groupId] 互斥，由 ViewModel 保证。 */
-    val favoritesOnly: Boolean = false
+    val favoritesOnly: Boolean = false,
+    /**
+     * 共享视图：忽略分组、收藏与关键词，返回全部有图相册。
+     * 与 [favoritesOnly]、[groupId] 同时为默认值时，表示"未分组视图"。
+     */
+    val allGroups: Boolean = false
 )
