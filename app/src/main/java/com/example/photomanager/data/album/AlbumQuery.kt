@@ -1,5 +1,5 @@
 /** 相册列表的查询条件：分组、关键词、排序，以及共享视图的"全部分组"标记。 */
-package com.example.photomanager.data
+package com.example.photomanager.data.album
 
 data class AlbumQuery(
     val groupId: Long?,
