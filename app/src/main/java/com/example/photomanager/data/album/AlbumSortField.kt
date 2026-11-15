@@ -1,5 +1,5 @@
 /** 限定相册排序字段，避免将外部输入作为 SQL 列名执行。 */
-package com.example.photomanager.data
+package com.example.photomanager.data.album
 
 import com.example.photomanager.R
 import androidx.annotation.StringRes
