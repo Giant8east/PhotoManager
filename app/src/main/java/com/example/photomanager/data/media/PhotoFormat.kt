@@ -1,5 +1,5 @@
 /** 图片文件格式归一化，供数据层和展示层判断缩略图能力。 */
-package com.example.photomanager.data
+package com.example.photomanager.data.media
 
 import java.util.Locale
 
