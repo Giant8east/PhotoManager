@@ -10,7 +10,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.photomanager.R
-import com.example.photomanager.data.GroupData
+import com.example.photomanager.data.group.GroupData
 import com.example.photomanager.data.database.GroupEntity
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext

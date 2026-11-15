@@ -11,7 +11,8 @@ import com.example.photomanager.data.database.PhotoEntity
 import kotlinx.coroutines.Job
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.photomanager.data.AlbumData
+import com.example.photomanager.data.album.AlbumData
+import com.example.photomanager.data.album.AlbumSyncData
 import com.example.photomanager.data.database.AlbumEntity
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -23,6 +24,7 @@ import dagger.assisted.AssistedInject
 @HiltViewModel(assistedFactory = AlbumDetailViewModel.Factory::class)
 class AlbumDetailViewModel @AssistedInject constructor(
     private val albumData: AlbumData,
+    private val albumSyncData: AlbumSyncData,
     @ApplicationContext private val context: Context,
     @Assisted private val albumId: Long,
     @Assisted private val albumPath: String
@@ -67,7 +69,7 @@ class AlbumDetailViewModel @AssistedInject constructor(
         if (refreshJob?.isActive == true) return
         refreshJob = viewModelScope.launch {
             try {
-                val isAlbumAvailable = albumData.refreshAlbum(albumPath)
+                val isAlbumAvailable = albumSyncData.refreshAlbum(albumPath)
                 val messageRes = if (isAlbumAvailable) R.string.album_refresh_success
                 else R.string.album_record_removed
                 Toast.makeText(context, messageRes, Toast.LENGTH_SHORT).show()

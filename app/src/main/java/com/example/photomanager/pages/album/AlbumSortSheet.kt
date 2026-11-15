@@ -32,7 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.photomanager.R
-import com.example.photomanager.data.AlbumSortField
+import com.example.photomanager.data.album.AlbumSortField
 import com.example.photomanager.pages.common.SheetFrame
 
 @Composable

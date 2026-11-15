@@ -12,7 +12,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.photomanager.data.PhotoFormat
+import com.example.photomanager.data.media.PhotoFormat
 
 @Composable
 internal fun PhotoFormatBadge(
