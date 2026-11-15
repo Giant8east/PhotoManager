@@ -66,7 +66,7 @@ fun Application.lanModule(...)
 
 ```kotlin
 /** 相册数据库实体，保存目录相册的展示信息、路径和所属分组。 */
-package com.example.photomanager.data.database
+package com.giant8east.photomanager.data.database
 ```
 
 ## ViewModel 规范
