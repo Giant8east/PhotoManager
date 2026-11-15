@@ -1,5 +1,5 @@
 /** 分组数据入口，负责分组查询、创建、重命名、排序和删除。 */
-package com.example.photomanager.data
+package com.example.photomanager.data.group
 
 import androidx.room.withTransaction
 import com.example.photomanager.data.database.GroupEntity
