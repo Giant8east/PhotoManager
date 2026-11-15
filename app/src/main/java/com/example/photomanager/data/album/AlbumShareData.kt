@@ -17,17 +17,23 @@ class AlbumShareData @Inject constructor(
 ) {
     /**
      * 共享视图的相册快照：跨全部分组，排序复用与本地列表相同的 SQL 构建。
-     * [sortField] 已由协议层把线上枚举转换成本地枚举。
+     * [sortField] 已由协议层把线上枚举转换成本地枚举；
+     * [keyword] 非空时走"全局搜索"分支（忽略分组），与本地搜索行为一致。
      */
-    suspend fun albums(sortField: AlbumSortField, descending: Boolean): List<AlbumEntity> =
+    suspend fun albums(
+        sortField: AlbumSortField,
+        descending: Boolean,
+        keyword: String
+    ): List<AlbumEntity> =
         database.albumDao().queryAlbums(
             AlbumQueryBuilder.build(
                 AlbumQuery(
                     groupId = null,
-                    keyword = "",
+                    keyword = keyword,
                     sortField = sortField,
                     isDescending = descending,
-                    allGroups = true
+                    // 有关键词时由 build 的"全局搜索"分支接管，这里只在无关键词时跨分组
+                    allGroups = keyword.isEmpty()
                 )
             )
         )
