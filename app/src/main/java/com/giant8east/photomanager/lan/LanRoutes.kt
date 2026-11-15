@@ -125,7 +125,10 @@ fun Application.lanModule(
                     }
                 }
 
-                call.respond(dataSource.albums(sort, descending))
+                // 关键词：空白视为"没有搜索"，避免 q="" 走成 LIKE '%%' 全匹配
+                val query = call.request.queryParameters["q"]?.trim()?.takeIf { it.isNotEmpty() }
+
+                call.respond(dataSource.albums(sort, descending, query))
             }
 
             // 分组 + 计数 + 未分组数量（不含收藏视图）

@@ -148,7 +148,11 @@ class LanDtosTest {
     @Test
     fun `假数据源可以替代 Android 实现`() = runBlocking {
         val source = object : ShareDataSource {
-            override suspend fun albums(sortField: LanSortField?, descending: Boolean?): LanAlbumListDto =
+            override suspend fun albums(
+                sortField: LanSortField?,
+                descending: Boolean?,
+                query: String?
+            ): LanAlbumListDto =
                 LanAlbumListDto(
                     albums = listOf(
                         LanAlbumDto(1, "a", 2, 3, groupId = null, coverUrl = null, modifiedAt = null)
@@ -169,7 +173,7 @@ class LanDtosTest {
                 if (photoId == 9L) MediaFile(path = "/tmp/p.png", name = "p.png", sizeBytes = 1) else null
         }
 
-        val listed = source.albums(LanSortField.NAME, descending = true)
+        val listed = source.albums(LanSortField.NAME, descending = true, query = null)
         assertEquals(1, listed.albums.size)
         assertEquals(LanSortField.NAME, listed.sortField)
         assertTrue(listed.sortDescending)

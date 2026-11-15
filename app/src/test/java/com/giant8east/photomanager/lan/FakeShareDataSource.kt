@@ -1,7 +1,7 @@
 /** 测试用假数据源：路由测试只关心协议，不需要真实数据库。 */
 package com.giant8east.photomanager.lan
 
-/** 内存实现：记录最近一次排序参数，方便断言路由是否正确传参。 */
+/** 内存实现：记录最近一次查询参数，方便断言路由是否正确传参。 */
 internal class FakeShareDataSource(
     private val albums: List<LanAlbumDto> = emptyList(),
     private val defaultSort: LanSortField = LanSortField.CUSTOM,
@@ -15,12 +15,25 @@ internal class FakeShareDataSource(
         private set
     var lastDescending: Boolean? = null
         private set
+    var lastQuery: String? = null
+        private set
 
-    override suspend fun albums(sortField: LanSortField?, descending: Boolean?): LanAlbumListDto {
+    override suspend fun albums(
+        sortField: LanSortField?,
+        descending: Boolean?,
+        query: String?
+    ): LanAlbumListDto {
         lastSort = sortField
         lastDescending = descending
+        lastQuery = query
+        // 假数据源也做一次最小过滤，让"搜索只返回命中项"的断言有意义
+        val matched = if (query.isNullOrEmpty()) {
+            albums
+        } else {
+            albums.filter { it.name.contains(query, ignoreCase = true) }
+        }
         return LanAlbumListDto(
-            albums = albums,
+            albums = matched,
             defaultSortField = defaultSort,
             defaultSortDescending = defaultDescending,
             sortField = sortField ?: defaultSort,

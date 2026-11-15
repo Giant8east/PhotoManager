@@ -25,9 +25,14 @@ interface ShareDataSource {
      *
      * 参数为 null 表示"使用宿主默认排序"：由实现方读取宿主的排序设置补齐，
      * 这样路由层不需要知道宿主的设置存在哪里。
+     * [query] 非空时按关键词过滤（与本地搜索同一套 SQL 语义，且忽略分组筛选）。
      * 返回值同时携带宿主默认排序（`defaultSort*`）与本次实际排序（`sort*`）。
      */
-    suspend fun albums(sortField: LanSortField?, descending: Boolean?): LanAlbumListDto
+    suspend fun albums(
+        sortField: LanSortField?,
+        descending: Boolean?,
+        query: String?
+    ): LanAlbumListDto
 
     suspend fun groups(): LanGroupListDto
 

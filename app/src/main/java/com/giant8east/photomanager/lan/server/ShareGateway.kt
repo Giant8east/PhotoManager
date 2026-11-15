@@ -28,14 +28,23 @@ class ShareGateway @Inject constructor(
     /**
      * 相册列表：请求参数为 null 时使用宿主当前的排序设置。
      * 响应同时带回"宿主默认排序"与"本次实际排序"，让远端能初始化/恢复默认。
+     * [query] 非空时按关键词搜索，忽略分组筛选（与本地搜索一致）。
      */
-    override suspend fun albums(sortField: LanSortField?, descending: Boolean?): LanAlbumListDto {
+    override suspend fun albums(
+        sortField: LanSortField?,
+        descending: Boolean?,
+        query: String?
+    ): LanAlbumListDto {
         val hostSettings = settingsData.observeSettings().first()
         val defaultSort = hostSettings.sortField.toLanSort()
         val appliedSort = sortField ?: defaultSort
         val appliedDescending = descending ?: hostSettings.isDescending
 
-        val albums = shareData.albums(appliedSort.toAlbumSort(), appliedDescending)
+        val albums = shareData.albums(
+            sortField = appliedSort.toAlbumSort(),
+            descending = appliedDescending,
+            keyword = query.orEmpty()
+        )
         return LanAlbumListDto(
             albums = albums.map { album -> album.toDto() },
             defaultSortField = defaultSort,

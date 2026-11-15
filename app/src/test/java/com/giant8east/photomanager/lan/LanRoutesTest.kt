@@ -104,6 +104,57 @@ class LanRoutesTest {
     }
 
     @Test
+    fun `关键词搜索只返回命中项`() = testApplication {
+        val source = FakeShareDataSource(
+            albums = listOf(
+                LanAlbumDto(1, "pengyoo", 1, 1, null, null, null),
+                LanAlbumDto(2, "其他相册", 1, 1, null, null, null)
+            )
+        )
+        install(source)
+        val response = client.get("/v1/albums?q=peng") {
+            header(TOKEN_HEADER, auth())
+        }
+        assertEquals(HttpStatusCode.OK, response.status)
+
+        val body = Json.decodeFromString<LanAlbumListDto>(response.bodyAsText())
+        assertEquals(1, body.albums.size)
+        assertEquals("pengyoo", body.albums.first().name)
+        assertEquals("peng", source.lastQuery)
+    }
+
+    @Test
+    fun `空白关键词等同未传`() = testApplication {
+        val source = FakeShareDataSource(
+            albums = listOf(LanAlbumDto(1, "a", 1, 1, null, null, null))
+        )
+        install(source)
+        // 纯空格：路由 trim 后视为没有搜索，避免走成 LIKE '%%'
+        val response = client.get("/v1/albums?q=%20%20") {
+            header(TOKEN_HEADER, auth())
+        }
+        assertEquals(HttpStatusCode.OK, response.status)
+        val body = Json.decodeFromString<LanAlbumListDto>(response.bodyAsText())
+        assertEquals(1, body.albums.size)
+        assertNull(source.lastQuery)
+    }
+
+    @Test
+    fun `关键词与排序可以组合`() = testApplication {
+        val source = FakeShareDataSource(
+            albums = listOf(LanAlbumDto(1, "peng", 1, 1, null, null, null))
+        )
+        install(source)
+        val response = client.get("/v1/albums?q=peng&sort=photoCount&desc=true") {
+            header(TOKEN_HEADER, auth())
+        }
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertEquals("peng", source.lastQuery)
+        assertEquals(LanSortField.PHOTO_COUNT, source.lastSort)
+        assertEquals(true, source.lastDescending)
+    }
+
+    @Test
     fun `非法排序字段返回 400`() = testApplication {
         install(FakeShareDataSource())
         val response = client.get("/v1/albums?sort=bogus") {
