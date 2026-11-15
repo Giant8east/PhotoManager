@@ -1,5 +1,8 @@
 /** 应用级相册删除协调器：持有长删除任务，暴露进度并协调扫描写库屏障。 */
-package com.example.photomanager.data
+package com.example.photomanager.data.delete
+
+import com.example.photomanager.data.album.AlbumData
+import com.example.photomanager.data.scan.DirectoryScanner
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
