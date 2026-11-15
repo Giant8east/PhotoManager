@@ -8,7 +8,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.photomanager"
+    namespace = "com.giant8east.photomanager"
     compileSdk = 34
 
     defaultConfig {
@@ -54,13 +54,13 @@ android {
 
 dependencies {
     implementation(libs.kotlinx.serialization.json)
-
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.cio)
     implementation(libs.ktor.server.content.negotiation)
     implementation(libs.ktor.server.partial.content)
     implementation(libs.ktor.server.auto.head.response)
     implementation(libs.ktor.serialization.kotlinx.json)
+
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -72,7 +72,10 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(libs.androidx.drawerlayout)
     implementation("com.github.seven332:drawerlayout:ea2bb388f0")
+    implementation(libs.reorderable)
+    implementation(libs.lazy.column.scrollbar)
     implementation(libs.androidx.material.icons.core)
+    implementation(libs.androidx.material.icons.extended)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.hilt.android)
     implementation(libs.androidx.hilt.navigation.compose)
@@ -86,8 +89,7 @@ dependencies {
     kapt(libs.androidx.room.compiler)
     testImplementation(libs.junit)
     testImplementation(libs.ktor.server.test.host)
-    testImplementation(libs.ktor.server.test.host)
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
+    androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.ui.test.junit4)
