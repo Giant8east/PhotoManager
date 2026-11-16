@@ -5,7 +5,6 @@ import androidx.room.withTransaction
 import com.giant8east.photomanager.data.database.AlbumEntity
 import com.giant8east.photomanager.data.database.PhotoDatabase
 import com.giant8east.photomanager.data.database.PhotoEntity
-import com.giant8east.photomanager.data.delete.DeletionGate
 import com.giant8east.photomanager.data.scan.DirectoryScanner
 import com.giant8east.photomanager.data.scan.ScannedAlbum
 import java.io.File
@@ -24,8 +23,7 @@ import kotlinx.coroutines.withContext
 @Singleton
 class AlbumSyncData @Inject constructor(
     private val database: PhotoDatabase,
-    private val directoryScanner: DirectoryScanner,
-    private val deletionGate: DeletionGate
+    private val directoryScanner: DirectoryScanner
 ) {
     /** 遍历同步整个根目录；目录扫描最多并行 [MAX_CONCURRENT_DIRECTORIES] 个。 */
     suspend fun syncDirectory(rootPath: String) = withContext(Dispatchers.IO) {
@@ -49,12 +47,10 @@ class AlbumSyncData @Inject constructor(
                 scope.launch {
                     limiter.withPermit {
                         currentCoroutineContext().ensureActive()
-                        val outcome = refreshDirectory(path)
+                        val scanned = scanAndWrite(path)
                         remainingPaths.remove(path)
-                        if (outcome is RefreshOutcome.Scanned) {
-                            outcome.album?.children?.forEach { child ->
-                                schedule(DirectoryScanner.normalizePath(child.path))
-                            }
+                        scanned?.children?.forEach { child ->
+                            schedule(DirectoryScanner.normalizePath(child.path))
                         }
                     }
                 }
@@ -68,34 +64,39 @@ class AlbumSyncData @Inject constructor(
                 launch {
                     limiter.withPermit {
                         currentCoroutineContext().ensureActive()
-                        refreshDirectory(stalePath)
+                        scanAndWrite(stalePath)
                     }
                 }
             }
         }
     }
 
-    /** 单相册刷新入口：返回刷新后目录是否仍有图片；删除中的路径不产生数据库写入。 */
-    suspend fun refreshAlbum(path: String): Boolean = withContext(Dispatchers.IO) {
-        when (val outcome = refreshDirectory(DirectoryScanner.normalizePath(path))) {
-            is RefreshOutcome.Scanned -> outcome.album?.photos?.isNotEmpty() == true
-            RefreshOutcome.Skipped -> true
-        }
-    }
+    /** 单相册刷新入口：返回刷新后目录是否仍有图片。 */
+    suspend fun refreshAlbum(path: String): Boolean = scanFolder(path)
 
-    /** 扫描单个目录并提交；删除屏障命中时返回 Skipped，不删除也不写入记录。 */
-    private suspend fun refreshDirectory(path: String): RefreshOutcome {
+    /**
+     * 扫描单个文件夹并把结果写进数据库；返回该文件夹是否仍有图片。
+     *
+     * 调度器的扫描任务只走这个入口，所以"文件夹里没有图片就删掉记录"只有这里在写。
+     */
+    suspend fun scanFolder(path: String): Boolean =
+        scanAndWrite(path)?.photos?.isNotEmpty() == true
+
+    /**
+     * 扫描单个目录并写库，返回扫描结果；`null` 表示目录里已经没有图片、记录已删除。
+     *
+     * 返回 null 时调用方不该再派生它的子目录：目录本身都不算相册了。
+     */
+    private suspend fun scanAndWrite(path: String): ScannedAlbum? = withContext(Dispatchers.IO) {
         val normalized = DirectoryScanner.normalizePath(path)
-        val ticket = deletionGate.beginRefresh(normalized) ?: return RefreshOutcome.Skipped
         val scanned = directoryScanner.scanAlbum(File(normalized))
-        val committed = deletionGate.commit(ticket) {
-            if (scanned == null || scanned.photos.isEmpty()) {
-                database.albumDao().deleteAlbumByPath(normalized)
-            } else {
-                saveScannedAlbum(scanned)
-            }
+        if (scanned == null || scanned.photos.isEmpty()) {
+            database.albumDao().deleteAlbumByPath(normalized)
+            null
+        } else {
+            saveScannedAlbum(scanned)
+            scanned
         }
-        return if (committed) RefreshOutcome.Scanned(scanned) else RefreshOutcome.Skipped
     }
 
     /** 在同一事务中确定新增或差分更新，避免重复导入创建第二条相册记录并保持图片 ID 稳定。 */
@@ -161,12 +162,6 @@ class AlbumSyncData @Inject constructor(
         if (updatedAlbum != existing) {
             database.albumDao().updateAlbums(listOf(updatedAlbum))
         }
-    }
-
-    /** 扫描完成但被删除屏障拒绝写入时的内部结果。 */
-    private sealed interface RefreshOutcome {
-        data class Scanned(val album: ScannedAlbum?) : RefreshOutcome
-        data object Skipped : RefreshOutcome
     }
 
     companion object {
