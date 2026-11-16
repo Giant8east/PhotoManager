@@ -1,12 +1,10 @@
-/** 相册数据入口：查询观察、分组/排序等写操作与相册记录删除；扫描同步见 AlbumSyncData。 */
+/** 相册数据入口：查询观察、分组/排序等写操作与相册记录移除；扫描同步见 AlbumSyncData。 */
 package com.giant8east.photomanager.data.album
 
-import androidx.room.withTransaction
 import com.giant8east.photomanager.data.database.AlbumDetailRecord
 import com.giant8east.photomanager.data.database.AlbumEntity
 import com.giant8east.photomanager.data.database.PhotoDatabase
 import com.giant8east.photomanager.data.database.PhotoEntity
-import com.giant8east.photomanager.data.delete.DeletionGate
 import com.giant8east.photomanager.data.scan.DirectoryScanner
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -18,8 +16,7 @@ import kotlinx.coroutines.withContext
 
 @Singleton
 class AlbumData @Inject constructor(
-    private val database: PhotoDatabase,
-    private val deletionGate: DeletionGate
+    private val database: PhotoDatabase
 ) {
     /** 构造相册查询并持续观察数据库变化。 */
     fun observeAlbums(query: AlbumQuery): Flow<List<AlbumEntity>> =
@@ -75,22 +72,12 @@ class AlbumData @Inject constructor(
     suspend fun updateReadingProgress(albumId: Long, photoIndex: Int) =
         database.albumDao().updateAlbumReadingProgress(albumId, photoIndex)
 
-    /** 删除指定扫描目录下由调用方确认的相册记录；文件删除由更高层协调器负责。 */
-    suspend fun deleteAlbumsByIds(ids: List<Long>) = withContext(Dispatchers.IO) {
-        database.withTransaction {
-            ids.forEach { database.albumDao().deleteAlbum(it) }
-        }
-    }
-
-    /** 删除指定扫描目录及其子目录对应的相册记录。 */
-    suspend fun deleteAlbumsUnderPath(path: String) = withContext(Dispatchers.IO) {
+    /** 移除指定扫描目录及其子目录对应的相册记录；只动索引，磁盘文件由删除任务负责。 */
+    suspend fun unindexAlbumsUnderPath(path: String) = withContext(Dispatchers.IO) {
         val normalized = DirectoryScanner.normalizePath(path)
-        val ticket = deletionGate.beginRefresh(normalized) ?: return@withContext
-        deletionGate.commit(ticket) {
-            database.albumDao().deleteAlbumsUnderPath(
-                normalized,
-                DirectoryScanner.childPathPrefix(normalized)
-            )
-        }
+        database.albumDao().deleteAlbumsUnderPath(
+            normalized,
+            DirectoryScanner.childPathPrefix(normalized)
+        )
     }
 }
