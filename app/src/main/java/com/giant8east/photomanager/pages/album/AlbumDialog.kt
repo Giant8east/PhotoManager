@@ -30,7 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.giant8east.photomanager.R
-import com.giant8east.photomanager.data.DeleteResult
+import com.giant8east.photomanager.data.delete.DeleteResult
 import com.giant8east.photomanager.pages.common.AppDialog
 import com.giant8east.photomanager.pages.common.AppLazyColumnScrollbar
 import com.giant8east.photomanager.pages.common.DeleteProgressDialog

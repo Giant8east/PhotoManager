@@ -15,8 +15,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.giant8east.photomanager.R
-import com.giant8east.photomanager.data.DeleteResult
-import com.giant8east.photomanager.data.DeleteState
+import com.giant8east.photomanager.data.delete.DeleteResult
+import com.giant8east.photomanager.data.delete.DeleteState
 
 @Composable
 internal fun DeleteProgressDialog(
