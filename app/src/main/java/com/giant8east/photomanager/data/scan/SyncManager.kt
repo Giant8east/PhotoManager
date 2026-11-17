@@ -1,12 +1,8 @@
 /** 应用级目录同步协调器：脱离设置页面生命周期，统一持有同步任务和状态。 */
 package com.giant8east.photomanager.data.scan
 
-import com.giant8east.photomanager.data.album.AlbumData
 import com.giant8east.photomanager.data.album.AlbumSyncData
-import com.giant8east.photomanager.data.settings.SettingData
-
 import android.net.Uri
-import com.giant8east.photomanager.data.settings.SettingDirectory
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -31,9 +27,9 @@ data class SyncState(
 
 @Singleton
 class SyncManager @Inject constructor(
-    private val albumData: AlbumData,
     private val albumSyncData: AlbumSyncData,
-    private val settingData: SettingData
+    private val scanRootsData: ScanRootsData,
+    private val directoryScanner: DirectoryScanner
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val _state = MutableStateFlow(SyncState())
@@ -54,16 +50,21 @@ class SyncManager @Inject constructor(
 
     /** 解析并添加目录；添加成功后重新同步全部已配置目录。 */
     fun addDirectory(uri: Uri) = start("all") {
-        val path = settingData.resolvePath(uri)
-        if (settingData.addDirectory(path)) {
+        val path = directoryScanner.resolveDirectoryPath(uri)
+        if (scanRootsData.addRoot(path)) {
             syncAllDirectoriesNow()
         }
     }
 
-    /** 移除目录配置及其相册记录，然后同步剩余目录。 */
-    fun removeDirectory(directory: SettingDirectory) = start("all") {
-        settingData.removeDirectory(directory.path)
-        albumData.deleteAlbumsUnderPath(directory.path)
+    /**
+     * 移除目录配置、清掉它在索引里的记录，然后同步剩余目录。
+     *
+     * 顺序不能反过来：先撤配置，后面的全量同步才不会把它重新扫回来。
+     * 索引清理要等任务真正跑完再同步，否则扫描可能把记录写回来。
+     */
+    fun removeDirectory(directory: ScanRoot) = start("all") {
+        scanRootsData.removeRoot(directory.path)
+        albumSyncData.unindexDirectory(directory.path)
         syncAllDirectoriesNow()
     }
 
@@ -110,7 +111,7 @@ class SyncManager @Inject constructor(
 
     /** 按配置顺序逐个同步全部目录；调用方负责保证运行在 IO 作用域。 */
     private suspend fun syncAllDirectoriesNow() {
-        settingData.directories.first().forEach { directory ->
+        scanRootsData.roots.first().forEach { directory ->
             albumSyncData.syncDirectory(directory.path)
         }
     }
