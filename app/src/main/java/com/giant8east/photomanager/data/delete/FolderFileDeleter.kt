@@ -5,10 +5,8 @@ import com.giant8east.photomanager.data.media.PhotoFormat
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.withContext
 
 /**
  * 本层删除结果。
@@ -39,16 +37,15 @@ class FolderFileDeleter @Inject constructor() {
     suspend fun deleteLocalFiles(
         root: File,
         onProgress: (deletedFiles: Long, failedFiles: Int) -> Unit
-    ): LocalDeleteResult = withContext(Dispatchers.IO) {
-        // 先拿到当前协程再切线程：扫描/删除中途被取消时要能抛出去
+    ): LocalDeleteResult {
+        // 先拿到当前协程：扫描/删除中途被取消时要能抛出去
         val context = currentCoroutineContext()
         // 目录已经不在了：没有文件可删，也不算失败（记录交给后面的扫描清掉）
         if (!root.isDirectory) {
-            return@withContext LocalDeleteResult(0, 0)
+            return LocalDeleteResult(0, 0)
         }
-        // listFiles 返回 null 表示有读权限问题：按一个失败上报，不能当成"删干净了"
-        val entries = root.listFiles()
-            ?: return@withContext LocalDeleteResult(0, 1)
+        // 读不到目录内容属于权限问题：按一个失败上报，不能当成"删干净了"
+        val entries = root.listFiles() ?: return LocalDeleteResult(0, 1)
 
         var deletedFiles = 0L
         var failedFiles = 0
@@ -73,14 +70,14 @@ class FolderFileDeleter @Inject constructor() {
             root.delete()
         }
 
-        LocalDeleteResult(deletedFiles, failedFiles)
+        return LocalDeleteResult(deletedFiles, failedFiles)
     }
 
     /** 图片按扩展名判断（与相册扫描的判据一致），另外所有点文件也算可删（含 .nomedia / .thumb）。 */
     private fun isDeletableFileName(name: String): Boolean =
         name.startsWith(".") || PhotoFormat.fromFileName(name) != PhotoFormat.OTHER
 
-    /** 删除单个文件；失败（权限、占用）由调用方计数并上报，不在这里吞掉。 */
+    /** 删除失败不抛异常，交给调用方统计成 failedFiles。 */
     private fun deleteFile(file: File): Boolean =
         runCatching { file.delete() }.getOrDefault(false)
 }
