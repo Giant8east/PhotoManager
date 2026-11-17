@@ -9,8 +9,9 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.giant8east.photomanager.R
-import com.giant8east.photomanager.data.settings.SettingData
-import com.giant8east.photomanager.data.SettingDirectory
+import com.giant8east.photomanager.data.album.AlbumData
+import com.giant8east.photomanager.data.scan.ScanRoot
+import com.giant8east.photomanager.data.scan.ScanRootsData
 import com.giant8east.photomanager.data.scan.SyncManager
 import com.giant8east.photomanager.ui.state.UiText
 import com.giant8east.photomanager.ui.state.toUiText
@@ -24,10 +25,11 @@ import kotlinx.coroutines.launch
 
 @HiltViewModel
 class LocalImportViewModel @Inject constructor(
-    private val settingData: SettingData,
+    private val scanRootsData: ScanRootsData,
+    private val albumData: AlbumData,
     private val syncManager: SyncManager
 ) : ViewModel() {
-    var directories by mutableStateOf<List<SettingDirectory>>(emptyList())
+    var directories by mutableStateOf<List<ScanRoot>>(emptyList())
         private set
     var validAlbumCount by mutableIntStateOf(0)
         private set
@@ -61,8 +63,8 @@ class LocalImportViewModel @Inject constructor(
         isLoading = directories.isEmpty()
         settingsJob = viewModelScope.launch {
             combine(
-                settingData.directories,
-                settingData.validAlbumCount
+                scanRootsData.roots,
+                albumData.observeValidAlbumCount()
             ) { directories, count -> directories to count }
                 .catch { error ->
                     if (error is CancellationException) throw error
@@ -84,5 +86,5 @@ class LocalImportViewModel @Inject constructor(
 
     fun stopSync() = syncManager.stop()
 
-    fun removeDirectory(directory: SettingDirectory) = syncManager.removeDirectory(directory)
+    fun removeDirectory(directory: ScanRoot) = syncManager.removeDirectory(directory)
 }
