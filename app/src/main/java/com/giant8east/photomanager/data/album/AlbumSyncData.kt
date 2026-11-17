@@ -1,193 +1,79 @@
-/** 相册同步入口：目录扫描、差分持久化与阅读进度对齐，只负责"把文件系统状态写进数据库"。 */
+/** 相册同步入口：先列出整棵目录树，再把每个文件夹排成扫描任务，最后清掉磁盘上已不存在的记录。 */
 package com.giant8east.photomanager.data.album
 
-import androidx.room.withTransaction
-import com.giant8east.photomanager.data.database.AlbumEntity
 import com.giant8east.photomanager.data.database.PhotoDatabase
-import com.giant8east.photomanager.data.database.PhotoEntity
 import com.giant8east.photomanager.data.scan.DirectoryScanner
-import com.giant8east.photomanager.data.scan.ScannedAlbum
-import java.io.File
-import java.util.concurrent.ConcurrentHashMap
+import com.giant8east.photomanager.data.task.FolderTask
+import com.giant8east.photomanager.data.task.FolderTaskScheduler
+import com.giant8east.photomanager.data.task.TaskKind
+import com.giant8east.photomanager.data.task.TaskResult
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 
+/**
+ * 同步的唯一入口，分三个阶段，各管一件事：
+ * 1. 遍历：只列出目录清单（[DirectoryScanner.collectDirectories]），不写库；
+ * 2. 扫描：一个目录一个 [TaskKind.SCAN_REFRESH] 任务，任务之间平级，谁先跑都行；
+ * 3. 清理：清单里没有、数据库里还留着的路径，说明目录已经被删掉了，直接删记录。
+ *
+ * 这样调度器只需要"入队 + 等队列空"，不需要父子任务派生；删除与同步抢同一个文件夹时，
+ * 仍由调度器的路径占用决定谁先来，而不是各写各的。
+ */
 @Singleton
 class AlbumSyncData @Inject constructor(
     private val database: PhotoDatabase,
-    private val directoryScanner: DirectoryScanner
+    private val directoryScanner: DirectoryScanner,
+    private val scheduler: FolderTaskScheduler
 ) {
-    /** 遍历同步整个根目录；目录扫描最多并行 [MAX_CONCURRENT_DIRECTORIES] 个。 */
+    /** 同步一个扫描根目录：列出整棵树 → 逐目录扫 → 清理消失的记录。 */
     suspend fun syncDirectory(rootPath: String) = withContext(Dispatchers.IO) {
         val normalizedRoot = DirectoryScanner.normalizePath(rootPath)
-        val remainingPaths = ConcurrentHashMap.newKeySet<String>().apply {
-            addAll(
-                database.albumDao().queryAlbumPathsUnderPath(
-                    normalizedRoot,
-                    DirectoryScanner.childPathPrefix(normalizedRoot)
-                )
-            )
+        val directories = directoryScanner.collectDirectories(normalizedRoot)
+        directories.forEach { directory ->
+            scheduler.enqueue(FolderTask(directory, TaskKind.SCAN_REFRESH))
         }
-        val visitedPaths = ConcurrentHashMap.newKeySet<String>()    // 保证各自的单次操作线程安全
-        val limiter = Semaphore(MAX_CONCURRENT_DIRECTORIES)
-
-        coroutineScope {
-            val scope = this
-
-            fun schedule(path: String) {
-                if (!visitedPaths.add(path)) return
-                scope.launch {
-                    limiter.withPermit {
-                        currentCoroutineContext().ensureActive()
-                        val scanned = scanAndWrite(path)
-                        remainingPaths.remove(path)
-                        scanned?.children?.forEach { child ->
-                            schedule(DirectoryScanner.normalizePath(child.path))
-                        }
-                    }
-                }
-            }
-
-            schedule(normalizedRoot)
-        }
-
-        coroutineScope {
-            remainingPaths.forEach { stalePath ->
-                launch {
-                    limiter.withPermit {
-                        currentCoroutineContext().ensureActive()
-                        scanAndWrite(stalePath)
-                    }
-                }
-            }
-        }
+        scheduler.awaitDataIdle()
+        unindexVanished(normalizedRoot, directories)
     }
 
     /** 单相册刷新入口：返回刷新后目录是否仍有图片。 */
-    suspend fun refreshAlbum(path: String): Boolean = scanFolder(path)
+    suspend fun refreshAlbum(path: String): Boolean {
+        val task = FolderTask(DirectoryScanner.normalizePath(path), TaskKind.SCAN_REFRESH)
+        return scheduler.enqueue(task).await() is TaskResult.Done
+    }
 
     /**
-     * 扫描单个文件夹并把结果写进数据库；返回该文件夹是否仍有图片。
+     * 移除一个扫描根在索引里的全部记录，等任务真正执行完再返回。
      *
-     * 调度器的扫描任务只走这个入口，所以"文件夹里没有图片就删掉记录"只有这里在写。
+     * 只删记录、不碰文件，所以用 [TaskKind.UNINDEX]（子树占用）：它会把同一路径下排队中的扫描
+     * 任务作废，避免扫描把刚删掉的记录又写回来。
      */
-    suspend fun scanFolder(path: String): Boolean =
-        scanAndWrite(path)?.photos?.isNotEmpty() == true
+    suspend fun unindexDirectory(path: String) {
+        val task = FolderTask(DirectoryScanner.normalizePath(path), TaskKind.UNINDEX)
+        scheduler.enqueue(task).await()
+    }
 
     /**
-     * 扫描单个目录并写库，返回扫描结果；`null` 表示目录里已经没有图片、记录已删除。
+     * 删掉"目录已经不存在、数据库里还留着"的记录。
      *
-     * 返回 null 时调用方不该再派生它的子目录：目录本身都不算相册了。
+     * 目录清单是本次遍历的快照，清单里没有的相册路径只可能是磁盘上已经删掉的，
+     * 所以这里能一次清干净整棵子树，不用每个文件夹各对一遍。
+     *
+     * 清单为空说明根目录本身没读到（被删掉、存储卡掉线或权限抖动）：这时一条记录都不动。
+     * 相册记录里带着收藏、分组、排序和阅读位置，误删比留下几条陈旧记录代价大得多；
+     * 真的删掉扫描根目录时走的是 SyncManager 的移除流程，不靠这里兜底。
      */
-    private suspend fun scanAndWrite(path: String): ScannedAlbum? = withContext(Dispatchers.IO) {
-        val normalized = DirectoryScanner.normalizePath(path)
-        val scanned = directoryScanner.scanAlbum(File(normalized))
-        if (scanned == null || scanned.photos.isEmpty()) {
-            database.albumDao().deleteAlbumByPath(normalized)
-            null
-        } else {
-            saveScannedAlbum(scanned)
-            scanned
-        }
-    }
+    private suspend fun unindexVanished(root: String, directories: List<String>) {
+        if (directories.isEmpty()) return
 
-    /** 在同一事务中确定新增或差分更新，避免重复导入创建第二条相册记录并保持图片 ID 稳定。 */
-    private suspend fun saveScannedAlbum(scanned: ScannedAlbum) = database.withTransaction {
-        val existing = database.albumDao().queryAlbumByPath(scanned.path)
-        if (existing == null) {
-            insertScannedAlbum(scanned)
-        } else {
-            updateScannedAlbum(existing, scanned)
-        }
-    }
-
-    /** 新相册由数据库生成 ID，再用该 ID 关联图片。 */
-    private suspend fun insertScannedAlbum(scanned: ScannedAlbum) {
-        val albumId = database.albumDao().insertAlbum(
-            AlbumEntity(
-                name = scanned.name,
-                albumPath = scanned.path,
-                modifiedAt = scanned.modifiedAt,
-                photoCount = scanned.photos.size,
-                coverPath = scanned.photos.first().contentUri,
-                totalSizeBytes = scanned.totalSizeBytes,
-                sortOrder = System.currentTimeMillis()
-            )
-        )
-        database.photoDao().insertPhotos(scanned.photos.map { it.copy(albumId = albumId) })
-    }
-
-    /** 按唯一文件路径差分同步图片记录（新增插入、缺失删除、变更更新），并按锚点对齐阅读进度。 */
-    private suspend fun updateScannedAlbum(existing: AlbumEntity, scanned: ScannedAlbum) {
-        val photoDao = database.photoDao()
-        val previous = photoDao.queryPhotosByAlbumId(existing.id)
-        val previousByPath = previous.associateBy { it.contentUri }
-        val scannedByPath = scanned.photos.associateBy { it.contentUri }
-
-        val removedIds = previous.filter { it.contentUri !in scannedByPath }.map { it.id }
-        val addedPhotos = scanned.photos
-            .filter { it.contentUri !in previousByPath }
-            .map { it.copy(albumId = existing.id) }
-        val modifiedPhotos = scanned.photos.mapNotNull { newPhoto ->
-            val oldPhoto = previousByPath[newPhoto.contentUri] ?: return@mapNotNull null
-            if (samePhotoMetadata(oldPhoto, newPhoto)) null
-            else newPhoto.copy(id = oldPhoto.id, albumId = existing.id, width = oldPhoto.width, height = oldPhoto.height)
-        }
-
-        if (removedIds.isNotEmpty()) photoDao.deletePhotosByIds(removedIds)
-        if (modifiedPhotos.isNotEmpty()) photoDao.updatePhotos(modifiedPhotos)
-        if (addedPhotos.isNotEmpty()) photoDao.insertPhotos(addedPhotos)
-
-        val updatedProgress = resolveUpdatedProgress(
-            previous = previous,
-            scanned = scanned.photos,
-            oldIndex = existing.lastViewedPhotoIndex
-        )
-        val updatedAlbum = existing.copy(
-            name = scanned.name,
-            modifiedAt = scanned.modifiedAt,
-            photoCount = scanned.photos.size,
-            coverPath = scanned.photos.first().contentUri,
-            totalSizeBytes = scanned.totalSizeBytes,
-            lastViewedPhotoIndex = updatedProgress
-        )
-        if (updatedAlbum != existing) {
-            database.albumDao().updateAlbums(listOf(updatedAlbum))
-        }
-    }
-
-    companion object {
-        /** 同时进行的目录扫描上限，避免大量子目录同时占用 IO 和 Room 事务。 */
-        private const val MAX_CONCURRENT_DIRECTORIES = 4
-
-        /** 比较文件元数据是否一致，保留数据库已有 ID 与图片记录。 */
-        internal fun samePhotoMetadata(old: PhotoEntity, new: PhotoEntity): Boolean =
-            old.sizeBytes == new.sizeBytes && old.modifiedAt == new.modifiedAt
-
-        /**
-         * 根据旧图片列表与旧阅读进度，计算新列表中最匹配的阅读下标：
-         * 1. 若原阅读图片仍存在，直接跟随该图片到新下标；
-         * 2. 若原阅读图片被移除，按文件名顺序停留在原位置紧邻的图片。
-         */
-        internal fun resolveUpdatedProgress(
-            previous: List<PhotoEntity>,
-            scanned: List<PhotoEntity>,
-            oldIndex: Int
-        ): Int {
-            if (scanned.isEmpty()) return 0
-            val anchor = previous.getOrNull(oldIndex) ?: return oldIndex.coerceIn(0, scanned.lastIndex)
-            val exactIndex = scanned.indexOfFirst { it.contentUri == anchor.contentUri }
-            if (exactIndex >= 0) return exactIndex
-            val neighborIndex = scanned.indexOfFirst { it.name >= anchor.name }
-            return if (neighborIndex >= 0) neighborIndex else scanned.lastIndex
+        val onDisk = directories.toHashSet()
+        val stalePaths = database.albumDao()
+            .queryAlbumPathsUnderPath(root, DirectoryScanner.childPathPrefix(root))
+            .filter { it !in onDisk }
+        for (path in stalePaths) {
+            database.albumDao().deleteAlbumByPath(path)
         }
     }
 }
