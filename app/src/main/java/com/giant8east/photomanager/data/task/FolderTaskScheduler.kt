@@ -173,11 +173,7 @@ class FolderTaskScheduler @Inject constructor(
         val task = dispatch.queued.task
         val handler = handlers[task.kind]
         val result = try {
-            if (handler == null) {
-                TaskResult.Failed("没有注册的任务处理器：${task.kind}")
-            } else {
-                handler.handle(task, SchedulerContext(task))
-            }
+            handler?.handle(task, SchedulerContext(task)) ?: TaskResult.Failed("没有注册的任务处理器：${task.kind}")
         } catch (cancelled: CancellationException) {
             // 协程取消必须继续抛出，不能让取消被当成普通失败吞掉
             finish(dispatch, TaskResult.Cancelled)
