@@ -51,7 +51,6 @@ sealed interface DeleteResult {
 
     /** 部分相册没删干净：成功 [deletedAlbums] 个，失败 [failedAlbums] 个。 */
     data class Partial(
-        val deletedAlbums: Int,
         val failedAlbums: Int,
     ) : DeleteResult
 
@@ -177,7 +176,6 @@ class DeleteManager @Inject constructor(
                 DeleteResult.Success
             } else {
                 DeleteResult.Partial(
-                    deletedAlbums = completedAlbums,
                     failedAlbums = failedAlbums,
                 )
             }
