@@ -49,10 +49,8 @@ sealed interface DeleteResult {
     /** 已有删除任务在跑，本次请求被拒绝 */
     data object Busy : DeleteResult
 
-    /** 部分相册没删干净：成功 [deletedAlbums] 个，失败 [failedAlbums] 个。 */
-    data class Partial(
-        val failedAlbums: Int,
-    ) : DeleteResult
+    /** 部分相册没删干净；[failedAlbums] 是没删成功的相册数。 */
+    data class Partial(val failedAlbums: Int) : DeleteResult
 
     /** 整体失败（异常或取消）。 */
     data class Failure(val message: String?) : DeleteResult
@@ -175,9 +173,7 @@ class DeleteManager @Inject constructor(
             val result = if (failedAlbums == 0) {
                 DeleteResult.Success
             } else {
-                DeleteResult.Partial(
-                    failedAlbums = failedAlbums,
-                )
+                DeleteResult.Partial(failedAlbums)
             }
             _state.value = DeleteState(
                 result = result,
