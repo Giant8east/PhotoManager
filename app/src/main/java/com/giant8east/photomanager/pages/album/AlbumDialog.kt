@@ -1,16 +1,20 @@
-/** 相册多选的批量删除与移动分组弹窗。 */
+/** 相册多选的批量删除（含删除进度与结果）、移动分组与保存排序弹窗。 */
 package com.giant8east.photomanager.pages.album
 
 import android.widget.Toast
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -22,6 +26,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -33,7 +38,6 @@ import com.giant8east.photomanager.R
 import com.giant8east.photomanager.data.delete.DeleteResult
 import com.giant8east.photomanager.pages.common.AppDialog
 import com.giant8east.photomanager.pages.common.AppLazyColumnScrollbar
-import com.giant8east.photomanager.pages.common.DeleteProgressDialog
 import com.giant8east.photomanager.pages.common.LocalDialogStack
 import com.giant8east.photomanager.ui.theme.appColors
 
@@ -76,14 +80,73 @@ internal fun AlbumDeleteDialog(
             )
         }
     } else {
-        DeleteProgressDialog(
-            state = deleteState,
-            onRetry = { viewModel.delete(selection.selectedIds) },
-            onClose = {
-                selection.clear()
-                dialogs.pop()
+        // 删除进行中与结果都在这里收口：运行中只显示进度，结束后才给重试与关闭按钮
+        AppDialog(
+            title = stringResource(R.string.album_delete_title),
+            buttons = if (!deleteState.isRunning && deleteState.result != null) {
+                { _ ->
+                    if (deleteState.result is DeleteResult.Partial ||
+                        deleteState.result is DeleteResult.Failure
+                    ) {
+                        TextButton(onClick = { viewModel.delete(selection.selectedIds) }) {
+                            Text(stringResource(R.string.page_retry))
+                        }
+                    }
+                    TextButton(
+                        onClick = {
+                            selection.clear()
+                            dialogs.pop()
+                        }
+                    ) { Text(stringResource(R.string.album_cancel)) }
+                }
+            } else {
+                null
             }
-        )
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                deleteState.currentAlbumName?.let { name ->
+                    Text(
+                        stringResource(R.string.delete_progress_current, name),
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (deleteState.isRunning) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp
+                        )
+                    }
+                    Text(
+                        stringResource(
+                            R.string.delete_progress_albums,
+                            deleteState.completedAlbums,
+                            deleteState.totalAlbums
+                        )
+                    )
+                }
+                Text(
+                    stringResource(R.string.delete_progress_files, deleteState.deletedFiles),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (deleteState.failedFiles > 0) {
+                    Text(
+                        stringResource(R.string.delete_progress_failed, deleteState.failedFiles),
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+                deleteState.failureMessage?.takeIf { it.isNotBlank() }?.let { message ->
+                    Text(message, color = MaterialTheme.colorScheme.error)
+                }
+                if (!deleteState.isRunning && deleteState.result is DeleteResult.Partial) {
+                    Text(stringResource(R.string.delete_partial_message))
+                }
+            }
+        }
     }
 
     LaunchedEffect(started, deleteState.result) {
