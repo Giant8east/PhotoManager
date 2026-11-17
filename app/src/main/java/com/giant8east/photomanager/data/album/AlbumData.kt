@@ -29,6 +29,9 @@ class AlbumData @Inject constructor(
     /** 持续观察已收藏且仍有图片的相册数量。 */
     fun observeFavoriteCount(): Flow<Int> = database.albumDao().observeFavoriteCountQuery()
 
+    /** 持续观察已同步的相册总数，供本地导入页展示。 */
+    fun observeValidAlbumCount(): Flow<Int> = database.albumDao().observeValidAlbumCount()
+
     /** 持续观察相册的完整图片索引。 */
     fun observePhotos(albumId: Long): Flow<List<PhotoEntity>> =
         database.photoDao().observePhotosQuery(albumId).distinctUntilChanged()
