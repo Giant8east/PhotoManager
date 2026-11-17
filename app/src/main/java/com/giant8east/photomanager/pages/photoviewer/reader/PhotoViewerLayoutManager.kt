@@ -9,7 +9,7 @@ import androidx.compose.ui.geometry.Size
 import com.giant8east.photomanager.data.database.PhotoEntity
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.Velocity
-import com.giant8east.photomanager.data.PhotoViewerSettings
+import com.giant8east.photomanager.data.settings.PhotoViewerSettings
 import com.giant8east.photomanager.pages.photoviewer.edge.PhotoViewerEdge
 import com.giant8east.photomanager.pages.photoviewer.edge.PhotoViewerEdgeEffect
 import kotlinx.coroutines.CoroutineScope

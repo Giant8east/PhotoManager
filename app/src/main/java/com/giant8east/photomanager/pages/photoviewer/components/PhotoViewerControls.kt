@@ -29,7 +29,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.giant8east.photomanager.R
-import com.giant8east.photomanager.data.ReadingDirection
+import com.giant8east.photomanager.data.settings.ReadingDirection
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlin.time.Duration.Companion.milliseconds

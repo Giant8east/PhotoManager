@@ -18,8 +18,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
-import com.giant8east.photomanager.data.PhotoViewerSettings
-import com.giant8east.photomanager.data.ReadingDirection
+import com.giant8east.photomanager.data.settings.PhotoViewerSettings
+import com.giant8east.photomanager.data.settings.ReadingDirection
 import com.giant8east.photomanager.pages.photoviewer.edge.PhotoViewerEdge
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart

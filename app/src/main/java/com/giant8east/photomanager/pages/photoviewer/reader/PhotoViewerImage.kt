@@ -11,7 +11,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.translate
-import com.giant8east.photomanager.data.PageScale
+import com.giant8east.photomanager.data.settings.PageScale
 
 /** 与 EhViewer 一致，限制相对于图片尺寸的实际比例。 */
 private const val MinScale = 0.1f

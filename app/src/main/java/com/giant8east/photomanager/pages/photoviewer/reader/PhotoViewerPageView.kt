@@ -30,8 +30,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.giant8east.photomanager.R
-import com.giant8east.photomanager.data.PageScale
 import com.giant8east.photomanager.data.database.PhotoEntity
+import com.giant8east.photomanager.data.settings.PageScale
 
 /** 解码预算不随长图项高度或整列缩放增加；单张请求最多约四百万像素。 */
 internal fun readerDecodeSize(screen: IntSize): IntSize = IntSize(

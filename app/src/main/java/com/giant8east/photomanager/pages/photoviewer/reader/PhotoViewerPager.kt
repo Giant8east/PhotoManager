@@ -25,8 +25,8 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
-import com.giant8east.photomanager.data.PhotoViewerSettings
-import com.giant8east.photomanager.data.ReadingDirection
+import com.giant8east.photomanager.data.settings.PhotoViewerSettings
+import com.giant8east.photomanager.data.settings.ReadingDirection
 import com.giant8east.photomanager.data.database.PhotoEntity
 import com.giant8east.photomanager.pages.photoviewer.edge.PhotoViewerEdgeView
 

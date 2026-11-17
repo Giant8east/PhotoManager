@@ -15,8 +15,8 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.giant8east.photomanager.MainActivity
-import com.giant8east.photomanager.data.PhotoViewerSettings
-import com.giant8east.photomanager.data.ScreenOrientation
+import com.giant8east.photomanager.data.settings.PhotoViewerSettings
+import com.giant8east.photomanager.data.settings.ScreenOrientation
 
 /**
  * 创建并绑定阅读页的系统能力控制器：配置变化时统一应用窗口设置，离开页面时恢复窗口。

@@ -28,7 +28,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
-import com.giant8east.photomanager.data.PhotoViewerSettings
+import com.giant8east.photomanager.data.settings.PhotoViewerSettings
 import com.giant8east.photomanager.data.database.PhotoEntity
 import com.giant8east.photomanager.pages.photoviewer.edge.PhotoViewerEdge
 import kotlin.math.abs
