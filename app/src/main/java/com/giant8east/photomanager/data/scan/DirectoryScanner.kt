@@ -21,6 +21,7 @@ import java.nio.file.attribute.BasicFileAttributes
 import java.time.Instant
 import javax.inject.Inject
 
+/** 单次目录扫描的结果；[photos] 是本层图片，[children] 是磁盘上的子目录，供同步遍历继续向下。 */
 internal data class ScannedAlbum(
     val path: String,
     val name: String,
