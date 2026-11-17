@@ -111,6 +111,34 @@ class DirectoryScanner @Inject constructor(
         )
     }
 
+    /**
+     * 深度优先收集 [rootPath] 以及它下面所有子目录的规范路径，目录不存在时返回空列表。
+     *
+     * 只读目录名，不读文件大小或修改时间，所以比逐个扫描便宜得多；
+     * 同步入口拿这份清单决定要扫哪些文件夹，也用它反过来找出数据库里多出来的陈旧记录。
+     * 用显式栈而不是递归，避免很深的目录树把调用栈撑爆；[visited] 兜住软链接成环。
+     */
+    suspend fun collectDirectories(rootPath: String): List<String> = withContext(Dispatchers.IO) {
+        val root = File(rootPath)
+        if (!root.isDirectory) return@withContext emptyList()
+
+        val collected = ArrayList<String>()
+        val visited = HashSet<String>()
+        val stack = ArrayDeque<File>()
+        stack.addLast(root)
+        while (stack.isNotEmpty()) {
+            currentCoroutineContext().ensureActive()
+            val current = stack.removeLast()
+            val normalized = normalizePath(current.path)
+            if (!visited.add(normalized)) continue
+            collected.add(normalized)
+            for (child in current.listFiles().orEmpty()) {
+                if (child.isDirectory) stack.addLast(child)
+            }
+        }
+        collected
+    }
+
     companion object {
         private const val EXTERNAL_STORAGE_AUTHORITY = "com.android.externalstorage.documents"
 
