@@ -1,27 +1,30 @@
-/** 应用级相册删除协调器：持有长删除任务，暴露进度并协调扫描写库屏障。 */
+/** 应用级相册删除协调器：把删除拆成调度任务，订阅进度并给出最终结论。 */
 package com.giant8east.photomanager.data.delete
 
-import com.giant8east.photomanager.data.album.AlbumData
+import com.giant8east.photomanager.data.database.AlbumEntity
 import com.giant8east.photomanager.data.scan.DirectoryScanner
-
+import com.giant8east.photomanager.data.task.FolderTask
+import com.giant8east.photomanager.data.task.FolderTaskScheduler
+import com.giant8east.photomanager.data.task.TaskKind
+import com.giant8east.photomanager.data.task.TaskResult
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import com.giant8east.photomanager.data.database.AlbumEntity
-import java.io.File
-import javax.inject.Inject
-import javax.inject.Singleton
 
 /** 删除进度快照；UI 只读订阅，不参与业务判断。 */
 data class DeleteState(
@@ -46,11 +49,10 @@ sealed interface DeleteResult {
     /** 已有删除任务在跑，本次请求被拒绝 */
     data object Busy : DeleteResult
 
-    /** 部分相册没删干净；[failedAlbumIds] 供 UI 保留选中或提示重试。 */
+    /** 部分相册没删干净：成功 [deletedAlbums] 个，失败 [failedAlbums] 个。 */
     data class Partial(
         val deletedAlbums: Int,
-        val failedAlbumIds: List<Long>,
-        val failedFiles: Int
+        val failedAlbums: Int,
     ) : DeleteResult
 
     /** 整体失败（异常或取消）。 */
@@ -60,23 +62,21 @@ sealed interface DeleteResult {
 /**
  * 删除流程的应用级协调器。
  *
- * 三个协作者的分工：
- * - [DeletionGate]：挡住"正在删除的路径"的扫描写库（顺序问题）；
- * - [FileTreeDeleter]：真正删除文件（动作）；
- * - [AlbumData]：删除数据库记录。
+ * 它不再自己删文件、也不自己删记录，只做三件事：
+ * 1. 给每个相册排一个 [TaskKind.DELETE_FILES] 任务；
+ * 2. 订阅调度器的文件进度，把数字翻译成界面状态；
+ * 3. 任务结束以后按"这个文件夹的图片有没有删干净"给出结论。
+ *
+ * 判断依据是文件夹本身，不是数据库：记录是扫描写出来的结果，
+ * 拿它当验收标准等于用"派生物"去判断"真实物"，删不掉的文件反而会被掩盖。
  *
  * 为什么任务跑在应用级 [scope] 而不是调用方的 viewModelScope：
- * 删除已经开始就无法回滚，页面退出时中断只会留下"文件删了一半、记录还在"的中间状态，
- * 所以调用方取消不应影响任务本身；UI 通过 [state] 观察进度。
- *
- * 同一时刻只允许一个删除任务（[operationMutex] + [activeJob]），避免两个任务互相删除
- * 同一路径时，一个成功一个报错。
+ * 删除已经开始就无法回滚，页面退出时中断只会留下"文件删了一半、记录还在"的状态，
+ * 所以调用方取消不应影响调度器里的任务本身；UI 通过 [state] 观察进度。
  */
 @Singleton
 class DeleteManager @Inject constructor(
-    private val albumData: AlbumData,
-    private val deletionGate: DeletionGate,
-    private val fileTreeDeleter: FileTreeDeleter
+    private val scheduler: FolderTaskScheduler
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val operationMutex = Mutex()
@@ -126,31 +126,26 @@ class DeleteManager @Inject constructor(
     }
 
     /**
-     * 真正的删除循环。每个相册的步骤固定为：
-     * 1. 删文件（[FileTreeDeleter]）；
-     * 2. 文件删干净了才删数据库记录（[AlbumData]）。
+     * 真正的删除循环：每个相册排一个删除任务，等它连同接手的扫描任务一起结束。
      *
-     * 顺序不能反：先删记录再删文件，一旦文件删除失败，用户会看到"相册不见了但磁盘文件还在"，
-     * 而且这些文件下次同步会被当成新相册重新出现。
+     * 结论完全来自每个任务的返回值：任务说没删干净（有图片删不掉、扫描写库失败）
+     * 或者根本没执行（排队时被更高优先级任务顶掉），就把这个相册记为失败；
+     * 只有 Done / Skipped 才算删干净。
      */
     private suspend fun deleteInternal(albums: List<AlbumEntity>): DeleteResult {
-        // 拉起闸门：让这批路径在此期间无法被扫描写库
-        val lease = deletionGate.beginDeletion(albums.map { it.albumPath })
         var deletedFiles = 0L
         var failedFiles = 0
         var completedAlbums = 0
-        val failedAlbumIds = mutableListOf<Long>()
         var failureMessage: String? = null
+        var failedAlbums = 0
 
-        _state.value = DeleteState(
-            isRunning = true,
-            totalAlbums = albums.size
-        )
+        _state.value = DeleteState(isRunning = true, totalAlbums = albums.size)
 
         try {
             for (album in albums) {
                 // 取消检查：被取消时直接抛 CancellationException，跳进下面的 catch
                 currentCoroutineContext().ensureActive()
+                val path = DirectoryScanner.normalizePath(album.albumPath)
                 _state.update {
                     it.copy(
                         currentAlbumName = album.name,
@@ -160,40 +155,30 @@ class DeleteManager @Inject constructor(
                     )
                 }
 
-                // 进度回调给出的是"本次目录已删除的文件数"，需要叠加到累计值上
-                val treeResult = fileTreeDeleter.deleteTree(
-                    File(DirectoryScanner.normalizePath(album.albumPath))
-                ) { progressFiles ->
-                    _state.update { it.copy(deletedFiles = deletedFiles + progressFiles) }
-                }
-                deletedFiles += treeResult.deletedFiles
-                failedFiles += treeResult.failedFiles
+                val handle = scheduler.enqueue(FolderTask(path, TaskKind.DELETE_FILES))
+                val result = awaitWithProgress(handle, path, deletedFiles, failedFiles)
 
-                // 有文件删不掉就保留记录：宁可显示"删除失败"，也不能让磁盘上留下孤儿文件
-                if (treeResult.hasBlockingFileFailure) {
-                    failedAlbumIds += album.id
-                    continue
-                }
-
-                try {
-                    albumData.deleteAlbumsByIds(listOf(album.id))
-                    completedAlbums++
-                } catch (cancelled: CancellationException) {
-                    // 协程规范：取消异常必须继续抛出，不能被当成普通失败吞掉
-                    throw cancelled
-                } catch (error: Exception) {
-                    failedAlbumIds += album.id
-                    failureMessage = error.message
+                // 结果里带的是"这一个文件夹删了多少"，累加后作为已完成部分的基准
+                deletedFiles += result.deletedFileCount
+                failedFiles += result.failedFileCount
+                when (result) {
+                    is TaskResult.Failed -> {
+                        failedAlbums++
+                        failureMessage = result.message ?: failureMessage
+                    }
+                    // 排队期间被更高优先级的任务（例如移除扫描根）顶掉，文件一个都没动，不能算删除成功
+                    TaskResult.Cancelled -> failedAlbums++
+                    // Done 表示删完并扫描过了；Skipped 表示扫描发现目录里已经没有图片，两种都是正常结束
+                    is TaskResult.Done, TaskResult.Skipped -> completedAlbums++
                 }
             }
 
-            val result = if (failedAlbumIds.isEmpty()) {
+            val result = if (failedAlbums == 0) {
                 DeleteResult.Success
             } else {
                 DeleteResult.Partial(
                     deletedAlbums = completedAlbums,
-                    failedAlbumIds = failedAlbumIds,
-                    failedFiles = failedFiles
+                    failedAlbums = failedAlbums,
                 )
             }
             _state.value = DeleteState(
@@ -229,9 +214,33 @@ class DeleteManager @Inject constructor(
                 failureMessage = error.message
             )
             return result
-        } finally {
-            // 必须归还租约，否则这批路径会永远无法再同步
-            deletionGate.endDeletion(lease)
         }
+    }
+
+    /**
+     * 等一个删除任务结束，同时把调度器上报的文件进度翻译成界面状态。
+     *
+     * 进度是"这个文件夹已经删了多少"，所以要叠加到 [deletedFiles] / [failedFiles] 基准上。
+     */
+    private suspend fun awaitWithProgress(
+        handle: Deferred<TaskResult>,
+        path: String,
+        deletedFiles: Long,
+        failedFiles: Int
+    ): TaskResult = coroutineScope {
+        val progressJob = launch {
+            scheduler.fileProgress.collect { progress ->
+                if (progress.path != path) return@collect
+                _state.update {
+                    it.copy(
+                        deletedFiles = deletedFiles + progress.deletedFiles,
+                        failedFiles = failedFiles + progress.failedFiles
+                    )
+                }
+            }
+        }
+        val result = handle.await()
+        progressJob.cancel()
+        result
     }
 }
