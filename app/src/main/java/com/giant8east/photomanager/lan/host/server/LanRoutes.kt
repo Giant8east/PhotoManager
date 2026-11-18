@@ -1,7 +1,19 @@
 /** 服务端路由与鉴权：只负责协议层，业务数据由调用方以 lambda 注入。 */
-package com.giant8east.photomanager.lan
+package com.giant8east.photomanager.lan.host.server
 
-import io.ktor.http.ContentType
+import com.giant8east.photomanager.lan.protocol.DEFAULT_PAGE_LIMIT
+import com.giant8east.photomanager.lan.protocol.DeviceInfoDto
+import com.giant8east.photomanager.lan.protocol.ErrorDto
+import com.giant8east.photomanager.lan.protocol.LanErrorCode
+import com.giant8east.photomanager.lan.protocol.LanPairPendingDto
+import com.giant8east.photomanager.lan.protocol.LanPairRequestDto
+import com.giant8east.photomanager.lan.protocol.LanPairResponseDto
+import com.giant8east.photomanager.lan.protocol.LanSortField
+import com.giant8east.photomanager.lan.protocol.MAX_PAGE_LIMIT
+import com.giant8east.photomanager.lan.protocol.SessionDto
+import com.giant8east.photomanager.lan.host.AlbumListRequest
+import com.giant8east.photomanager.lan.host.ShareDataSource
+import com.giant8east.photomanager.lan.protocol.TOKEN_HEADER
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
@@ -12,6 +24,7 @@ import io.ktor.server.application.install
 import io.ktor.server.plugins.autohead.AutoHeadResponse
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.partialcontent.PartialContent
+import io.ktor.server.request.ApplicationRequest
 import io.ktor.server.request.header
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
@@ -24,18 +37,13 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
 import io.ktor.util.AttributeKey
-import io.ktor.util.pipeline.PipelineContext
 import java.io.File
-
-/** 鉴权头名字，自定义头，避免与标准 Authorization 混淆，客户端拦截器统一注入。 */
-const val TOKEN_HEADER = "token"
 
 /** 鉴权通过后把设备 id 放进 call 的属性里，路由里用 [deviceId] 读取。 */
 private val DeviceIdKey = AttributeKey<String>("LanDeviceId")
 
 /**
- * 服务端模块：装 JSON 内容协商与 Range 支持，注册开放接口（ping）与受保护接口，
- * 再通过 [routes] 挂载调用方自己的路由。
+ * 服务端模块：装 JSON 内容协商与 Range 支持，注册开放接口（ping、配对）与受保护接口。
  *
  * 鉴权是**统一**的：所有需要 token 的接口都写在 [authenticated] 块里，
  * 由块上的拦截器一次性校验，路由内部不再各自调用 `requireDevice`。
@@ -43,15 +51,13 @@ private val DeviceIdKey = AttributeKey<String>("LanDeviceId")
  * 参数说明：
  * - [tokens]：token 仓库，测试可注入预置实例；
  * - [deviceInfo]：函数类型参数 `() -> DeviceInfoDto`，把"设备名从哪来"交给 Android 侧；
- * - [dataSource]：共享数据的只读快照来源，路由不直接依赖 Room；
- * - [routes]：带接收者的 lambda（等价于 `(Route) -> Unit`），用于追加业务路由。
+ * - [dataSource]：共享数据的只读快照来源，路由不直接依赖 Room。
  */
 fun Application.lanModule(
     tokens: LanTokenStore,
     pairing: LanPairing,
     deviceInfo: () -> DeviceInfoDto,
-    dataSource: ShareDataSource,
-    routes: Route.() -> Unit = {}
+    dataSource: ShareDataSource
 ) {
     // install 是 Ktor 的插件机制：注册插件后会介入请求处理管道
     install(ContentNegotiation) {
@@ -103,7 +109,7 @@ fun Application.lanModule(
                 call.respond(SessionDto(checkNotNull(call.deviceId())))
             }
 
-            // 相册列表：sort/desc 缺省 = 宿主默认排序；非法参数 400
+            // 相册列表：sort/desc 缺省 = 宿主默认排序；groupId 缺省 = 未分组；分页参数非法 400
             get("/v1/albums") {
                 val sortParam = call.request.queryParameters["sort"]
                 // 判断sort字段是否合法
@@ -128,7 +134,41 @@ fun Application.lanModule(
                 // 关键词：空白视为"没有搜索"，避免 q="" 走成 LIKE '%%' 全匹配
                 val query = call.request.queryParameters["q"]?.trim()?.takeIf { it.isNotEmpty() }
 
-                call.respond(dataSource.albums(sort, descending, query))
+                // 分组：缺省表示未分组（与宿主首页默认视图一致）；有关键词时数据源会忽略它
+                val groupParam = call.request.queryParameters["groupId"]
+                val groupId = groupParam?.toLongOrNull()
+                if (groupParam != null && groupId == null) {
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        ErrorDto(LanErrorCode.INVALID_ID, "groupId must be a number")
+                    )
+                    return@get
+                }
+
+                // 分页：offset 缺省 0，limit 缺省 DEFAULT_PAGE_LIMIT，超过上限按上限截断
+                val offset = call.request.intQuery("offset", default = 0, minimum = 0)
+                val limit = call.request.intQuery("limit", default = DEFAULT_PAGE_LIMIT, minimum = 1)
+                    ?.coerceAtMost(MAX_PAGE_LIMIT)
+                if (offset == null || limit == null) {
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        ErrorDto(LanErrorCode.INVALID_PAGE, "offset/limit must be valid numbers")
+                    )
+                    return@get
+                }
+
+                call.respond(
+                    dataSource.albums(
+                        AlbumListRequest(
+                            sortField = sort,
+                            descending = descending,
+                            query = query,
+                            groupId = groupId,
+                            offset = offset,
+                            limit = limit
+                        )
+                    )
+                )
             }
 
             // 分组 + 计数 + 未分组数量（不含收藏视图）
@@ -167,9 +207,6 @@ fun Application.lanModule(
                 call.respondFile(File(media.path))
             }
         }
-
-        // 调用方追加的业务路由（例如 /v1/pair，它本身需要保持未鉴权）
-        routes()
     }
 }
 
@@ -245,15 +282,11 @@ private suspend fun ApplicationCall.respondInvalidSort(message: String) {
     respond(HttpStatusCode.BadRequest, ErrorDto(code = LanErrorCode.INVALID_SORT, message = message))
 }
 
-/** 媒体类型推断；未知扩展名退回二进制流，避免客户端把图片当文本解析。 */
-internal fun contentTypeOf(fileName: String): ContentType =
-    when (fileName.substringAfterLast('.', "").lowercase()) {
-        "jpg", "jpeg" -> ContentType.Image.JPEG
-        "png" -> ContentType.Image.PNG
-        "webp" -> ContentType("image", "webp")
-        "gif" -> ContentType.Image.GIF
-        "bmp" -> ContentType("image", "bmp")
-        "heic", "heif" -> ContentType("image", "heic")
-        "avif" -> ContentType("image", "avif")
-        else -> ContentType.Application.OctetStream
-    }
+/**
+ * 读取整型 query 参数：缺省用 [default]；非数字或小于 [minimum] 返回 null，
+ * 由调用方回 400。这里不静默纠正非法值，否则客户端把 offset 写成字符串也没人发现。
+ */
+private fun ApplicationRequest.intQuery(name: String, default: Int, minimum: Int): Int? {
+    val raw = queryParameters[name] ?: return default
+    return raw.toIntOrNull()?.takeIf { it >= minimum }
+}
