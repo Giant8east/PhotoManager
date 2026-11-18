@@ -104,7 +104,8 @@ class LanTokenStore(
 
     /** 32 字节随机数的十六进制表示，避免可预测 token。 */
     private fun randomToken(): String {
-        val bytes = ByteArray(TOKEN_BYTES).also(random::nextBytes)
+        val bytes = ByteArray(TOKEN_BYTES);
+        random.nextBytes(bytes)
         return bytes.joinToString("") { byte -> "%02x".format(byte) }
     }
 
