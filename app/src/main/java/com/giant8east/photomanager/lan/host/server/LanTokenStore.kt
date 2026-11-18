@@ -1,5 +1,5 @@
 /** 会话 token 仓库：内存实现，滑动过期 + 关闭共享即清空。 */
-package com.giant8east.photomanager.lan
+package com.giant8east.photomanager.lan.host.server
 
 import java.security.SecureRandom
 
@@ -71,9 +71,8 @@ class LanTokenStore(
      * 过期时还要删两张表，所以同样放在锁内。
      */
     fun resolve(token: String): String? = synchronized(lock) {
-        val entry = byToken[token]
+        val entry = byToken[token] ?: return@synchronized null
         // 等价于 if (entry == null) return null（返回到 synchronized 的 lambda 之外）
-        if (entry == null) return@synchronized null
 
         val now = clock()
         if (entry.isExpired(now)) {
