@@ -5,7 +5,6 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
- * - `wire`：查询参数与 JSON 里的取值（大小写敏感，仅小写 kamelCase）；
  * - `defaultDescending`：切换字段时的默认方向，与本地枚举保持一致。
  *
  * 语法糖：`@SerialName("custom")` 让 JSON 里输出 `"custom"` 而不是枚举名 `CUSTOM`；
