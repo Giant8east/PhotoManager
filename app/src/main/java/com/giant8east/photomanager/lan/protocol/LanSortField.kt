@@ -1,5 +1,5 @@
 /** 排序字段的线上枚举：客户端只传 wire 值，服务端负责映射成本地排序表达式。 */
-package com.giant8east.photomanager.lan
+package com.giant8east.photomanager.lan.protocol
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable

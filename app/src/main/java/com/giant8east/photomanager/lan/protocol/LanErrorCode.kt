@@ -1,5 +1,5 @@
 /** 协议错误码：集中定义，避免各处手写字符串导致客户端匹配不上。 */
-package com.giant8east.photomanager.lan
+package com.giant8east.photomanager.lan.protocol
 
 import kotlinx.serialization.Serializable
 
