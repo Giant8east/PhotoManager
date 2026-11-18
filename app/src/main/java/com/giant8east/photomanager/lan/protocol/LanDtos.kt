@@ -57,11 +57,17 @@ data class LanGroupDto(
 )
 
 /**
- * 相册列表响应。
+ * 相册列表响应（一页）。
  *
  * - `defaultSort*`：宿主当前的排序设置，远端用来初始化"默认排序"或"恢复默认"；
  * - `sort*`：本次实际应用的排序（请求带参数则等于参数，否则等于 default）；
  * 两者分开返回，避免把用户当前选择误当成宿主默认值。
+ *
+ * 分页字段只是"外壳"，[LanAlbumDto] 本身不含页码：换页只改 offset/limit，
+ * 实体字段不变，两端解析逻辑也不用跟着改。
+ * - `offset`/`limit`：本次窗口，`limit` 可能已被服务端截断，以这里为准；
+ * - `total`：满足筛选条件的总数（不是全库总数）；
+ * - `hasMore`：`offset + albums.size < total`，客户端不必自己算。
  */
 @Serializable
 data class LanAlbumListDto(
@@ -69,7 +75,11 @@ data class LanAlbumListDto(
     val defaultSortField: LanSortField,
     val defaultSortDescending: Boolean,
     val sortField: LanSortField,
-    val sortDescending: Boolean
+    val sortDescending: Boolean,
+    val offset: Int,
+    val limit: Int,
+    val total: Int,
+    val hasMore: Boolean
 )
 
 /** 远端抽屉需要的完整分组信息：分组列表 + 未分组相册数量。 */
