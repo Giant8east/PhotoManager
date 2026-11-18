@@ -16,6 +16,9 @@ enum class LanErrorCode {
     UNAUTHORIZED,
     INVALID_ID,
     INVALID_SORT,
+
+    /** 分页参数非法：offset 为负或 limit 不是正整数。 */
+    INVALID_PAGE,
     NOT_FOUND,
 
     /** 配对：主机用户拒绝。 */
