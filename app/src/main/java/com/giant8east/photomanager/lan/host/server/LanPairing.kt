@@ -1,6 +1,8 @@
 /** 配对状态机：白名单免确认、陌生设备等待主机批准。 */
-package com.giant8east.photomanager.lan
+package com.giant8east.photomanager.lan.host.server
 
+import com.giant8east.photomanager.lan.protocol.LanPairRequestDto
+import com.giant8east.photomanager.lan.host.WhitelistStore
 import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -185,9 +187,9 @@ class LanPairing(
      */
     private fun expireLocked(now: Long) {
         val expired = pending.values.filter { now - it.createdAt > pairTimeoutMillis }
-        for ((requestId) in expired) {
-            pending.remove(requestId)
-            results[requestId] = StoredResult(Outcome.Expired, now)
+        for (request in expired) {
+            pending.remove(request.requestId)
+            results[request.requestId] = StoredResult(Outcome.Expired, now)
         }
 
         val staleResults = results.entries
