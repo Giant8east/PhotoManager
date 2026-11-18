@@ -1,6 +1,8 @@
 /** 服务端生命周期：启动/停止 Ktor CIO 引擎，并把系统分配的真实端口告诉调用方。 */
-package com.giant8east.photomanager.lan
+package com.giant8east.photomanager.lan.host.server
 
+import com.giant8east.photomanager.lan.protocol.DeviceInfoDto
+import com.giant8east.photomanager.lan.host.ShareDataSource
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.ApplicationEngine
 import io.ktor.server.engine.embeddedServer
@@ -11,9 +13,11 @@ import io.ktor.server.engine.embeddedServer
  * 端口传 0 表示让系统分配空闲端口（避免和别的应用撞端口），
  * 启动后用 [port] 把地址广播出去（mDNS TXT / 通知里显示）。
  *
+ * 实例是一次性的：[LanShareController] 每次开启共享都新建一个，关闭后丢弃，
+ * 所以这里不处理"重复 start"。
+ *
  * 语法糖说明（构造函数）：
  * - 主构造参数写成 `private val` 时，参数同时成为类属性，省去手写字段和赋值；
- * - `tokens: LanTokenStore = LanTokenStore()` 是**默认参数**，等价于提供两个重载；
  * - `deviceInfo: () -> DeviceInfoDto` 是函数类型参数，等价于"传入一个获取设备信息的方法"。
  */
 class LanServer(
@@ -30,17 +34,8 @@ class LanServer(
         // `private set` 是语法糖：对外只读（外部不能赋值），类内部可以赋值
         private set
 
-    /**
-     * 启动服务；已启动时直接返回当前端口。
-     *
-     * 幂等保护的原因：Android 的 `onStartCommand` **可能被多次调用**
-     * （每次 startService 都会投递一次、START_STICKY 重启也会投递），
-     * 没有这层保护就会重复 bind：旧引擎引用被覆盖，端口泄漏且无法 stop。
-     */
+    /** 启动服务并返回实际监听的端口。 */
     suspend fun start(bindPort: Int = 0): Int {
-        // 等价于 if (engine != null) return port
-        engine?.let { return port }
-
         val started = embeddedServer(CIO, port = bindPort) {
             lanModule(tokens, pairing, deviceInfo, dataSource)
         }.start(wait = false)
@@ -65,10 +60,5 @@ class LanServer(
         // 置空表示"回到未启动状态"，下次 start 会重新创建引擎
         engine = null
         port = 0
-        // 关闭共享后所有 token 立即失效（白名单记录以后单独持久化，不在这里清）
-        tokens.clear()
-        pairing.clear()
     }
-
-    fun revokeDevice(deviceId: String) = tokens.revoke(deviceId)
 }
