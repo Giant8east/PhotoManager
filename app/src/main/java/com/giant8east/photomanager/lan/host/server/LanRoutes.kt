@@ -80,10 +80,7 @@ fun Application.lanModule(
         post("/v1/pair") {
             val request = call.receive<LanPairRequestDto>()
             if (request.deviceId.isBlank()) {
-                call.respond(
-                    HttpStatusCode.BadRequest,
-                    ErrorDto(LanErrorCode.INVALID_ID, "deviceId must not be blank")
-                )
+                call.respondBadRequest(LanErrorCode.INVALID_ID, "deviceId must not be blank")
                 return@post
             }
             call.respondPairOutcome(pairing.submit(request))
@@ -93,10 +90,7 @@ fun Application.lanModule(
         get("/v1/pair/{requestId}") {
             val requestId = call.parameters["requestId"]
             if (requestId.isNullOrBlank()) {
-                call.respond(
-                    HttpStatusCode.BadRequest,
-                    ErrorDto(LanErrorCode.INVALID_ID, "requestId must not be blank")
-                )
+                call.respondBadRequest(LanErrorCode.INVALID_ID, "requestId must not be blank")
                 return@get
             }
             call.respondPairOutcome(pairing.poll(requestId))
@@ -115,7 +109,7 @@ fun Application.lanModule(
                 // 判断sort字段是否合法
                 val sort = sortParam?.let(LanSortField::fromWire)
                 if (sortParam != null && sort == null) {
-                    call.respondInvalidSort("unsupported sort: $sortParam")
+                    call.respondBadRequest(LanErrorCode.INVALID_SORT, "unsupported sort: $sortParam")
                     return@get
                 }
 
@@ -126,7 +120,7 @@ fun Application.lanModule(
                     "true" -> true
                     "false" -> false
                     else -> {
-                        call.respondInvalidSort("desc must be true or false")
+                        call.respondBadRequest(LanErrorCode.INVALID_SORT, "desc must be true or false")
                         return@get
                     }
                 }
@@ -138,10 +132,7 @@ fun Application.lanModule(
                 val groupParam = call.request.queryParameters["groupId"]
                 val groupId = groupParam?.toLongOrNull()
                 if (groupParam != null && groupId == null) {
-                    call.respond(
-                        HttpStatusCode.BadRequest,
-                        ErrorDto(LanErrorCode.INVALID_ID, "groupId must be a number")
-                    )
+                    call.respondBadRequest(LanErrorCode.INVALID_ID, "groupId must be a number")
                     return@get
                 }
 
@@ -150,10 +141,7 @@ fun Application.lanModule(
                 val limit = call.request.intQuery("limit", default = DEFAULT_PAGE_LIMIT, minimum = 1)
                     ?.coerceAtMost(MAX_PAGE_LIMIT)
                 if (offset == null || limit == null) {
-                    call.respond(
-                        HttpStatusCode.BadRequest,
-                        ErrorDto(LanErrorCode.INVALID_PAGE, "offset/limit must be valid numbers")
-                    )
+                    call.respondBadRequest(LanErrorCode.INVALID_PAGE, "offset/limit must be valid numbers")
                     return@get
                 }
 
@@ -180,10 +168,7 @@ fun Application.lanModule(
             get("/v1/albums/{id}/photos") {
                 val albumId = call.parameters["id"]?.toLongOrNull()
                 if (albumId == null) {
-                    call.respond(
-                        HttpStatusCode.BadRequest,
-                        ErrorDto(LanErrorCode.INVALID_ID, "album id must be a number")
-                    )
+                    call.respondBadRequest(LanErrorCode.INVALID_ID, "album id must be a number")
                     return@get
                 }
                 call.respond(dataSource.photos(albumId))
@@ -193,10 +178,7 @@ fun Application.lanModule(
             get("/v1/media/{id}") {
                 val photoId = call.parameters["id"]?.toLongOrNull()
                 if (photoId == null) {
-                    call.respond(
-                        HttpStatusCode.BadRequest,
-                        ErrorDto(LanErrorCode.INVALID_ID, "photo id must be a number")
-                    )
+                    call.respondBadRequest(LanErrorCode.INVALID_ID, "photo id must be a number")
                     return@get
                 }
                 val media = dataSource.mediaFile(photoId)
@@ -277,9 +259,18 @@ private suspend fun ApplicationCall.respondPairOutcome(outcome: LanPairing.Outco
     }
 }
 
-/** 统一的排序参数错误响应；抽出来避免两处重复拼 code/message。 */
-private suspend fun ApplicationCall.respondInvalidSort(message: String) {
-    respond(HttpStatusCode.BadRequest, ErrorDto(code = LanErrorCode.INVALID_SORT, message = message))
+/**
+ * 统一的 400 响应：协议层的参数错误都走这里，不再逐个 handler 拼
+ * `respond(HttpStatusCode.BadRequest, ErrorDto(code, message))`。
+ *
+ * 语义：400 表示**调用方把参数写错了**，客户端不该把它当业务分支处理——
+ * 它只会出现在客户端 bug 或有人手动调接口的时候。
+ *
+ * 语法糖：`ApplicationCall.respondBadRequest` 是扩展函数，
+ * 等价于 `respondBadRequest(call, code, message)`。
+ */
+private suspend fun ApplicationCall.respondBadRequest(code: LanErrorCode, message: String) {
+    respond(HttpStatusCode.BadRequest, ErrorDto(code = code, message = message))
 }
 
 /**
