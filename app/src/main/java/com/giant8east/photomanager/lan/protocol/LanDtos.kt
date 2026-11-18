@@ -1,5 +1,5 @@
 /** 局域网协议的线上 DTO：服务端与客户端共用同一份定义，改接口时两边同时生效。 */
-package com.giant8east.photomanager.lan
+package com.giant8east.photomanager.lan.protocol
 
 import kotlinx.serialization.Serializable
 
