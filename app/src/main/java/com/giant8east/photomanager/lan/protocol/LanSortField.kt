@@ -5,8 +5,6 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
- * 与本地 `AlbumSortField` 一一对应，但**不依赖** app 模块（`:lan` 是纯 JVM）。
- *
  * - `wire`：查询参数与 JSON 里的取值（大小写敏感，仅小写 kamelCase）；
  * - `defaultDescending`：切换字段时的默认方向，与本地枚举保持一致。
  *
