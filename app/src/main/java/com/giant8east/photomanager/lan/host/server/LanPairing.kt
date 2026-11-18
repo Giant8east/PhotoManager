@@ -175,7 +175,7 @@ class LanPairing(
      * 签发与写结果在同一次锁内完成，客户端不会看到"token 已发、结果还没写"的中间态。
      */
     private fun issueLocked(deviceId: String): Outcome.Issued =
-        Outcome.Issued(tokens.issue(deviceId).token)
+        Outcome.Issued(tokens.issue(deviceId))
 
     /**
      * 统一的过期处理，必须在 [mutex] 内调用：
