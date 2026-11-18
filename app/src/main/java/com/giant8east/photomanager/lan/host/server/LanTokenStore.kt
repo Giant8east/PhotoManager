@@ -3,12 +3,6 @@ package com.giant8east.photomanager.lan.host.server
 
 import java.security.SecureRandom
 
-/** 签发结果：token 与它当前的截止时间（滑动过期，使用中会顺延）。 */
-data class IssuedToken(
-    val token: String,
-    val expiresAt: Long
-)
-
 /**
  * 一个 deviceId 对应一个 token，反向也维护 token → 设备，校验是 O(1)。
  *
@@ -46,8 +40,13 @@ class LanTokenStore(
     // 所以 issue 里调用 purgeExpired 不需要单独加锁。
     private val lock = Any()
 
-    /** 为设备签发新 token；重复签发会让旧 token 立即失效，并顺带清理已过期的条目。 */
-    fun issue(deviceId: String): IssuedToken = synchronized(lock) {
+    /**
+     * 为设备签发新 token；重复签发会让旧 token 立即失效，并顺带清理已过期的条目。
+     *
+     * 只返回 token 字符串：截止时间由 `Entry` 在内部维护，且会被 [resolve] 不断往后推，
+     * 导出它的副本只会让调用方拿到一个立刻过时的值。
+     */
+    fun issue(deviceId: String): String = synchronized(lock) {
         val now = clock()
         // 过期判断本身是惰性的（resolve 时触发），这里在签发时顺带扫一遍，
         // 避免长期共享、很多设备配对过之后过期条目一直滞留在 map 里
@@ -58,7 +57,7 @@ class LanTokenStore(
         byDevice.put(deviceId, token)?.let(byToken::remove)
         // 语法糖：map[key] = value 等价于 put(key, value)
         byToken[token] = Entry(deviceId, expiresAt = now + idleTimeoutMillis)
-        IssuedToken(token, now + idleTimeoutMillis)
+        token
     }
 
     /** 仅供测试与诊断：当前登记的 token 数量。 */
