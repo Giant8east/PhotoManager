@@ -10,6 +10,9 @@ const val TOKEN_HEADER = "token"
 /** 协议版本前缀，所有业务接口都挂在它下面。 */
 const val API_PREFIX = "/v1"
 
+/** mDNS/DNS-SD 服务类型：分享方用它注册、访客方按它发现，两端必须完全一致。 */
+const val LAN_SERVICE_TYPE = "_photomanager._tcp"
+
 /** 分页默认页大小：请求不带 limit 时服务端用它。 */
 const val DEFAULT_PAGE_LIMIT = 60
 
