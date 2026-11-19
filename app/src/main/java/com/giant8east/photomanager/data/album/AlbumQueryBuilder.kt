@@ -19,11 +19,6 @@ object AlbumQueryBuilder {
         val filterClause: String
         val filterArgs: Array<Any?>
         when {
-            // 共享视图：跨全部分组，不叠加任何筛选
-            query.allGroups -> {
-                filterClause = ""
-                filterArgs = emptyArray()
-            }
             hasKeyword -> {
                 filterClause = ""
                 filterArgs = emptyArray()
