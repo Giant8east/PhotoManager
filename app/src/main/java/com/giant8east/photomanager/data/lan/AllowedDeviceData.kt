@@ -3,7 +3,7 @@ package com.giant8east.photomanager.data.lan
 
 import com.giant8east.photomanager.data.database.AllowedDeviceEntity
 import com.giant8east.photomanager.data.database.PhotoDatabase
-import com.giant8east.photomanager.lan.WhitelistStore
+import com.giant8east.photomanager.lan.server.WhitelistStore
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
@@ -37,10 +37,5 @@ class AllowedDeviceData @Inject constructor(
 
     override suspend fun remove(deviceId: String) {
         database.allowedDeviceDao().deleteAllowedDevice(deviceId)
-    }
-
-    /** 白名单设备每次免确认配对时刷新"最近访问"。 */
-    suspend fun touch(deviceId: String) {
-        database.allowedDeviceDao().updateLastSeen(deviceId, System.currentTimeMillis())
     }
 }
