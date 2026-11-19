@@ -20,9 +20,6 @@ interface AllowedDeviceDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAllowedDevice(device: AllowedDeviceEntity)
 
-    @Query("UPDATE allowed_devices SET lastSeenAt = :lastSeenAt WHERE deviceId = :deviceId")
-    suspend fun updateLastSeen(deviceId: String, lastSeenAt: Long)
-
     @Query("DELETE FROM allowed_devices WHERE deviceId = :deviceId")
     suspend fun deleteAllowedDevice(deviceId: String)
 }
