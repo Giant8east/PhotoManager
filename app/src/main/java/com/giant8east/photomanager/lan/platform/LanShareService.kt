@@ -1,5 +1,5 @@
 /** 共享前台服务：保证进程存活并展示地址，关闭动作回到控制器。 */
-package com.giant8east.photomanager.lan.server
+package com.giant8east.photomanager.lan.platform
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -14,8 +14,8 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.giant8east.photomanager.R
-import com.giant8east.photomanager.lan.LanShareController
-import com.giant8east.photomanager.lan.LanShareState
+import com.giant8east.photomanager.lan.host.LanShareController
+import com.giant8east.photomanager.lan.host.LanShareState
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
@@ -42,8 +42,12 @@ class LanShareService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
-            controller.setEnabled(false)
-            stopSelf()
+            // 关闭共享要停引擎、清 token，可能耗时几十毫秒；等它做完再停服务，
+            // 否则服务先被停掉，共享状态却还挂在运行中。
+            scope.launch {
+                controller.setEnabled(false)
+                stopSelf()
+            }
             return START_NOT_STICKY
         }
         return START_STICKY
@@ -70,11 +74,7 @@ class LanShareService : Service() {
             this,
             NOTIFICATION_ID,
             notification,
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-            } else {
-                0
-            }
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
         )
     }
 
