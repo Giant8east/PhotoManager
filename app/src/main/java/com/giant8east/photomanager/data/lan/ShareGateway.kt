@@ -1,5 +1,5 @@
 /** 协议层数据桥：把本地 Room 快照映射成局域网 DTO，排序语义与本地列表共用一套。 */
-package com.giant8east.photomanager.lan.server
+package com.giant8east.photomanager.data.lan
 
 import com.giant8east.photomanager.data.album.AlbumShareData
 import com.giant8east.photomanager.data.settings.AlbumListSettingsData
@@ -7,14 +7,15 @@ import com.giant8east.photomanager.data.album.AlbumSortField
 import com.giant8east.photomanager.data.media.PhotoFormat
 import com.giant8east.photomanager.data.database.AlbumEntity
 import com.giant8east.photomanager.data.database.PhotoEntity
-import com.giant8east.photomanager.lan.LanAlbumDto
-import com.giant8east.photomanager.lan.LanAlbumListDto
-import com.giant8east.photomanager.lan.LanGroupDto
-import com.giant8east.photomanager.lan.LanGroupListDto
-import com.giant8east.photomanager.lan.LanPhotoDto
-import com.giant8east.photomanager.lan.LanSortField
-import com.giant8east.photomanager.lan.MediaFile
-import com.giant8east.photomanager.lan.ShareDataSource
+import com.giant8east.photomanager.lan.protocol.LanAlbumDto
+import com.giant8east.photomanager.lan.protocol.LanAlbumListDto
+import com.giant8east.photomanager.lan.protocol.LanGroupDto
+import com.giant8east.photomanager.lan.protocol.LanGroupListDto
+import com.giant8east.photomanager.lan.protocol.LanPhotoDto
+import com.giant8east.photomanager.lan.protocol.LanSortField
+import com.giant8east.photomanager.lan.server.AlbumListRequest
+import com.giant8east.photomanager.lan.server.MediaFile
+import com.giant8east.photomanager.lan.server.ShareDataSource
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.first
@@ -28,31 +29,40 @@ class ShareGateway @Inject constructor(
     /**
      * 相册列表：请求参数为 null 时使用宿主当前的排序设置。
      * 响应同时带回"宿主默认排序"与"本次实际排序"，让远端能初始化/恢复默认。
-     * [query] 非空时按关键词搜索，忽略分组筛选（与本地搜索一致）。
+     *
+     * 分页在内存里切片：Room 的相册查询仍然一次取全量，这里只把窗口内的相册
+     * 映射成 DTO。真正的成本在封面的 N+1 查询，切片后只对一页（最多 200 个）发查询；
+     * 相册总量到万级时再把 LIMIT/OFFSET 下推到 SQL。
      */
-    override suspend fun albums(
-        sortField: LanSortField?,
-        descending: Boolean?,
-        query: String?
-    ): LanAlbumListDto {
+    override suspend fun albums(request: AlbumListRequest): LanAlbumListDto {
         val hostSettings = settingsData.observeSettings().first()
         val defaultSort = hostSettings.sortField.toLanSort()
-        val appliedSort = sortField ?: defaultSort
-        val appliedDescending = descending ?: hostSettings.isDescending
+        val appliedSort = request.sortField ?: defaultSort
+        val appliedDescending = request.descending ?: hostSettings.isDescending
 
-        val albums = shareData.albums(
+        val matched = shareData.albums(
             sortField = appliedSort.toAlbumSort(),
             descending = appliedDescending,
-            keyword = query.orEmpty()
+            keyword = request.query.orEmpty(),
+            groupId = request.groupId
         )
+        val page = matched.page(request.offset, request.limit)
         return LanAlbumListDto(
-            albums = albums.map { album -> album.toDto() },
+            albums = page.map { album -> album.toDto() },
             defaultSortField = defaultSort,
             defaultSortDescending = hostSettings.isDescending,
             sortField = appliedSort,
-            sortDescending = appliedDescending
+            sortDescending = appliedDescending,
+            offset = request.offset,
+            limit = request.limit,
+            total = matched.size,
+            hasMore = request.offset + page.size < matched.size
         )
     }
+
+    /** 取一页：偏移越过末尾返回空页，长度不足一页时只返回剩下的部分。 */
+    private fun <T> List<T>.page(offset: Int, limit: Int): List<T> =
+        if (offset >= size) emptyList() else subList(offset, minOf(offset + limit, size))
 
     override suspend fun groups(): LanGroupListDto {
         val groups = shareData.groups()
