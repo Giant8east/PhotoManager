@@ -6,6 +6,7 @@ import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.util.Log
 import com.giant8east.photomanager.lan.guest.LanDevice
+import com.giant8east.photomanager.lan.protocol.LAN_SERVICE_TYPE
 import kotlin.coroutines.resume
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -79,7 +80,7 @@ class MdnsBrowser(context: Context, private val selfDeviceId: String) {
         }
         discoveryListener = listener
         try {
-            nsdManager.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, listener)
+            nsdManager.discoverServices(LAN_SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, listener)
         } catch (_: Exception) {
             // 注册失败（系统 NSD 不可用等）：别把一个没注册成功的句柄留给 stop() 去注销
             discoveryListener = null
@@ -176,7 +177,6 @@ class MdnsBrowser(context: Context, private val selfDeviceId: String) {
 
     // companion object：Kotlin 放"类级常量"的地方，等价于 Java 的 static final
     private companion object {
-        const val SERVICE_TYPE = "_photomanager._tcp"
         const val TAG = "MdnsBrowser"
 
         /** 单次解析的等待上限；局域网正常是几十毫秒，3 秒还没结果说明系统卡住了。 */
