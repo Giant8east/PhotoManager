@@ -16,24 +16,23 @@ class AlbumShareData @Inject constructor(
     private val database: PhotoDatabase
 ) {
     /**
-     * 共享视图的相册快照：跨全部分组，排序复用与本地列表相同的 SQL 构建。
+     * 共享视图的相册快照：一次取某个分组（[groupId] 为 null 表示未分组）。
      * [sortField] 已由协议层把线上枚举转换成本地枚举；
      * [keyword] 非空时走"全局搜索"分支（忽略分组），与本地搜索行为一致。
      */
     suspend fun albums(
         sortField: AlbumSortField,
         descending: Boolean,
-        keyword: String
+        keyword: String,
+        groupId: Long?
     ): List<AlbumEntity> =
         database.albumDao().queryAlbums(
             AlbumQueryBuilder.build(
                 AlbumQuery(
-                    groupId = null,
+                    groupId = groupId,
                     keyword = keyword,
                     sortField = sortField,
-                    isDescending = descending,
-                    // 有关键词时由 build 的"全局搜索"分支接管，这里只在无关键词时跨分组
-                    allGroups = keyword.isEmpty()
+                    isDescending = descending
                 )
             )
         )
