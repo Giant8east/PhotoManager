@@ -40,13 +40,10 @@ class LanServer(
             lanModule(tokens, pairing, deviceInfo, dataSource)
         }.start(wait = false)
 
-        // resolvedConnectors()：查询引擎实际绑定到的地址和端口（bindPort = 0 时必须查）
-        val resolved = try {
-            started.resolvedConnectors().firstOrNull()
-        } catch (error: Exception) {
-            runCatching { started.stop(0, 0) }
-            throw error
-        }
+        // resolvedConnectors()：查询引擎实际绑定到的地址和端口（bindPort = 0 时必须查）。
+        // start(wait = false) 能正常返回，就说明绑定已经完成——CIO 在 startupJob 完成之前
+        // 就把 resolvedConnectors 填好了，绑定失败则由 start() 自己抛出。所以这里不需要 try。
+        val resolved = started.resolvedConnectors().firstOrNull()
         if (resolved == null) {
             // 引擎起来了却拿不到连接信息，说明没真正监听：关掉它并抛异常，
             // 让上层显示"共享启动失败"，而不是拿一个假端口去广播。
