@@ -21,7 +21,7 @@ data class RemoteAlbumQuery(
     val query: String? = null,
     /** 排序字段，总是显式下发；默认 [LanSortField.CUSTOM]（对方的手动顺序）。 */
     val sortField: LanSortField,
-    /** 方向跟着字段一起发给服务端；字段是 CUSTOM 时对方按手动顺序排，方向不生效。 */
+    /** 方向跟着字段一起发给服务端；CUSTOM 时服务端同样按方向排（desc 会把手动顺序倒过来），只是 UI 不为 CUSTOM 提供方向控件。 */
     val descending: Boolean = false
 )
 
