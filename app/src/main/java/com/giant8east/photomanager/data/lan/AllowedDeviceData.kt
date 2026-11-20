@@ -3,7 +3,7 @@ package com.giant8east.photomanager.data.lan
 
 import com.giant8east.photomanager.data.database.AllowedDeviceEntity
 import com.giant8east.photomanager.data.database.PhotoDatabase
-import com.giant8east.photomanager.lan.protocol.LanTrustedDevice
+import com.giant8east.photomanager.lan.server.LanTrustedDevice
 import com.giant8east.photomanager.lan.server.WhitelistStore
 import javax.inject.Inject
 import javax.inject.Singleton
