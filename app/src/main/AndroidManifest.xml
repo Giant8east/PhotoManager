@@ -11,6 +11,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- 部分机型需要持有组播锁才能稳定收发 mDNS 发现报文。 -->
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <!-- Wi-Fi 锁需要这个权限：共享期间保持 Wi-Fi 高性能，避免熄屏后心跳被省电策略拖延。 -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
         android:name=".PhotoManagerApplication"
