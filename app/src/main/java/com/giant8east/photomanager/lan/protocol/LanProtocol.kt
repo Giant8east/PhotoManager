@@ -13,6 +13,22 @@ const val API_PREFIX = "/v1"
 /** mDNS/DNS-SD 服务类型：分享方用它注册、访客方按它发现，两端必须完全一致。 */
 const val LAN_SERVICE_TYPE = "_photomanager._tcp"
 
+/**
+ * 连接状态推送（`GET /v1/events`）的心跳间隔：服务端每 1.5 秒写一帧注释行。
+ *
+ * 心跳不是为了"告诉客户端我还活着"——真关机时连接会被立刻关闭；
+ * 它是为了**静默断链**：Wi-Fi 断了、对端掉电，TCP 不会马上报错，
+ * 只能靠"这段时间一个字节都没收到"来判断。
+ */
+const val SSE_HEARTBEAT_MILLIS = 1_500L
+
+/**
+ * 访客侧的读超时：连续这么久收不到任何字节就判定对端失联。
+ *
+ * 必须明显大于 [SSE_HEARTBEAT_MILLIS]（留出 2～3 次心跳的余量），否则正常抖动也会误判。
+ */
+const val SSE_READ_TIMEOUT_MILLIS = 4_000L
+
 /** 分页默认页大小：请求不带 limit 时服务端用它。 */
 const val DEFAULT_PAGE_LIMIT = 60
 
