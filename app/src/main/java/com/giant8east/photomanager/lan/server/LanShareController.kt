@@ -2,8 +2,7 @@
 package com.giant8east.photomanager.lan.server
 
 import android.util.Log
-import com.giant8east.photomanager.lan.AndroidNetworkStatus
-import com.giant8east.photomanager.lan.WifiAddress
+import com.giant8east.photomanager.lan.LocalAddress
 import com.giant8east.photomanager.lan.protocol.DeviceInfoDto
 import com.giant8east.photomanager.lan.protocol.LanDevice
 import com.giant8east.photomanager.lan.protocol.LanIdentity
@@ -14,8 +13,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -28,7 +25,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * 单例控制器：UI 只调用 [setEnabled] 并订阅 [state]。
@@ -45,9 +41,8 @@ class LanShareController @Inject constructor(
     private val allowedDevices: WhitelistStore,
     private val backgroundHost: ServiceBackgroundHost,
     private val announcer: MdnsAnnouncer,
-    private val networkStatus: AndroidNetworkStatus,
-    // 热点侧地址没有系统回调可用，只能靠枚举网卡算（见 HotspotAddress 的注释）
-    private val hotspot: HotspotAddress
+    // 地址（Wi-Fi / 热点、优先级、变化观察）整件事都在它里面，控制器只消费结果
+    private val localAddress: LocalAddress
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val mutex = Mutex()
@@ -56,11 +51,8 @@ class LanShareController @Inject constructor(
 
     private var server: LanServer? = null
 
-    /** 共享期间的地址看门狗：热点开关没有回调，只能定时看。只在共享期间存在。 */
+    /** 地址观察协程：只在共享期间存在，负责"地址变了重新广播、没了关共享"。 */
     private var addressJob: Job? = null
-
-    /** 上一次广播出去的 IP：地址没变就不要重复注册 mDNS。 */
-    private var publishedAddress: String? = null
 
     private val mutableState = MutableStateFlow(LanShareState())
     val state: StateFlow<LanShareState> = mutableState.asStateFlow()
@@ -81,7 +73,7 @@ class LanShareController @Inject constructor(
 
     /**
      * 开关入口：返回本次操作的结果，[LanShareResult] 里的三种失败
-     * （[LanShareResult.NoWifiAddress] / [LanShareResult.StartFailed] / [LanShareResult.AdvertiseFailed]）
+     * （[LanShareResult.NoAddress] / [LanShareResult.StartFailed] / [LanShareResult.AdvertiseFailed]）
      * 都由 UI 负责提示用户，共享保持关闭。
      * 引擎的启动与停止会阻塞线程，所以统一切到 Default 调度器，不占用调用方（UI 主线程或前台服务）的线程。
      */
@@ -110,10 +102,8 @@ class LanShareController @Inject constructor(
 
         // 没有可用 IPv4 就没法广播地址，UI 也只能显示一个空地址。所以在拉起任何东西之前先确认，
         // 失败时直接返回"保持关闭"，不需要回滚已经启动的服务或引擎。
-        // 顺序：连着的 Wi-Fi（STA）→ 热点接口。只有热点没有 Wi-Fi 时也能共享，
-        // 这时对端连的就是热点网段里的我们。
-        val ip = networkStatus.awaitAddress() ?: hotspot.current()
-            ?: return LanShareResult.NoWifiAddress
+        // 顺序由 LocalAddress 决定：连着的 Wi-Fi（STA）优先，其次热点——只有热点没有 Wi-Fi 时也能共享。
+        val ip = localAddress.awaitAddress() ?: return LanShareResult.NoAddress
 
         // 先拉起前台服务，保证进程在绑定端口期间有前台优先级
         try {
@@ -160,60 +150,51 @@ class LanShareController @Inject constructor(
     }
 
     /**
-     * 共享期间的地址看门狗。
+     * 共享期间订阅地址变化。
      *
-     * 为什么需要它：Wi-Fi 有 `ConnectivityManager` 回调，但热点没有（`SoftApCallback` 是 SystemApi），
-     * 所以热点开关、热点地址变化只能定时探。两件事都靠它：
-     * - 地址变了（比如 Wi-Fi 断了但热点还在）→ 换地址重新广播，正在连着的对端不受影响；
-     * - 地址没了（Wi-Fi 与热点都没有）→ 关共享并提示，不留在"开着但谁也连不上"的假状态。
+     * 两种变化都只影响"要不要继续开着"：
+     * - 地址变了（比如 Wi-Fi 断了但热点还在）→ 用新地址重新广播，正在连着的对端不受影响；
+     * - 地址没了（`null`）→ 关共享并提示，不留在"开着但谁也连不上"的假状态。
+     *
+     * 什么时候算"变了"、什么时候算"没了"由 [LocalAddress.watch] 判定（含切网去抖），这里只处理结果。
      */
     private fun startAddressMonitorLocked() {
         addressJob?.cancel()
         addressJob = scope.launch {
-            var missingTicks = 0
-            while (isActive) {
-                delay(ADDRESS_POLL_INTERVAL_MILLIS.milliseconds)
-                val current = currentAddress()
-                val keepRunning = mutex.withLock {
-                    val running = server ?: return@withLock false
-                    if (current == null) {
-                        // 切网时地址会短暂全无，连续几轮都探不到才真的关
-                        missingTicks++
-                        if (missingTicks < ADDRESS_LOST_TICKS) return@withLock true
-                        // 下面会停共享；先把引用摘掉，否则 cancel 会取消到自己，
-                        // 导致 stopLocked 在 pairing.clear() 那个挂起点上中断，留下半状态
-                        addressJob = null
-                        stopLocked()
-                        mutableEvents.tryEmit(LanShareEvent.WifiLost)
-                        return@withLock false
-                    }
-                    missingTicks = 0
-                    if (current == publishedAddress) return@withLock true
-                    if (publishLocked(running.port, current)) return@withLock true
-                    addressJob = null
-                    stopLocked()
-                    mutableEvents.tryEmit(LanShareEvent.AdvertiseFailed)
-                    return@withLock false
+            localAddress.watch().collect { current ->
+                if (current == null) {
+                    closeFromWatcher(LanShareEvent.AddressLost)
+                    return@collect
                 }
-                if (!keepRunning) return@launch
+                val failed = mutex.withLock {
+                    val running = server ?: return@withLock false
+                    !publishLocked(running.port, current)
+                }
+                if (failed) closeFromWatcher(LanShareEvent.AdvertiseFailed)
             }
         }
     }
 
     /**
-     * 本机"对端该用的地址"：优先连着的 Wi-Fi（STA），其次热点。
+     * 由地址观察触发的关闭：必须另起一个协程。
      *
-     * 两者取数方式不同是刻意的：STA 用 `ConnectivityManager` 的结果（网络一消失立刻算没有，不会滞后），
-     * 热点只能用网卡枚举（网卡上的地址会比"热点已关"晚消失一会儿，所以只信 `isUp` + 有 IPv4）。
+     * 不能在收集协程里直接调 [stopLocked]——它会取消 [addressJob]，也就是取消正在执行它的这个协程，
+     * 于是 stopLocked 会在 `pairing.clear()` 那个挂起点上中断，留下"通知还在、token 还有效"的半状态。
      */
-    private fun currentAddress(): String? =
-        (networkStatus.ipv4.value as? WifiAddress.Present)?.value ?: hotspot.current()
+    private fun closeFromWatcher(reason: LanShareEvent) {
+        scope.launch {
+            mutex.withLock {
+                if (server == null) return@withLock
+                stopLocked()
+                mutableEvents.tryEmit(reason)
+            }
+        }
+    }
 
     private suspend fun stopLocked(): LanShareResult {
-        // 看门狗先撤。它自己触发关闭时已经把 addressJob 置空，所以这里不会取消到它自己。
+        // 观察协程先撤：它自己触发关闭时走的是 closeFromWatcher 另起的协程，所以这里不会取消到它自己
         addressJob?.cancel()
         addressJob = null
-        publishedAddress = null
         // 这两步都没有异常出口：announcer.stop() 内部判空 + runCatching；server.stop() 是 Ktor 的
         // shutdownServer（complete / join / destroyApplication），dispose 的异常在库内部就被吞掉了
         announcer.stop()
@@ -245,7 +226,6 @@ class LanShareController @Inject constructor(
         )
         val registered = announcer.announce(device)
         if (!registered) return false
-        publishedAddress = ip
         mutableState.value = LanShareState(
             isRunning = true,
             address = "http://$ip:$port"
@@ -255,15 +235,6 @@ class LanShareController @Inject constructor(
 
     // companion object：Kotlin 放"类级常量"的地方，等价于 Java 的 static final
     private companion object {
-        /**
-         * 地址轮询间隔。热点没有系统回调，只能自己看；3 秒的代价是 getifaddrs 一次系统调用，
-         * 而收益是"关热点后最多 3 秒内反映到状态"。
-         */
-        const val ADDRESS_POLL_INTERVAL_MILLIS = 3_000L
-
-        /** 连续几轮探不到地址才关共享：切网时地址会短暂全无，一轮就关会误伤漫游。 */
-        const val ADDRESS_LOST_TICKS = 2
-
         /** logcat 过滤器标签：adb logcat -s LanShareController */
         const val TAG = "LanShareController"
     }
