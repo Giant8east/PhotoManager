@@ -1,7 +1,6 @@
 /** mDNS 浏览：把同一局域网里正在共享的设备变成"实例名 → 设备"的可订阅表。 */
 package com.giant8east.photomanager.lan.client
 
-import com.giant8east.photomanager.lan.LanDebugLog
 import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
@@ -104,7 +103,6 @@ class MdnsBrowser @Inject constructor(
 
             override fun onServiceFound(serviceInfo: NsdServiceInfo) {
                 Log.d(TAG, "found: ${serviceInfo.serviceName}")
-                LanDebugLog.write("found: ${serviceInfo.serviceName}")
                 activeNames.add(serviceInfo.serviceName)
                 // trySend 不阻塞：队列无界（UNLIMITED），只在通道已关闭时失败
                 resolveQueue.trySend(serviceInfo)
@@ -117,14 +115,12 @@ class MdnsBrowser @Inject constructor(
             }
         }
         discoveryListener = listener
-        LanDebugLog.write("browser start: $LAN_SERVICE_TYPE")
         if (multicastLock?.isHeld == false) multicastLock.acquire()
         try {
             nsdManager.discoverServices(LAN_SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, listener)
-            LanDebugLog.write("browser started")
         } catch (error: Exception) {
             // 注册失败（系统 NSD 不可用等）：别把一个没注册成功的句柄留给 stop() 去注销
-            LanDebugLog.write("browser start threw: ${error.message}")
+            Log.w(TAG, "discovery start threw: ${error.message}")
             discoveryListener = null
             return
         }
@@ -187,7 +183,6 @@ class MdnsBrowser @Inject constructor(
         // TXT 里的设备身份；与本机相同即"自己"，不是对面那台手机
         val peerDeviceId = serviceInfo.attributes?.get("deviceId")?.decodeToString()
         Log.d(TAG, "resolved: ${serviceInfo.serviceName} host=$host port=${serviceInfo.port} deviceId=$peerDeviceId self=$selfDeviceId")
-        LanDebugLog.write("resolved: ${serviceInfo.serviceName} host=$host port=${serviceInfo.port} deviceId=$peerDeviceId self=$selfDeviceId")
         if (host == null) return null
         if (serviceInfo.port !in 1..65535) return null
         if (peerDeviceId == selfDeviceId) return null
