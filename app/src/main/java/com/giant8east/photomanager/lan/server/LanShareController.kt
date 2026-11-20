@@ -181,19 +181,18 @@ class LanShareController @Inject constructor(
     }
 
     private suspend fun stopLocked(): LanShareResult {
-        try {
-            announcer.stop()
-            server?.stop()
-        } catch (error: Exception) {
-            // 引擎关闭失败也要把下面这些收干净：否则开关会停在"运行中"而实际早已不可用
-            Log.w(TAG, "failed to stop LAN server: ${error.message}")
-        } finally {
-            server = null
-        }
+        // 这两步都没有异常出口：announcer.stop() 内部判空 + runCatching；server.stop() 是 Ktor 的
+        // shutdownServer（complete / join / destroyApplication），dispose 的异常在库内部就被吞掉了
+        announcer.stop()
+        server?.stop()
+        server = null
         // 关闭共享后所有 token 立即失效、待确认请求作废：这是"开关"的业务语义，不属于引擎
         tokens.clear()
         backgroundHost.stop()
         mutableState.value = LanShareState()
+        // 唯一的挂起点（Mutex.lock 可取消）必须留到最后：用户点关闭后马上返回会取消
+        // viewModelScope，取消只可能断在这一行，此时通知与开关状态已经复位，不会留下
+        // "通知还在、开关还亮、实际谁也连不上"的半状态
         pairing.clear()
         return LanShareResult.Closed
     }
