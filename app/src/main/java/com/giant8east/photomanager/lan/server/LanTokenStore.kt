@@ -41,7 +41,8 @@ class LanTokenStore(
     private val lock = Any()
 
     /**
-     * 为设备签发新 token；重复签发会让旧 token 立即失效，并顺带清理已过期的条目。
+     * 为设备签发 token，并顺带清理已过期的条目；
+     * 若该设备已有未过期 token，直接复用并续期，避免同一设备并发配对互相顶号引发 401 风暴。
      *
      * 只返回 token 字符串：截止时间由 `Entry` 在内部维护，且会被 [resolve] 不断往后推，
      * 导出它的副本只会让调用方拿到一个立刻过时的值。
@@ -52,10 +53,17 @@ class LanTokenStore(
         // 避免长期共享、很多设备配对过之后过期条目一直滞留在 map 里
         purgeExpired(now)
 
+        val existingToken = byDevice[deviceId]
+        if (existingToken != null) {
+            // purgeExpired 刚清理完过期项且两张表同锁同步，这里对应条目必然存在
+            checkNotNull(byToken[existingToken]).expiresAt = now + idleTimeoutMillis
+            // return@synchronized 表示从 synchronized 的 lambda 返回，作为整个 issue() 的返回值
+            return@synchronized existingToken
+        }
+
         val token = randomToken()
-        // put 返回旧值；?.let 等价于 if (旧值 != null) byToken.remove(旧值)
-        byDevice.put(deviceId, token)?.let(byToken::remove)
         // 语法糖：map[key] = value 等价于 put(key, value)
+        byDevice[deviceId] = token
         byToken[token] = Entry(deviceId, expiresAt = now + idleTimeoutMillis)
         token
     }
@@ -74,7 +82,7 @@ class LanTokenStore(
         if (entry.isExpired(now)) {
             byToken.remove(token)
             // 锁内可以确定反向表指向的就是这个 token：
-            // issue 换 token 时会同时删掉旧的 byToken 条目，不会出现两条并存
+            // issue 只在旧 token 过期或被撤销后才签发新 token，不会出现两条并存
             byDevice.remove(entry.deviceId)
             return@synchronized null
         }
