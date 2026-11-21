@@ -83,6 +83,8 @@ internal fun AlbumDeleteDialog(
         // 删除进行中与结果都在这里收口：运行中只显示进度，结束后才给重试与关闭按钮
         AppDialog(
             title = stringResource(R.string.album_delete_title),
+            // 删除进行中点空白/返回都不能关闭：用户看不到进度也取消不了任务，只能等它跑完
+            dismissible = !deleteState.isRunning,
             buttons = if (!deleteState.isRunning && deleteState.result != null) {
                 { _ ->
                     if (deleteState.result is DeleteResult.Partial ||
