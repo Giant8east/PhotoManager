@@ -5,6 +5,7 @@ import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.net.wifi.WifiManager
+import android.os.SystemClock
 import android.util.Log
 import com.giant8east.photomanager.lan.protocol.LanDevice
 import com.giant8east.photomanager.lan.protocol.LanIdentity
@@ -18,10 +19,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
@@ -74,27 +77,52 @@ class MdnsBrowser @Inject constructor(
     // onServiceLost 在系统线程回调、解析循环在 Default 线程，所以用并发集合。
     private val activeNames: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
-    // 解析循环自己活在一个 scope 里；浏览期间 resolveJob 非空，它同时就是"是否在浏览"的标志
+    // 解析循环自己活在一个 scope 里。resolveJob 只是"循环在跑"的句柄，不能单独代表"正在浏览"：
+    // 注册是异步的，listener 已经交出、循环还没起来的那一小段也算浏览中（见 start() 的双条件守卫）。
     private val resolveScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var resolveJob: Job? = null
+
+    // 看门狗：列表空着、又长时间没有任何回调时，主动重开一次会话。
+    // 专门对付"系统会话已经坏了但没人知道"——后台→前台时那次 discoverServices 失败，
+    // onStart 已经走过，再没有第二次机会，只能靠它自己重来。
+    private var watchdogJob: Job? = null
+
+    // 连续失败次数，用来算退避间隔；注册成功后归零
+    private var startAttempt = 0
+
+    // 最近一次收到系统回调的时刻（开机以后的毫秒数，不受改系统时间影响）。
+    // onServiceFound/onServiceLost/onDiscoveryStarted 都会刷新它，看门狗拿"现在 - 它"当静默时长。
+    @Volatile
+    private var lastEventAt = 0L
 
     // 要注销时交给系统的句柄；null 表示还没成功注册过（没有可注销的会话）
     private var discoveryListener: NsdManager.DiscoveryListener? = null
 
     fun start() {
         // 已经在浏览就直接返回：重复 start 会让第一个 listener 再也注销不掉
-        // （字段被覆盖）、两条循环抢同一个队列、multicastLock 计数变成 2 而 stop 只 release 一次
-        if (resolveJob != null) return
+        // （字段被覆盖）、两条循环抢同一个队列、multicastLock 计数变成 2 而 stop 只 release 一次。
+        // 两个条件都要看：注册是异步的，listener 已交出但解析循环还没起来（或反过来）都算"在浏览中"
+        if (discoveryListener != null || resolveJob != null) return
         val listener = object : NsdManager.DiscoveryListener {  // 给注册调用一个类型非空的引用
             override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
-                Log.e(TAG, "Discovery failed: Error code:$errorCode")
-                stop()
+                // 后台→前台的快速切换里，系统旧的发现会话常常还没停干净，
+                // 这一次注册就会失败（FAILURE_ALREADY_ACTIVE）。如果只是 stop()，
+                // 那么此刻 App 已经在前台、ProcessLifecycleOwner.onStart 不会再触发，
+                // 就再也没人调 start()——表现为"列表永久空着，必须杀进程"。
+                Log.w(TAG, "Discovery failed: Error code:$errorCode")
+                scheduleStartRetry()
             }
 
-            override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) = Unit
+            // 停不掉说明系统侧那条会话可能还活着，下一条 start() 就可能撞 ALREADY_ACTIVE；
+            // 本地状态已经复位，这里只留线索（重试交给 scheduleStartRetry）
+            override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) {
+                Log.w(TAG, "Discovery stop failed: Error code:$errorCode")
+            }
 
             override fun onDiscoveryStarted(serviceType: String) {
                 Log.d(TAG, "Service discovery started")
+                startAttempt = 0                                   // 真的起来了，退避计数清零
+                lastEventAt = SystemClock.elapsedRealtime()
             }
 
             override fun onDiscoveryStopped(serviceType: String) {
@@ -103,6 +131,7 @@ class MdnsBrowser @Inject constructor(
 
             override fun onServiceFound(serviceInfo: NsdServiceInfo) {
                 Log.d(TAG, "found: ${serviceInfo.serviceName}")
+                lastEventAt = SystemClock.elapsedRealtime()
                 activeNames.add(serviceInfo.serviceName)
                 // trySend 不阻塞：队列无界（UNLIMITED），只在通道已关闭时失败
                 resolveQueue.trySend(serviceInfo)
@@ -110,6 +139,7 @@ class MdnsBrowser @Inject constructor(
 
             override fun onServiceLost(serviceInfo: NsdServiceInfo) {
                 // 两种丢失：已经解析出来进了表（要删表项），或还在解析队列里排队（删 activeNames 就行）
+                lastEventAt = SystemClock.elapsedRealtime()
                 activeNames.remove(serviceInfo.serviceName)
                 mutableServices.update { it - serviceInfo.serviceName }
             }
@@ -119,9 +149,13 @@ class MdnsBrowser @Inject constructor(
         try {
             nsdManager.discoverServices(LAN_SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, listener)
         } catch (error: Exception) {
-            // 注册失败（系统 NSD 不可用等）：别把一个没注册成功的句柄留给 stop() 去注销
+            // 注册是同步失败的（系统 NSD 不可用、服务类型非法等）：和异步失败走同一条路——
+            // 先摘掉这个从未注册成功的句柄（免得 releaseDiscovery() 去注销一个幽灵），
+            // 再由 scheduleStartRetry() 复位组播锁与队列、按退避重试。
+            // 只 return 不重试的话，此刻 App 已在前台，onStart 不会再触发，列表就永久空着。
             Log.w(TAG, "discovery start threw: ${error.message}")
             discoveryListener = null
+            scheduleStartRetry()
             return
         }
 
@@ -143,9 +177,37 @@ class MdnsBrowser @Inject constructor(
                 }
             }
         }
+
+        startWatchdog()
     }
 
     fun stop() {
+        // 看门狗先停，否则它可能在关掉之后又把会话拉起来
+        watchdogJob?.cancel()
+        watchdogJob = null
+        startAttempt = 0
+        releaseDiscovery()
+    }
+
+    /**
+     * 用户点"刷新"：丢掉当前会话重新开一次。
+     *
+     * 系统 NSD 没有"自定义查询"接口，我们没法只说一句"有人吗"；但重开一次发现会话
+     * 本身就是一次全新的查询——网段里所有应答者会被再问一遍，本地那张表也一起清空，
+     * 等于把"可能已经坏了"的会话整个换掉。所以按钮语义是"刷新我自己的浏览器"。
+     */
+    fun refresh() {
+        stop()
+        start()
+    }
+
+    /**
+     * 把本地这一侧的会话状态全部复位，但不碰看门狗。
+     *
+     * 抽出来是因为两条路都要用它：正常 [stop]，以及注册失败后的重试
+     * （重试前必须先把上一条 listener 摘干净，否则新会话还是撞 ALREADY_ACTIVE）。
+     */
+    private fun releaseDiscovery() {
         // cancel 幂等，且在途解析的回调看到 continuation 已取消就会丢弃结果，不会把设备"复活"
         resolveJob?.cancel()
         resolveJob = null
@@ -156,8 +218,10 @@ class MdnsBrowser @Inject constructor(
         if (listener != null) {
             try {
                 nsdManager.stopServiceDiscovery(listener)
-            } catch (_: Exception) {
-                // 会话在系统侧可能已经失效（比如网络断开会自动结束），注销失败不影响本地状态
+            } catch (error: Exception) {
+                // 会话在系统侧可能已经失效（比如网络断开会自动结束），注销失败不影响本地状态；
+                // 但它正是"下一条会话撞 ALREADY_ACTIVE"的直接前因，所以留一行日志
+                Log.w(TAG, "stop discovery threw: ${error.message}")
             }
         }
 
@@ -168,6 +232,51 @@ class MdnsBrowser @Inject constructor(
             // 空循环：tryReceive 取到就丢
         }
         if (multicastLock?.isHeld == true) multicastLock.release()
+    }
+
+    /**
+     * 注册失败后按退避再试几次（300 → 600 → 1200 毫秒）。
+     *
+     * 系统侧旧会话的注销是异步的，失败往往只是"撞车"，等一会儿就能成功；
+     * 用完 [MAX_START_ATTEMPTS] 次就放弃，把机会留给下一次前后台切换或用户点刷新。
+     */
+    private fun scheduleStartRetry() {
+        releaseDiscovery()
+        if (startAttempt >= MAX_START_ATTEMPTS) {
+            Log.w(TAG, "discovery start failed $startAttempt times, giving up until next start()")
+            startAttempt = 0
+            return
+        }
+        val waitMillis = START_RETRY_BASE_MILLIS shl startAttempt   // 等价于 base * 2^attempt
+        startAttempt++
+        resolveScope.launch {
+            delay(waitMillis.milliseconds)
+            start()
+        }
+    }
+
+    /**
+     * 看门狗：列表空着、又 [WATCHDOG_INTERVAL_MILLIS] 没收到任何回调时，重开一次会话。
+     *
+     * 只在表为空时动手：有设备在应答就说明会话是活的，此时重开会把已有的行抖掉。
+     * 表空又长时间没有任何事件，正是"系统会话坏了但没人知道"的样子。
+     */
+    private fun startWatchdog() {
+        watchdogJob?.cancel()
+        watchdogJob = resolveScope.launch {
+            while (isActive) {
+                delay(WATCHDOG_INTERVAL_MILLIS.milliseconds)
+                if (mutableServices.value.isNotEmpty()) continue
+                val idleMillis = SystemClock.elapsedRealtime() - lastEventAt
+                if (idleMillis < WATCHDOG_INTERVAL_MILLIS) continue
+                Log.w(TAG, "no callback for ${idleMillis}ms and list is empty, restarting discovery")
+                // 先摘掉自己的引用，否则下面的 stop() 取消到的就是本协程，start() 根本不会执行
+                watchdogJob = null
+                stop()
+                start()
+                return@launch
+            }
+        }
     }
 
     /**
@@ -201,6 +310,24 @@ class MdnsBrowser @Inject constructor(
     }
 
     /**
+     * 解析一条发现结果，失败最多再试 [RESOLVE_ATTEMPTS] 次。
+     *
+     * 为什么要重试：系统同一时刻只允许一个 `resolveService`，撞车就会
+     * `onResolveFailed(FAILURE_ALREADY_ACTIVE)`；而 mdnsd 对"已经知道的实例"不会再补发
+     * `onServiceFound`，一次失败就等于这台设备永远消失。隔几百毫秒再问一次通常就通了。
+     */
+    private suspend fun resolveOnce(serviceInfo: NsdServiceInfo): NsdServiceInfo? {
+        var attempt = 0
+        while (attempt < RESOLVE_ATTEMPTS) {
+            val resolved = resolveAttempt(serviceInfo)
+            if (resolved != null) return resolved
+            attempt++
+            if (attempt < RESOLVE_ATTEMPTS) delay(RESOLVE_RETRY_DELAY_MILLIS.milliseconds)
+        }
+        return null
+    }
+
+    /**
      * 发起一次解析并挂起等结果；失败（回调失败 / 同步抛异常 / 超时）返回 null。
      *
      * `suspendCancellableCoroutine` 把"回调式 API"转成"挂起函数"：谁调用它谁就被挂住，
@@ -209,7 +336,7 @@ class MdnsBrowser @Inject constructor(
      * 外面套一层超时是因为系统**有时根本不回调**（服务在解析途中消失、网络接口不匹配、
      * 个别 ROM 的 NSD 实现异常）：没有它，那条 `for` 循环会永久停在第一条上，后面排队等死。
      */
-    private suspend fun resolveOnce(serviceInfo: NsdServiceInfo): NsdServiceInfo? =
+    private suspend fun resolveAttempt(serviceInfo: NsdServiceInfo): NsdServiceInfo? =
         withTimeoutOrNull(RESOLVE_TIMEOUT_MILLIS.milliseconds) {
             suspendCancellableCoroutine { continuation ->
                 val listener = object : NsdManager.ResolveListener {
@@ -222,7 +349,8 @@ class MdnsBrowser @Inject constructor(
                         if (continuation.isActive) continuation.resume(serviceInfo)
                     }
                 }
-                // 部分机型在服务刚出现时解析会失败，丢弃即可，下次 onServiceFound 再来一遍
+                // 同步抛异常（系统 NSD 拒绝了这次解析）：当成一次失败交给 resolveOnce 重试。
+                // 别指望"下次 onServiceFound 再来一遍"——mdnsd 对已经知道的实例不会补发。
                 try {
                     nsdManager.resolveService(serviceInfo, listener)
                 } catch (_: Exception) {
@@ -237,5 +365,20 @@ class MdnsBrowser @Inject constructor(
 
         /** 单次解析的等待上限；局域网正常是几十毫秒，3 秒还没结果说明系统卡住了。 */
         const val RESOLVE_TIMEOUT_MILLIS = 3_000L
+
+        /** 一条发现结果最多解析几次（含第一次）。 */
+        const val RESOLVE_ATTEMPTS = 2
+
+        /** 两次解析之间的间隔：留给系统把上一次"占着"的解析会话放掉。 */
+        const val RESOLVE_RETRY_DELAY_MILLIS = 400L
+
+        /** 注册发现会话最多试几次（含第一次）；用完就等下次前后台切换或用户点刷新。 */
+        const val MAX_START_ATTEMPTS = 3
+
+        /** 退避起点：300 → 600 → 1200 毫秒。 */
+        const val START_RETRY_BASE_MILLIS = 300L
+
+        /** 列表空着又这么久没有任何回调，就认为会话已经哑了（系统 TTL 是 120 秒，取 90 秒更早发现）。 */
+        const val WATCHDOG_INTERVAL_MILLIS = 90_000L
     }
 }
