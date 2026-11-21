@@ -9,8 +9,12 @@ import com.giant8east.photomanager.lan.protocol.LanPairRequestDto
 import com.giant8east.photomanager.lan.protocol.LanPairResponseDto
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import okhttp3.MediaType.Companion.toMediaType
@@ -47,24 +51,71 @@ class PairingFlow @Inject constructor(
     private val identity: LanIdentity,
     private val sessions: LanSessionRegistry
 ) {
-    /** 已经配对过就直接复用 token；否则走完整流程。 */
-    suspend fun connect(device: LanDevice): String = withContext(Dispatchers.IO) {
-        sessions.tokenFor(device.address)?.let { return@withContext it }
+    private val mutex = Mutex()
+    // 同一台设备（address）正在进行中的配对请求：并发到达的 connect / reconnect 直接复用，不重复发 POST /v1/pair
+    private val inFlight = mutableMapOf<String, CompletableDeferred<String>>()
 
-        val issued = try {
-            submitPair(device)
-        } catch (io: IOException) {
-            throw LanPairFailure.Unreachable(io)   // 连不上/超时，和"被拒绝"区分开
+    /** 已经配对过就直接复用 token；否则走完整流程（同设备并发调用自动合并为一次请求）。 */
+    suspend fun connect(device: LanDevice): String = acquireToken(device, forceRefresh = false)
+
+    /** 401 之后重新配对：先丢掉旧 token，再走一次完整流程（同设备并发 401 自动合并）。 */
+    suspend fun reconnect(device: LanDevice): String = acquireToken(device, forceRefresh = true)
+
+    private suspend fun acquireToken(device: LanDevice, forceRefresh: Boolean): String =
+        withContext(Dispatchers.IO) {
+            val address = device.address
+            var cachedToken: String? = null
+            var joined: CompletableDeferred<String>? = null
+            var leader: CompletableDeferred<String>? = null
+
+            mutex.withLock {
+                val running = inFlight[address]
+                if (running != null) {
+                    // 已有在途配对就直接搭便车，不重复发起网络请求
+                    joined = running
+                } else if (forceRefresh) {
+                    // 只有成为领跑者时才清旧 token，避免并发 reconnect 反复擦除状态
+                    sessions.remove(address)
+                    val created = CompletableDeferred<String>()
+                    inFlight[address] = created
+                    leader = created
+                } else {
+                    val token = sessions.tokenFor(address)
+                    if (token != null) {
+                        cachedToken = token
+                    } else {
+                        val created = CompletableDeferred<String>()
+                        inFlight[address] = created
+                        leader = created
+                    }
+                }
+            }
+
+            val hit = cachedToken
+            if (hit != null) return@withContext hit
+            val running = joined
+            if (running != null) return@withContext running.await()
+
+            val active = checkNotNull(leader)
+            try {
+                val issued = try {
+                    submitPair(device)
+                } catch (io: IOException) {
+                    throw LanPairFailure.Unreachable(io)   // 连不上/超时，和"被拒绝"区分开
+                }
+                sessions.put(address, issued)
+                active.complete(issued)
+                issued
+            } catch (error: Throwable) {
+                active.completeExceptionally(error)
+                throw error
+            } finally {
+                // 即使当前协程被取消，也必须清掉占位条目，否则后续请求会永远 await 一个失效的 deferred
+                withContext(NonCancellable) {
+                    mutex.withLock { inFlight.remove(address, active) }
+                }
+            }
         }
-        sessions.put(device.address, issued)
-        issued
-    }
-
-    /** 401 之后重新配对：先丢掉旧 token，再走一次完整流程。 */
-    suspend fun reconnect(device: LanDevice): String {
-        sessions.remove(device.address)
-        return connect(device)
-    }
 
     private suspend fun submitPair(device: LanDevice): String {
         val payload = http.json
