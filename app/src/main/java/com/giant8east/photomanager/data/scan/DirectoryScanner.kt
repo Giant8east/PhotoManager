@@ -133,7 +133,11 @@ class DirectoryScanner @Inject constructor(
             val normalized = normalizePath(current.path)
             if (!visited.add(normalized)) continue
             collected.add(normalized)
-            for (child in current.listFiles().orEmpty()) {
+            // 目录存在但读不到列表时必须中止整次同步，不能用 .orEmpty() 跳过——
+            // 否则下游 unindexVanished 会把这棵子树当成"磁盘已删"清掉相册记录
+            val entries = current.listFiles()
+                ?: error(context.getString(R.string.directory_read_failed, normalized))
+            for (child in entries) {
                 if (child.isDirectory) stack.addLast(child)
             }
         }
