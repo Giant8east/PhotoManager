@@ -1,6 +1,7 @@
 /** 服务端路由与鉴权：只负责协议层，业务数据由调用方以 lambda 注入。 */
 package com.giant8east.photomanager.lan.server
 
+import com.giant8east.photomanager.model.AlbumSortField
 import com.giant8east.photomanager.lan.protocol.DEFAULT_PAGE_LIMIT
 import com.giant8east.photomanager.lan.protocol.DeviceInfoDto
 import com.giant8east.photomanager.lan.protocol.ErrorDto
@@ -8,7 +9,6 @@ import com.giant8east.photomanager.lan.protocol.LanErrorCode
 import com.giant8east.photomanager.lan.protocol.LanPairPendingDto
 import com.giant8east.photomanager.lan.protocol.LanPairRequestDto
 import com.giant8east.photomanager.lan.protocol.LanPairResponseDto
-import com.giant8east.photomanager.lan.protocol.LanSortField
 import com.giant8east.photomanager.lan.protocol.MAX_PAGE_LIMIT
 import com.giant8east.photomanager.lan.protocol.SSE_HEARTBEAT_MILLIS
 import com.giant8east.photomanager.lan.protocol.SessionDto
@@ -21,10 +21,13 @@ import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.ApplicationCallPipeline
 import io.ktor.server.application.call
 import io.ktor.server.application.install
+import io.ktor.server.application.log
+import io.ktor.server.plugins.BadRequestException
+import io.ktor.server.plugins.ContentTransformationException
 import io.ktor.server.plugins.autohead.AutoHeadResponse
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.partialcontent.PartialContent
-import io.ktor.server.request.ApplicationRequest
+import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.request.header
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
@@ -75,6 +78,43 @@ fun Application.lanModule(
     install(PartialContent)
     // AutoHeadResponse：把 HEAD 请求转给同路径的 GET 处理，客户端可用它探测大小/类型
     install(AutoHeadResponse)
+    // StatusPages：全模块唯一的"异常 → HTTP 响应"映射处。
+    //
+    // 参数校验失败一律靠抛异常（见 LanParameters.kt），路由里不再写 respond + return；
+    // 这三个 handler 按异常类型由具体到宽泛匹配，具体类型永远优先。
+    install(StatusPages) {
+        // 参数错误：走自定义异常，message 里已经写明是哪个参数、什么值
+        exception<InvalidParameterException> { call, cause ->
+            call.respond(
+                HttpStatusCode.BadRequest,
+                ErrorDto(LanErrorCode.INVALID_PARAM, cause.message ?: "invalid parameter")
+            )
+        }
+        // 请求体无法反序列化（JSON 语法错误、缺必填字段）：当成参数错误，而不是服务端 500。
+        // ContentTransformationException 不继承 BadRequestException，引擎默认会把它归到 500。
+        exception<ContentTransformationException> { call, cause ->
+            call.respond(
+                HttpStatusCode.BadRequest,
+                ErrorDto(LanErrorCode.INVALID_PARAM, "malformed request body: ${cause.message}")
+            )
+        }
+        // Ktor 自己抛的 400（例如 MissingFieldException）：同样按协议格式返回
+        exception<BadRequestException> { call, cause ->
+            call.respond(
+                HttpStatusCode.BadRequest,
+                ErrorDto(LanErrorCode.INVALID_PARAM, cause.message ?: "bad request")
+            )
+        }
+        // 兜底：必须留日志，否则线上 500 会变成"用户说连不上、我们什么都查不到"。
+        // 同时不能把 message 回给对端 —— 同网段任何设备都能看到，内部信息会泄漏。
+        exception<Throwable> { call, cause ->
+            call.application.log.error("unhandled failure on ${call.request.local.uri}", cause)
+            call.respond(
+                HttpStatusCode.InternalServerError,
+                ErrorDto(LanErrorCode.INTERNAL, "internal error")
+            )
+        }
+    }
 
     // routing { } 用 lambda 构建路由表：路径 + HTTP 方法 → 处理函数
     routing {
@@ -88,26 +128,14 @@ fun Application.lanModule(
             val request = call.receive<LanPairRequestDto>()
             // deviceId 是白名单主键：不 trim 的话 "abc" 和 " abc " 会被当成两台不同设备。
             // name 会原样进主机弹窗与白名单列表，长度不设上限等于把外部字符串直接塞进 UI 和数据库。
-            val deviceId = request.deviceId.trim()
-            if (deviceId.isEmpty() || deviceId.length > MAX_DEVICE_FIELD_LENGTH) {
-                call.respondBadRequest(
-                    LanErrorCode.INVALID_ID,
-                    "deviceId must be 1..$MAX_DEVICE_FIELD_LENGTH characters"
-                )
-                return@post
-            }
+            val deviceId = request.deviceId.trim().requireLength("deviceId", 1..MAX_DEVICE_FIELD_LENGTH)
             val name = request.name.trim().take(MAX_DEVICE_FIELD_LENGTH)
             call.respondPairOutcome(pairing.submit(request.copy(deviceId = deviceId, name = name)))
         }
 
         // 轮询：202 表示仍在等待，200 表示已批准，403 拒绝，409 超时
         get("/v1/pair/{requestId}") {
-            val requestId = call.parameters["requestId"]
-            if (requestId.isNullOrBlank()) {
-                call.respondBadRequest(LanErrorCode.INVALID_ID, "requestId must not be blank")
-                return@get
-            }
-            call.respondPairOutcome(pairing.poll(requestId))
+            call.respondPairOutcome(pairing.poll(call.requiredPathParameter("requestId")))
         }
 
         // 受保护接口：统一在 authenticated 里校验 token，块内路由不需要各自校验
@@ -119,58 +147,22 @@ fun Application.lanModule(
 
             // 相册列表：sort/desc 缺省 = 宿主默认排序；groupId 缺省 = 未分组；分页参数非法 400
             get("/v1/albums") {
-                val sortParam = call.request.queryParameters["sort"]
-                // 判断sort字段是否合法
-                val sort = sortParam?.let(LanSortField::fromWire)
-                if (sortParam != null && sort == null) {
-                    call.respondBadRequest(LanErrorCode.INVALID_SORT, "unsupported sort: $sortParam")
-                    return@get
-                }
-
-                // 判断desc字段是否合法
-                val descParam = call.request.queryParameters["desc"]
-                val descending = when (descParam) {
-                    null -> null
-                    "true" -> true
-                    "false" -> false
-                    else -> {
-                        call.respondBadRequest(LanErrorCode.INVALID_SORT, "desc must be true or false")
-                        return@get
-                    }
-                }
-
-                // 关键词：空白视为"没有搜索"，避免 q="" 走成 LIKE '%%' 全匹配
-                val query = call.request.queryParameters["q"]?.trim()?.takeIf { it.isNotEmpty() }
-
-                // 分组：缺省表示未分组（与宿主首页默认视图一致）；有关键词时数据源会忽略它
-                val groupParam = call.request.queryParameters["groupId"]
-                val groupId = groupParam?.toLongOrNull()
-                if (groupParam != null && groupId == null) {
-                    call.respondBadRequest(LanErrorCode.INVALID_ID, "groupId must be a number")
-                    return@get
-                }
-
-                // 分页：offset 缺省 0，limit 缺省 DEFAULT_PAGE_LIMIT，超过上限按上限截断
-                val offset = call.request.intQuery("offset", default = 0, minimum = 0)
-                val limit = call.request.intQuery("limit", default = DEFAULT_PAGE_LIMIT, minimum = 1)
-                    ?.coerceAtMost(MAX_PAGE_LIMIT)
-                if (offset == null || limit == null) {
-                    call.respondBadRequest(LanErrorCode.INVALID_PAGE, "offset/limit must be valid numbers")
-                    return@get
-                }
-
-                call.respond(
-                    dataSource.albums(
-                        AlbumListRequest(
-                            sortField = sort,
-                            descending = descending,
-                            query = query,
-                            groupId = groupId,
-                            offset = offset,
-                            limit = limit
-                        )
-                    )
+                val request = AlbumListRequest(
+                    // 未知排序字段算参数错误（缺省则是 null = 跟随宿主设置）
+                    sortField = call.request.queryParameters["sort"]?.let { raw ->
+                        AlbumSortField.fromWire(raw) ?: throw InvalidParameterException("sort", raw)
+                    },
+                    descending = call.request.booleanParameter("desc"),
+                    // 关键词原样透传：空白归一化与"空白视为无搜索"统一由 AlbumQueryBuilder 处理
+                    query = call.request.queryParameters["q"],
+                    // 分组：缺省表示未分组（与宿主首页默认视图一致）；有关键词时数据源会忽略它
+                    groupId = call.request.longParameter("groupId"),
+                    // 分页：offset 缺省 0，limit 缺省 DEFAULT_PAGE_LIMIT，超过上限按上限截断
+                    offset = call.request.intParameter("offset", default = 0, minimum = 0),
+                    limit = call.request.intParameter("limit", default = DEFAULT_PAGE_LIMIT, minimum = 1)
+                        .coerceAtMost(MAX_PAGE_LIMIT)
                 )
+                call.respond(dataSource.albums(request))
             }
 
             // 分组 + 计数 + 未分组数量（不含收藏视图）
@@ -180,22 +172,12 @@ fun Application.lanModule(
 
             // 某相册的图片列表；相册不存在时返回空数组（共享只包含有图的相册）
             get("/v1/albums/{id}/photos") {
-                val albumId = call.parameters["id"]?.toLongOrNull()
-                if (albumId == null) {
-                    call.respondBadRequest(LanErrorCode.INVALID_ID, "album id must be a number")
-                    return@get
-                }
-                call.respond(dataSource.photos(albumId))
+                call.respond(dataSource.photos(call.longPathParameter("id")))
             }
 
             // 图片字节流：respondFile + PartialContent 自动处理 Range/Content-Type
             get("/v1/media/{id}") {
-                val photoId = call.parameters["id"]?.toLongOrNull()
-                if (photoId == null) {
-                    call.respondBadRequest(LanErrorCode.INVALID_ID, "photo id must be a number")
-                    return@get
-                }
-                val media = dataSource.mediaFile(photoId)
+                val media = dataSource.mediaFile(call.longPathParameter("id"))
                 if (media == null) {
                     call.respond(HttpStatusCode.NotFound, ErrorDto(LanErrorCode.NOT_FOUND, "media not found"))
                     return@get
@@ -300,27 +282,4 @@ private suspend fun ApplicationCall.respondPairOutcome(outcome: LanPairing.Outco
             ErrorDto(LanErrorCode.NOT_FOUND, "pairing request not found")
         )
     }
-}
-
-/**
- * 统一的 400 响应：协议层的参数错误都走这里，不再逐个 handler 拼
- * `respond(HttpStatusCode.BadRequest, ErrorDto(code, message))`。
- *
- * 语义：400 表示**调用方把参数写错了**，客户端不该把它当业务分支处理——
- * 它只会出现在客户端 bug 或有人手动调接口的时候。
- *
- * 语法糖：`ApplicationCall.respondBadRequest` 是扩展函数，
- * 等价于 `respondBadRequest(call, code, message)`。
- */
-private suspend fun ApplicationCall.respondBadRequest(code: LanErrorCode, message: String) {
-    respond(HttpStatusCode.BadRequest, ErrorDto(code = code, message = message))
-}
-
-/**
- * 读取整型 query 参数：缺省用 [default]；非数字或小于 [minimum] 返回 null，
- * 由调用方回 400。这里不静默纠正非法值，否则客户端把 offset 写成字符串也没人发现。
- */
-private fun ApplicationRequest.intQuery(name: String, default: Int, minimum: Int): Int? {
-    val raw = queryParameters[name] ?: return default
-    return raw.toIntOrNull()?.takeIf { it >= minimum }
 }
