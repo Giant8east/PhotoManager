@@ -15,6 +15,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -40,6 +44,7 @@ import com.giant8east.photomanager.pages.groupmanager.GroupManagePage
 import com.giant8east.photomanager.pages.setting.SettingPage
 import com.giant8east.photomanager.ui.state.PageContent
 import com.giant8east.photomanager.ui.state.PageState
+import com.giant8east.photomanager.ui.theme.appColors
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 
@@ -88,10 +93,21 @@ internal fun AlbumPage(
                 favoritesSelected = viewModel.favoritesOnly,
                 onGroupSelected = viewModel::selectGroup,
                 onFavoritesSelected = viewModel::selectFavorites,
-                onManageGroups = {
-                    navigator.pushTo { GroupManagePage(navigator) }
-                },
-                onCloseDrawer = closeDrawer
+                onCloseDrawer = closeDrawer,
+                headerActions = {
+                    IconButton(
+                        onClick = {
+                            navigator.pushTo { GroupManagePage(navigator) }
+                            closeDrawer()
+                        }
+                    ) {
+                        Icon(
+                            Icons.Default.Settings,
+                            contentDescription = stringResource(R.string.album_group_manage),
+                            tint = appColors.toolbarContent
+                        )
+                    }
+                }
             )
         }
     ) {
