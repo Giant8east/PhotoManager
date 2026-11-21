@@ -2,6 +2,7 @@
 package com.giant8east.photomanager.data.album
 
 import androidx.sqlite.db.SimpleSQLiteQuery
+import com.giant8east.photomanager.model.AlbumSortField
 
 /**
  * 列名全部来自 [AlbumSortField] 枚举，用户输入只作为绑定参数进入 LIKE，
@@ -43,7 +44,7 @@ object AlbumQueryBuilder {
         ) {
             "favoriteSortOrder"
         } else {
-            query.sortField.sqlExpression
+            query.sortField.orderExpression()
         }
         val sql = """
             SELECT * FROM albums
@@ -55,6 +56,19 @@ object AlbumQueryBuilder {
             sql,
             arrayOf(searchPattern(query.keyword), *filterArgs)
         )
+    }
+
+    /**
+     * ORDER BY 的字段片段。SQL 列名属于数据层，所以不在共用的 [AlbumSortField] 里，
+     * 这里用穷尽 `when` 保证新增排序字段时编译器立刻报错。
+     */
+    private fun AlbumSortField.orderExpression(): String = when (this) {
+        // 自定义顺序就是相册的手动排序序号。
+        AlbumSortField.CUSTOM -> "sortOrder"
+        AlbumSortField.NAME -> "name COLLATE NOCASE"
+        AlbumSortField.MODIFIED_AT -> "julianday(modifiedAt)"
+        AlbumSortField.PHOTO_COUNT -> "photoCount"
+        AlbumSortField.FILE_SIZE -> "totalSizeBytes"
     }
 
     /** 转义 SQLite LIKE 模式中的特殊通配符。 */
