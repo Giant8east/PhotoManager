@@ -4,8 +4,8 @@ package com.giant8east.photomanager.data.lan
 import android.content.Context
 import android.os.Build
 import androidx.core.content.edit
+import com.giant8east.photomanager.BuildConfig
 import com.giant8east.photomanager.lan.protocol.LanIdentity
-import com.hippo.drawerlayout.BuildConfig
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.UUID
 import javax.inject.Inject
