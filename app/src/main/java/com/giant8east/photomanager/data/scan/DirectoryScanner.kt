@@ -7,8 +7,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import android.net.Uri
 import android.os.Environment
 import android.provider.DocumentsContract
-import android.webkit.MimeTypeMap
 import com.giant8east.photomanager.data.database.PhotoEntity
+import com.giant8east.photomanager.data.media.PhotoFormat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -147,10 +147,6 @@ class DirectoryScanner @Inject constructor(
     companion object {
         private const val EXTERNAL_STORAGE_AUTHORITY = "com.android.externalstorage.documents"
 
-        private val IMAGE_EXTENSIONS = setOf(
-            "jpg", "jpeg", "png", "webp", "gif", "bmp", "heic", "heif", "avif"
-        )
-
         /** 归一化本地路径，消除冗余分隔符、`.`、`..` 与末尾斜杠。 */
         fun normalizePath(rawPath: String): String =
             runCatching { File(rawPath).canonicalPath }
@@ -170,15 +166,9 @@ class DirectoryScanner @Inject constructor(
                 c.startsWith("$p$separator")
         }
 
-        /** 扫描只按扩展名识别类型，不预解码或过滤零字节、损坏及透明图片。 */
-        private fun isImageFile(file: File): Boolean {
-            val ext = file.extension.lowercase()
-            if (ext.isEmpty()) return false
-            if (ext in IMAGE_EXTENSIONS) return true
-            return runCatching {
-                MimeTypeMap.getSingleton()?.getMimeTypeFromExtension(ext)?.startsWith("image/") == true
-            }.getOrDefault(false)
-        }
+        /** 扫描只按扩展名识别类型，与删除器共用 [PhotoFormat] 作为唯一口径，不预解码或过滤零字节、损坏及透明图片。 */
+        private fun isImageFile(file: File): Boolean =
+            PhotoFormat.fromFileName(file.name) != PhotoFormat.OTHER
 
         private fun formatEpochMillis(millis: Long): String? =
             millis.takeIf { it > 0L }?.let(Instant::ofEpochMilli)?.toString()
