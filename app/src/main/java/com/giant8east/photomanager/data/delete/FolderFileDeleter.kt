@@ -56,7 +56,7 @@ class FolderFileDeleter @Inject constructor() {
             if (entry.isDirectory) continue
             if (!isDeletableFileName(entry.name)) continue
 
-            if (deleteFile(entry)) {
+            if (entry.delete()) {
                 deletedFiles++
             } else {
                 failedFiles++
@@ -76,8 +76,4 @@ class FolderFileDeleter @Inject constructor() {
     /** 图片按扩展名判断（与相册扫描的判据一致），另外所有点文件也算可删（含 .nomedia / .thumb）。 */
     private fun isDeletableFileName(name: String): Boolean =
         name.startsWith(".") || PhotoFormat.fromFileName(name) != PhotoFormat.OTHER
-
-    /** 删除失败不抛异常，交给调用方统计成 failedFiles。 */
-    private fun deleteFile(file: File): Boolean =
-        runCatching { file.delete() }.getOrDefault(false)
 }
