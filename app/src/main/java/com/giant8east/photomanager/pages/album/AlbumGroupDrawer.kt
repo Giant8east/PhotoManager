@@ -42,22 +42,26 @@ internal fun AlbumGroupDrawer(
     onManageGroups: () -> Unit,
     onCloseDrawer: () -> Unit,
     // 远端设备不共享收藏视图，抽屉里也就不出现这一项。
-    showFavorites: Boolean = true
+    showFavorites: Boolean = true,
+    // 远端没有"管理分组"这回事，齿轮按钮直接不出现。
+    showManageGroups: Boolean = true
 ) {
     DrawerFrame(
         title = stringResource(R.string.album_group_title),
         headerActions = {
-            IconButton(
-                onClick = {
-                    onManageGroups()
-                    onCloseDrawer()
+            if (showManageGroups) {
+                IconButton(
+                    onClick = {
+                        onManageGroups()
+                        onCloseDrawer()
+                    }
+                ) {
+                    Icon(
+                        Icons.Default.Settings,
+                        contentDescription = null,
+                        tint = appColors.toolbarContent
+                    )
                 }
-            ) {
-                Icon(
-                    Icons.Default.Settings,
-                    contentDescription = null,
-                    tint = appColors.toolbarContent
-                )
             }
         }
     ) {
