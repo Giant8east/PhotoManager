@@ -25,12 +25,17 @@ class DeleteFilesHandler @Inject constructor(
         val scan = context.handOff(FolderTask(task.path, TaskKind.SCAN_REFRESH))
         val scanResult = scan.await()
 
-        return when {
-            local.hasBlockingFileFailure ->
-                TaskResult.Failed(null, local.deletedFiles, local.failedFiles)
-            scanResult is TaskResult.Failed ->
-                TaskResult.Failed(scanResult.message, local.deletedFiles, local.failedFiles)
-            else -> TaskResult.Done(local.deletedFiles, local.failedFiles)
+        if (local.hasBlockingFileFailure) {
+            return TaskResult.Failed(null, local.deletedFiles, local.failedFiles)
+        }
+
+        // 扫描里 Skipped 表示"本层已无图片、数据库记录已删"，这才是删除成功的唯一判据；
+        // 扫描返回 Done 说明目录里仍有图片，不能误报删除成功。
+        return when (scanResult) {
+            TaskResult.Skipped -> TaskResult.Done(local.deletedFiles, local.failedFiles)
+            is TaskResult.Failed -> TaskResult.Failed(scanResult.message, local.deletedFiles, local.failedFiles)
+            is TaskResult.Done -> TaskResult.Failed("目录里仍有图片未删除", local.deletedFiles, local.failedFiles)
+            TaskResult.Cancelled -> TaskResult.Failed("删除后的扫描任务被取消", local.deletedFiles, local.failedFiles)
         }
     }
 }
