@@ -6,6 +6,7 @@ import com.giant8east.photomanager.data.database.AlbumEntity
 import com.giant8east.photomanager.data.database.PhotoDatabase
 import com.giant8east.photomanager.data.database.PhotoEntity
 import com.giant8east.photomanager.data.scan.DirectoryScanner
+import com.giant8east.photomanager.model.AlbumQuery
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers

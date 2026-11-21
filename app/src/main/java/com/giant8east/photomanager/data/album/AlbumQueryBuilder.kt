@@ -2,6 +2,7 @@
 package com.giant8east.photomanager.data.album
 
 import androidx.sqlite.db.SimpleSQLiteQuery
+import com.giant8east.photomanager.model.AlbumQuery
 import com.giant8east.photomanager.model.AlbumSortField
 
 /**

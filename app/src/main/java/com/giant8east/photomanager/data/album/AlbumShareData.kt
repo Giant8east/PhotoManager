@@ -1,6 +1,7 @@
 /** 局域网共享的只读快照：一次性查询，不订阅数据库变化，只暴露给协议层。 */
 package com.giant8east.photomanager.data.album
 
+import com.giant8east.photomanager.model.AlbumQuery
 import com.giant8east.photomanager.model.AlbumSortField
 import com.giant8east.photomanager.data.database.AlbumEntity
 import com.giant8east.photomanager.data.database.GroupWithAlbumCount
