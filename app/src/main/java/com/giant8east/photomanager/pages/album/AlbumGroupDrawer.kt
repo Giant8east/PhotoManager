@@ -4,6 +4,7 @@ package com.giant8east.photomanager.pages.album
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -11,11 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -28,7 +25,6 @@ import com.giant8east.photomanager.R
 import com.giant8east.photomanager.data.database.GroupWithAlbumCount
 import com.giant8east.photomanager.pages.common.DrawerFrame
 import com.giant8east.photomanager.pages.common.AppLazyColumnScrollbar
-import com.giant8east.photomanager.ui.theme.appColors
 
 @Composable
 internal fun AlbumGroupDrawer(
@@ -39,31 +35,15 @@ internal fun AlbumGroupDrawer(
     favoritesSelected: Boolean,
     onGroupSelected: (Long?) -> Unit,
     onFavoritesSelected: () -> Unit,
-    onManageGroups: () -> Unit,
     onCloseDrawer: () -> Unit,
     // 远端设备不共享收藏视图，抽屉里也就不出现这一项。
     showFavorites: Boolean = true,
-    // 远端没有"管理分组"这回事，齿轮按钮直接不出现。
-    showManageGroups: Boolean = true
+    // 右上角按钮由调用方提供：相册页传齿轮（点开分组管理），远端页不传即不显示。
+    headerActions: @Composable RowScope.() -> Unit = {}
 ) {
     DrawerFrame(
         title = stringResource(R.string.album_group_title),
-        headerActions = {
-            if (showManageGroups) {
-                IconButton(
-                    onClick = {
-                        onManageGroups()
-                        onCloseDrawer()
-                    }
-                ) {
-                    Icon(
-                        Icons.Default.Settings,
-                        contentDescription = null,
-                        tint = appColors.toolbarContent
-                    )
-                }
-            }
-        }
+        headerActions = headerActions
     ) {
         val listState = rememberLazyListState()
         AppLazyColumnScrollbar(state = listState) {
