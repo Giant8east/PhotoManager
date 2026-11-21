@@ -16,27 +16,29 @@ object AlbumQueryBuilder {
         val nullOrder = if (query.sortField == AlbumSortField.MODIFIED_AT) {
             "julianday(modifiedAt) IS NULL ASC, "
         } else ""
+        // 统一在查询构建边界归一化关键词，保证本地、远端与 HTTP 接口口径完全一致；
         // 有关键词时做全局搜索：忽略分组与收藏筛选，避免"明明有这个相册却搜不到"。
-        val hasKeyword = query.keyword.isNotBlank()
-        val filterClause: String
-        val filterArgs: Array<Any?>
+        val keyword = query.keyword.trim()
+        val hasKeyword = keyword.isNotEmpty()
+        val whereClause: String
+        val whereArgs: Array<Any?>
         when {
             hasKeyword -> {
-                filterClause = ""
-                filterArgs = emptyArray()
+                whereClause = "name LIKE ? ESCAPE '\\' COLLATE NOCASE"
+                whereArgs = arrayOf(searchPattern(keyword))
             }
             // 收藏视图跨分组，不再叠加分组条件。
             query.favoritesOnly -> {
-                filterClause = "AND isFavorite = 1"
-                filterArgs = emptyArray()
+                whereClause = "isFavorite = 1"
+                whereArgs = emptyArray()
             }
             query.groupId == null -> {
-                filterClause = "AND groupId IS NULL"
-                filterArgs = emptyArray()
+                whereClause = "groupId IS NULL"
+                whereArgs = emptyArray()
             }
             else -> {
-                filterClause = "AND groupId = ?"
-                filterArgs = arrayOf(query.groupId)
+                whereClause = "groupId = ?"
+                whereArgs = arrayOf(query.groupId)
             }
         }
         // 自定义排序是视图级的：仅收藏视图使用自己的列，全局搜索结果仍按分组序号排序。
@@ -49,14 +51,10 @@ object AlbumQueryBuilder {
         }
         val sql = """
             SELECT * FROM albums
-            WHERE name LIKE ? ESCAPE '\' COLLATE NOCASE
-            $filterClause
+            WHERE $whereClause
             ORDER BY $nullOrder$orderExpression $direction, albumPath ASC
         """.trimIndent()
-        return SimpleSQLiteQuery(
-            sql,
-            arrayOf(searchPattern(query.keyword), *filterArgs)
-        )
+        return SimpleSQLiteQuery(sql, whereArgs)
     }
 
     /**
