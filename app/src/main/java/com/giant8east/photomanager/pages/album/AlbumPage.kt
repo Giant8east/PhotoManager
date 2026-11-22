@@ -121,7 +121,16 @@ internal fun AlbumPage(
                     searchInput = viewModel.searchInput,
                     onSearchInputChange = viewModel::onSearchInputChange,
                     actionsEnabled = !selection.isSelectionMode,
-                    sheetStack = sheets,
+                    onSortClick = {
+                        sheets.show {
+                            AlbumSortSheet(
+                                currentField = viewModel.sortField,
+                                isDescending = viewModel.isDescending,
+                                onFieldSelected = viewModel::selectSortField,
+                                onDirectionChanged = viewModel::setSortDescending
+                            )
+                        }
+                    },
                     onOpenSettings = { navigator.pushTo { SettingPage(navigator) } }
                 )
                 Box(Modifier.weight(1f)) {
