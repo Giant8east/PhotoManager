@@ -14,7 +14,6 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -68,21 +67,6 @@ class FolderTaskScheduler @Inject constructor(
     /** 当前删除任务的实时进度，UI 只读订阅。 */
     val fileProgress: StateFlow<FileProgress> = _fileProgress.asStateFlow()
 
-    private val _dataActivity = MutableStateFlow(0)
-
-    /**
-     * 数据车道上还有多少活（排队 + 正在跑）。
-     *
-     * 同步是先列出全部目录再逐个排队，任务数会随着入队增长，
-     * 所以"这一轮扫完了"只能看这个数归零，不能只等某一个任务的句柄。
-     */
-    val dataActivity: StateFlow<Int> = _dataActivity.asStateFlow()
-
-    /** 等到数据车道彻底空闲。删任务在文件车道，不受这个等待影响。 */
-    suspend fun awaitDataIdle() {
-        dataActivity.first { it == 0 }
-    }
-
     /**
      * 排队一个任务并返回句柄；同一路径已有同级或更高优先级的任务时，复用那个任务的句柄。
      */
@@ -90,7 +74,7 @@ class FolderTaskScheduler @Inject constructor(
         val deferred = CompletableDeferred<TaskResult>()
         val handle = mutex.withLock {
             startWorkersLocked()
-            enqueueLocked(task, deferred).also { publishActivityLocked() }
+            enqueueLocked(task, deferred)
         }
         wakeups.getValue(task.kind.lane).trySend(Unit)
         return handle
@@ -165,7 +149,6 @@ class FolderTaskScheduler @Inject constructor(
         if (queued.task.kind == TaskKind.DELETE_FILES || queued.task.kind == TaskKind.UNINDEX) {
             dropCoveredLocked(queued.task)
         }
-        publishActivityLocked()
         return Dispatch(queued, claim)
     }
 
@@ -189,7 +172,6 @@ class FolderTaskScheduler @Inject constructor(
             // 处理器可能已经通过 handOff 交出了占用，这里的移除是幂等的
             claims.remove(dispatch.claim)
             dispatch.queued.deferred.complete(result)
-            publishActivityLocked()
         }
         // 占用释放后其他车道可能就有活干了，全部唤醒一次
         wakeups.values.forEach { it.trySend(Unit) }
@@ -227,12 +209,6 @@ class FolderTaskScheduler @Inject constructor(
         }
     }
 
-    /** 重新统计数据车道的活数；每次入队、领取、结束都要同步一次。 */
-    private fun publishActivityLocked() {
-        _dataActivity.value = pending.count { it.task.kind.lane == TaskLane.DATA } +
-            claims.count { it.kind.lane == TaskLane.DATA }
-    }
-
     /** 处理器看到的调度器接口；只能申请任务和上报进度，碰不到队列本身。 */
     private inner class SchedulerContext(private val task: FolderTask) : TaskContext {
         override suspend fun enqueue(task: FolderTask): Deferred<TaskResult> =
@@ -244,7 +220,7 @@ class FolderTaskScheduler @Inject constructor(
                 // 先交出占用，让接手同一个文件夹的任务能立刻被调度
                 claims.removeAll { it.path == this.task.path && it.kind == this.task.kind }
                 // 交接同样要走去重：这条路径上可能已经排着详情刷新，不能再排第二个扫描
-                enqueueLocked(task, deferred).also { publishActivityLocked() }
+                enqueueLocked(task, deferred)
             }
             wakeups.values.forEach { it.trySend(Unit) }
             return handle
