@@ -3,9 +3,9 @@ package com.giant8east.photomanager.lan.client
 
 import androidx.paging.PagingSource
 import androidx.paging.PagingState
+import com.giant8east.photomanager.model.AlbumSortField
 import com.giant8east.photomanager.lan.protocol.LanAlbumDto
 import com.giant8east.photomanager.lan.protocol.LanDevice
-import com.giant8east.photomanager.lan.protocol.LanSortField
 import com.giant8east.photomanager.lan.protocol.MAX_PAGE_LIMIT
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -19,8 +19,8 @@ data class RemoteAlbumQuery(
     val device: LanDevice,
     val groupId: Long?,
     val query: String? = null,
-    /** 排序字段，总是显式下发；默认 [LanSortField.CUSTOM]（对方的手动顺序）。 */
-    val sortField: LanSortField,
+    /** 排序字段，总是显式下发；默认 [AlbumSortField.CUSTOM]（对方的手动顺序）。 */
+    val sortField: AlbumSortField,
     /** 方向跟着字段一起发给服务端；CUSTOM 时服务端同样按方向排（desc 会把手动顺序倒过来），只是 UI 不为 CUSTOM 提供方向控件。 */
     val descending: Boolean = false
 )
