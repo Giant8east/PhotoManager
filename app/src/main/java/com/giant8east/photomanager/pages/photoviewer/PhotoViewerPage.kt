@@ -42,7 +42,6 @@ fun PhotoViewerPage(
     BackHandler { navigator.pop() }
     LaunchedEffect(albumId) { viewModel.load(albumId) }
     PhotoViewerScaffold(
-        navigator = navigator,
         initialIndex = initialIndex,
         state = viewModel.state,
         onRetry = viewModel::retry
@@ -63,7 +62,6 @@ fun PhotoViewerPage(
     BackHandler { navigator.pop() }
     LaunchedEffect(photos) { viewModel.loadPhotos(photos) }
     PhotoViewerScaffold(
-        navigator = navigator,
         initialIndex = initialIndex,
         state = viewModel.state,
         onRetry = { viewModel.loadPhotos(photos) }
@@ -72,7 +70,6 @@ fun PhotoViewerPage(
 
 @Composable
 private fun PhotoViewerScaffold(
-    navigator: AppNavigator,
     initialIndex: Int,
     state: PageState<PhotoViewerContent>,
     onRetry: () -> Unit

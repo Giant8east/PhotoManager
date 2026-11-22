@@ -35,7 +35,6 @@ import com.giant8east.photomanager.data.database.AlbumEntity
 import com.giant8east.photomanager.data.database.PhotoEntity
 import com.giant8east.photomanager.navigation.AppNavigator
 import com.giant8east.photomanager.pages.common.AppLazyColumnScrollbar
-import com.giant8east.photomanager.pages.common.DropdownMenuButton
 import com.giant8east.photomanager.ui.format.rememberAlbumModifiedTimeText
 import com.giant8east.photomanager.ui.theme.appColors
 import com.giant8east.photomanager.pages.photoviewer.PhotoViewerPage
