@@ -27,8 +27,11 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.net.Inet4Address
+import java.net.InetSocketAddress
+import java.net.Socket
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -167,6 +170,12 @@ class MdnsBrowser @Inject constructor(
                 // （加回去就再也没有 lost 回调来删它，会永久残留成一个点不开的假设备）
                 if (serviceInfo.serviceName !in activeNames) continue
                 val entry = parseDeviceFromResolvedService(resolved) ?: continue  // 自己 / 无地址 / 端口无效
+                // 系统 mdnsd 会把异常退出/覆盖安装设备的旧记录缓存 120 秒，刷新也会原样回推；
+                // 入表前做一次极轻量 TCP 探活，端口已关（Connection refused）立刻丢弃幽灵设备。
+                if (!isPortReachable(entry.second.ip, entry.second.port)) {
+                    Log.d(TAG, "dropping stale mdns entry (unreachable): ${entry.first} ${entry.second.address}")
+                    continue
+                }
                 // 同一台设备重启共享后端口变了、实例名也跟着变，而旧实例的 lost 要等 TTL（约 120 秒）才到。
                 // 所以按 deviceId 先把旧条目挤掉，列表里只留最新那条；
                 // 对端没带 deviceId（老版本）时无从判断是否同一台，原样追加，不误删。
@@ -360,9 +369,25 @@ class MdnsBrowser @Inject constructor(
             }
         }
 
+    /** 轻量 TCP 探活：验证对端 Ktor 端口确实在监听，过滤 mdnsd 缓存里已失效的幽灵记录。 */
+    private suspend fun isPortReachable(host: String, port: Int): Boolean = withContext(Dispatchers.IO) {
+        try {
+            // use 块结束时自动关闭 socket，等价于 try { ... } finally { socket.close() }
+            Socket().use { socket ->
+                socket.connect(InetSocketAddress(host, port), TCP_PROBE_TIMEOUT_MILLIS)
+            }
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     // companion object：Kotlin 放"类级常量"的地方，等价于 Java 的 static final
     private companion object {
         const val TAG = "MdnsBrowser"
+
+        /** TCP 探活超时：局域网在线端口通常 1~20ms 即握手完成，关共享端口 1~5ms 即回 RST。 */
+        const val TCP_PROBE_TIMEOUT_MILLIS = 1_000
 
         /** 单次解析的等待上限；局域网正常是几十毫秒，3 秒还没结果说明系统卡住了。 */
         const val RESOLVE_TIMEOUT_MILLIS = 3_000L
