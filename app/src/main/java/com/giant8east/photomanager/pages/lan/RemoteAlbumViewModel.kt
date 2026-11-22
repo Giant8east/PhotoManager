@@ -11,6 +11,11 @@ import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
+import com.giant8east.photomanager.data.database.AlbumDao
+import com.giant8east.photomanager.data.lan.RemoteAlbumKey
+import com.giant8east.photomanager.data.lan.RemoteDownloadManager
+import com.giant8east.photomanager.data.lan.RemoteDownloadStatus
+import com.giant8east.photomanager.data.lan.RemoteDownloadTask
 import com.giant8east.photomanager.lan.LocalAddress
 import com.giant8east.photomanager.lan.WifiAddress
 import com.giant8east.photomanager.model.AlbumSortField
@@ -31,6 +36,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
@@ -53,8 +59,17 @@ enum class RemoteLinkState {
 class RemoteAlbumViewModel @Inject constructor(
     private val lanClient: LanClient,
     private val eventStream: LanEventStream,
-    private val localAddress: LocalAddress
+    private val localAddress: LocalAddress,
+    private val downloadManager: RemoteDownloadManager,
+    private val albumDao: AlbumDao
 ) : ViewModel() {
+    /** 直接透传下载管理器的只读状态流，不额外写搬运协程（遵循 AGENTS.md）。 */
+    val downloadTasks: StateFlow<Map<RemoteAlbumKey, RemoteDownloadTask>> = downloadManager.tasks
+
+    /** 本机已从当前设备下载过的远端相册 ID 集合，进入页面即可标出"已下载"。 */
+    var downloadedAlbumIds by mutableStateOf<Set<Long>>(emptySet())
+        private set
+
     var device by mutableStateOf<LanDevice?>(null)
         private set
     var groups by mutableStateOf<List<LanGroupDto>>(emptyList())
@@ -80,6 +95,7 @@ class RemoteAlbumViewModel @Inject constructor(
 
     private var searchJob: Job? = null
     private var groupsJob: Job? = null
+    private var downloadedJob: Job? = null
 
     /** 与对端的连接状态；只在页面可见时维护。 */
     var linkState by mutableStateOf(RemoteLinkState.CONNECTING)
@@ -125,8 +141,37 @@ class RemoteAlbumViewModel @Inject constructor(
         if (device == target && queries.value != null) return
         device = target
         selectedGroupId = null
+        observeDownloadedAlbums(target)
         refreshGroups()
         rebuildQuery()
+    }
+
+    private fun observeDownloadedAlbums(target: LanDevice) {
+        downloadedJob?.cancel()
+        val deviceKey = target.deviceId ?: target.address
+        downloadedJob = viewModelScope.launch {
+            albumDao.observeDownloadedAlbumsByDeviceQuery(deviceKey).collect { list ->
+                downloadedAlbumIds = list.mapNotNull { it.remoteAlbumId }.toSet()
+            }
+        }
+    }
+
+    /** 批量下载选中的远端相册。 */
+    fun downloadAlbums(selected: List<LanAlbumDto>) {
+        val target = device ?: return
+        downloadManager.enqueue(target, selected)
+    }
+
+    /** 单项右下角播放/暂停按钮：下载或排队中则取消，否则开始下载（已下载则触发增量对比刷新）。 */
+    fun toggleAlbumDownload(album: LanAlbumDto) {
+        val target = device ?: return
+        val key = RemoteAlbumKey.of(target, album.id)
+        val status = downloadManager.tasks.value[key]?.status
+        if (status is RemoteDownloadStatus.Queued || status is RemoteDownloadStatus.Downloading) {
+            downloadManager.cancelOne(key)
+        } else {
+            downloadManager.enqueue(target, listOf(album))
+        }
     }
 
     fun onSearchInputChange(value: String) {

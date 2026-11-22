@@ -24,6 +24,7 @@ import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -81,7 +82,11 @@ internal fun AlbumListCard(
     // 远端相册复用同一张卡片：点击交给调用方，多选与收藏按需关闭。
     onCardClick: (() -> Unit)? = null,
     showFavorite: Boolean = true,
-    selectionEnabled: Boolean = true
+    selectionEnabled: Boolean = true,
+    showDragHandle: Boolean = true,
+    trailingAction: (@Composable () -> Unit)? = null,
+    statusBadge: (@Composable () -> Unit)? = null,
+    downloadProgress: Float? = null
 ) {
     val selected = album.id in selection.selectedIds
     val context = LocalContext.current
@@ -133,6 +138,7 @@ internal fun AlbumListCard(
             ),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
+        Column {
         Row {
             AsyncImage(
                 model = coverRequest,
@@ -174,7 +180,7 @@ internal fun AlbumListCard(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                // 卡片右侧垂直居中：普通态是收藏开关，多选态在原地换成拖拽手柄。
+                // 卡片右侧垂直居中：本地普通态是收藏、多选态是拖拽手柄；远端可插入播放/暂停下载按钮。
                 Box(
                     Modifier
                         .align(Alignment.CenterEnd)
@@ -183,23 +189,25 @@ internal fun AlbumListCard(
                     contentAlignment = Alignment.Center
                 ) {
                     if (selectionEnabled && selection.isSelectionMode) {
-                        Box(
-                            Modifier.fillMaxSize().then(
-                                if (reorderEnabled) {
-                                    dragHandleModifier
-                                } else {
-                                    Modifier.clickable(onClick = onReorderBlocked)
-                                }
-                            ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.DragHandle,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                                    alpha = if (reorderEnabled) 1f else 0.38f
+                        if (showDragHandle) {
+                            Box(
+                                Modifier.fillMaxSize().then(
+                                    if (reorderEnabled) {
+                                        dragHandleModifier
+                                    } else {
+                                        Modifier.clickable(onClick = onReorderBlocked)
+                                    }
+                                ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.DragHandle,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                        alpha = if (reorderEnabled) 1f else 0.38f
+                                    )
                                 )
-                            )
+                            }
                         }
                     } else if (showFavorite) {
                         Box(
@@ -214,6 +222,17 @@ internal fun AlbumListCard(
                                 else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
+                    } else {
+                        trailingAction?.invoke()
+                    }
+                }
+                if (statusBadge != null) {
+                    Box(
+                        Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(start = 8.dp, bottom = 4.dp)
+                    ) {
+                        statusBadge()
                     }
                 }
                 Column(
@@ -264,6 +283,15 @@ internal fun AlbumListCard(
                     }
                 }
             }
+        }
+        if (downloadProgress != null) {
+            LinearProgressIndicator(
+                progress = { downloadProgress },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(3.dp)
+            )
+        }
         }
     }
     }
