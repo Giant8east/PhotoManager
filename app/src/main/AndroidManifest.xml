@@ -9,6 +9,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- 共享要长期在线：申请跳过电量优化，否则系统会在后台把进程压到 background cpuset，
+         连 accept 都跑不动，对端心跳超时后判定断连。 -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- 部分机型需要持有组播锁才能稳定收发 mDNS 发现报文。 -->
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <!-- Wi-Fi 锁需要这个权限：共享期间保持 Wi-Fi 高性能，避免熄屏后心跳被省电策略拖延。 -->
@@ -40,6 +43,11 @@
 
         <service
             android:name=".lan.server.LanShareService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <service
+            android:name=".lan.client.LanDownloadService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
     </application>

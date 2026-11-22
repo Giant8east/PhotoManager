@@ -62,4 +62,18 @@ interface AlbumDao {
 
     @Query("UPDATE albums SET isHidden = :hidden WHERE id IN (:albumIds)")
     suspend fun updateAlbumsHidden(albumIds: List<Long>, hidden: Boolean)
+
+    @Query("SELECT * FROM albums WHERE remoteDeviceId = :deviceId AND remoteAlbumId IS NOT NULL")
+    fun observeDownloadedAlbumsByDeviceQuery(deviceId: String): Flow<List<AlbumEntity>>
+
+    @Query("SELECT * FROM albums WHERE remoteDeviceId = :deviceId AND remoteAlbumId = :remoteAlbumId LIMIT 1")
+    suspend fun queryAlbumByRemote(deviceId: String, remoteAlbumId: Long): AlbumEntity?
+
+    @Query("UPDATE albums SET sourceName = :sourceName, remoteDeviceId = :remoteDeviceId, remoteAlbumId = :remoteAlbumId WHERE albumPath = :albumPath")
+    suspend fun updateAlbumSourceByPath(
+        albumPath: String,
+        sourceName: String,
+        remoteDeviceId: String,
+        remoteAlbumId: Long
+    )
 }

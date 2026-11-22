@@ -163,6 +163,14 @@
     <string name="album_hidden_done">Hidden from system gallery</string>
     <string name="album_unhidden_done">Restored to system gallery</string>
     <string name="album_hidden_badge">Hidden</string>
+    <string name="lan_download_channel">LAN Downloads</string>
+    <string name="lan_download_starting">Preparing download…</string>
+    <string name="lan_download_progress_text">%1$d / %2$d · %3$s</string>
+    <string name="lan_download_stop_all">Stop all</string>
+    <string name="lan_download_summary_done">Downloaded %1$d album(s)</string>
+    <string name="lan_download_summary_with_failed">Downloaded %1$d, failed %2$d</string>
+    <string name="lan_download_queued">Queued</string>
+    <string name="lan_download_completed_badge">Downloaded</string>
     <string name="album_action_move_group">Move to group</string>
     <string name="album_group_default_short">Default</string>
     <string name="album_action_delete">Confirm</string>

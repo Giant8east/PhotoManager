@@ -54,7 +54,8 @@ fun AlbumDetailPage(
         AlbumDetailContent(
             navigator = navigator,
             content = content,
-            sourceLabel = stringResource(R.string.album_detail_local),
+            // 局域网下载来的相册显示来源设备名，本机相册显示"本地"
+            sourceLabel = content.album.sourceName.ifEmpty { stringResource(R.string.album_detail_local) },
             onRefreshDirectory = viewModel::refreshDirectory,
             onToggleFavorite = viewModel::toggleFavorite,
             onToggleHidden = viewModel::toggleHidden,
