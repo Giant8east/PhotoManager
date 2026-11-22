@@ -33,26 +33,30 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
-import com.giant8east.photomanager.pages.photoviewer.system.PhotoViewerSystemController
+import com.giant8east.photomanager.pages.photoviewer.system.VolumeKeyHost
 import com.giant8east.photomanager.ui.theme.LocalStatusBarColor
 import com.giant8east.photomanager.ui.theme.PhotoManagerTheme
 import dagger.hilt.android.AndroidEntryPoint
 import androidx.core.net.toUri
 
 @AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+class MainActivity : ComponentActivity(), VolumeKeyHost {
     private var hasStorageAccess by mutableStateOf(false)
-    var photoViewerSystemController: PhotoViewerSystemController? = null    // 阅读页控制器
+    private var volumeKeyHandler: ((KeyEvent) -> Boolean)? = null
+
+    override fun setVolumeKeyHandler(handler: ((KeyEvent) -> Boolean)?) {
+        volumeKeyHandler = handler
+    }
 
     // 按下物理按键时执行
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
-        if (photoViewerSystemController?.handleVolumeKey(event) == true) return true
+        if (volumeKeyHandler?.invoke(event) == true) return true
         return super.onKeyDown(keyCode, event)
     }
 
     // 松开物理按键时执行
     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
-        if (photoViewerSystemController?.handleVolumeKey(event) == true) return true
+        if (volumeKeyHandler?.invoke(event) == true) return true
         return super.onKeyUp(keyCode, event)
     }
 
