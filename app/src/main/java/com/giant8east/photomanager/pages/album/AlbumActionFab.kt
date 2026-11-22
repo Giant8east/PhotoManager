@@ -101,7 +101,7 @@ internal fun AlbumActionFab(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(end = 3.dp, bottom = 70.dp),
+            .padding(end = FAB_END_PADDING, bottom = FAB_BOTTOM_PADDING),
         contentAlignment = Alignment.BottomEnd
     ) {
         Column(
@@ -111,7 +111,7 @@ internal fun AlbumActionFab(
             fun miniModifier(distance: Int): Modifier =
                 Modifier.graphicsLayer {
                     translationY = (1f - progress) * with(density) {
-                        (72.dp + 56.dp * distance.toFloat()).toPx()
+                        (FAB_LIFT_BASE + FAB_SPACING * distance.toFloat()).toPx()
                     }
                     alpha = progress
                 }
@@ -239,3 +239,8 @@ private fun MiniIconActionFab(
         Icon(imageVector, contentDescription = stringResource(R.string.album_save_order_action))
     }
 }
+
+private val FAB_END_PADDING = 3.dp
+private val FAB_BOTTOM_PADDING = 70.dp
+private val FAB_LIFT_BASE = 72.dp
+private val FAB_SPACING = 56.dp

@@ -11,7 +11,7 @@ import java.time.format.DateTimeFormatter
 
 private val AlbumTimePattern = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm")
 
-/** 无法解析的旧数据按未知时间处理，避免展示层因脏数据崩溃。 */
+/** 无法解析的旧数据按未知时间处理，避免展示层因脏数据崩溃（待数据层统一格式后可移除）。 */
 internal fun formatAlbumModifiedTime(modifiedAt: String?): String? =
     modifiedAt?.let {
         runCatching {

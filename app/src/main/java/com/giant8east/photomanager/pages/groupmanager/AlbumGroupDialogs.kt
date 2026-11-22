@@ -1,4 +1,4 @@
-/** 相册页的分组编辑、分组删除、分组选择和相册删除确认弹窗。 */
+/** 分组管理页的分组新建、重命名和删除确认弹窗。 */
 package com.giant8east.photomanager.pages.groupmanager
 
 import androidx.compose.foundation.layout.Column

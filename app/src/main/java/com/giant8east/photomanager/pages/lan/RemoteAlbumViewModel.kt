@@ -145,7 +145,7 @@ class RemoteAlbumViewModel @Inject constructor(
         )
     }
 
-    /** 分组（左抽屉）单独加载：它失败不该挡住相册列表本身。 */
+    /** 分组（右抽屉）单独加载：它失败不该挡住相册列表本身。 */
     fun refreshGroups() {
         val target = device ?: return
         groupsMessage = null

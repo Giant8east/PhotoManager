@@ -20,7 +20,7 @@ internal class AlbumSelectionState {
         if (albumId != null) selectedIds = selectedIds + albumId
     }
 
-    /** 切换指定相册的选中状态；非多选模式下忽略。 */
+    /** 切换指定相册的选中状态；调用方需保证在多选模式下调用。 */
     fun toggle(albumId: Long) {
         selectedIds = if (albumId in selectedIds) {
             selectedIds - albumId

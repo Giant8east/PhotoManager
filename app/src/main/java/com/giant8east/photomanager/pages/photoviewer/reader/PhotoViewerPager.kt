@@ -30,6 +30,7 @@ import com.giant8east.photomanager.data.settings.ReadingDirection
 import com.giant8east.photomanager.data.database.PhotoEntity
 import com.giant8east.photomanager.pages.photoviewer.edge.PhotoViewerEdgeView
 
+/** 手势识别器与布局管理器的装配点，对外转发稳定的阅读读取/控制面。 */
 internal class PhotoViewerPager(
     private val layout: PhotoViewerLayoutManager
 ) {

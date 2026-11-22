@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
@@ -109,8 +110,8 @@ fun PhotoViewerControls(
                 LayoutDirection.Rtl else LayoutDirection.Ltr
             CompositionLocalProvider(LocalLayoutDirection provides direction) {
                 // 至少保留参考布局的 32dp，并为长页码及系统字体缩放预留完整宽度。
-                val pageNumberWidth = with(androidx.compose.ui.platform.LocalDensity.current) {
-                    (pageCount.toString().length * 8).sp.toDp() + 8.dp
+                val pageNumberWidth = with(LocalDensity.current) {
+                    (pageCount.toString().length * PAGE_NUMBER_CHAR_WIDTH_SP).sp.toDp() + 8.dp
                 }.coerceAtLeast(32.dp)
                 Row(
                     Modifier.fillMaxWidth().height(48.dp).background(Color(0xFF424242))
@@ -149,3 +150,5 @@ fun PhotoViewerControls(
         }
     }
 }
+
+private const val PAGE_NUMBER_CHAR_WIDTH_SP = 8

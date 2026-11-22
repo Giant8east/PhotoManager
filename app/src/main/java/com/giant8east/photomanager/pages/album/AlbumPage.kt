@@ -1,4 +1,4 @@
-/** 相册库主页内容：顶部搜索、相册列表和批量操作 FAB；分组抽屉由 AlbumRoot 承载。 */
+/** 相册库主页内容：右侧分组抽屉、顶部搜索、相册列表和批量操作 FAB。 */
 package com.giant8east.photomanager.pages.album
 
 import androidx.compose.foundation.ExperimentalFoundationApi
