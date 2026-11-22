@@ -66,16 +66,13 @@ import com.giant8east.photomanager.pages.album.AlbumSelectionState
 import com.giant8east.photomanager.pages.album.AlbumSortSheet
 import com.giant8east.photomanager.pages.common.AppLazyColumnScrollbar
 import com.giant8east.photomanager.pages.common.DrawerHost
+import com.giant8east.photomanager.pages.common.SearchTopBar
 import com.giant8east.photomanager.pages.common.SheetHost
 import com.giant8east.photomanager.pages.common.TopBarShadow
 import com.giant8east.photomanager.pages.common.rememberSheetStack
+import com.giant8east.photomanager.ui.state.PageMessage
 import com.giant8east.photomanager.ui.state.resolve
 import com.giant8east.photomanager.ui.theme.appColors
-
-/**
- * 搜索框占位文字与输入框共用一份带显式行高的样式，否则空输入时光标会偏上（与本地顶栏同一个理由）。
- */
-private val SearchTextStyle = TextStyle(fontSize = 18.sp, lineHeight = 24.sp)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -139,101 +136,35 @@ fun RemoteAlbumPage(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            CenterAlignedTopAppBar(
-                title = {
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                            .padding(horizontal = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .fillMaxHeight(),
-                            shape = RoundedCornerShape(2.dp),
-                            color = appColors.cardBackground,
-                            tonalElevation = 0.dp,
-                            shadowElevation = 2.dp
-                        ) {
-                            Row(
-                                Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                BasicTextField(
-                                    value = viewModel.searchInput,
-                                    onValueChange = viewModel::onSearchInputChange,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .padding(horizontal = 4.dp),
-                                    singleLine = true,
-                                    textStyle = SearchTextStyle.copy(
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    ),
-                                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                                    decorationBox = { innerTextField ->
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Box(
-                                                Modifier.weight(1f),
-                                                contentAlignment = Alignment.CenterStart
-                                            ) {
-                                                if (viewModel.searchInput.isEmpty()) {
-                                                    Text(
-                                                        text = stringResource(R.string.album_search_hint),
-                                                        style = SearchTextStyle,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                    )
-                                                }
-                                                innerTextField()
-                                            }
-                                            if (viewModel.searchInput.isNotEmpty()) {
-                                                IconButton(onClick = { viewModel.onSearchInputChange("") }) {
-                                                    Icon(
-                                                        Icons.Default.Clear,
-                                                        contentDescription = null,
-                                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                )
-
-                                // 排序：字段与方向一起发给服务端，本机不保存偏好；弹窗本身复用本地那一套
-                                IconButton(
-                                    onClick = {
-                                        sheets.show {
-                                            AlbumSortSheet(
-                                                currentField = viewModel.sortField,
-                                                isDescending = viewModel.isDescending,
-                                                onFieldSelected = viewModel::selectSortField,
-                                                onDirectionChanged = viewModel::setSortDescending
-                                            )
-                                        }
-                                    }
-                                ) {
-                                    Icon(
-                                        painterResource(R.drawable.ic_sort),
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
-                    }
-                },
+            SearchTopBar(
+                searchInput = viewModel.searchInput,
+                onSearchInputChange = viewModel::onSearchInputChange,
                 navigationIcon = {
                     IconButton(onClick = navigator::pop) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
                     }
                 },
-                windowInsets = WindowInsets(0),
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = appColors.toolbarBackground,
-                    titleContentColor = appColors.toolbarContent,
-                    navigationIconContentColor = appColors.toolbarContent
-                )
+                trailingContent = {
+                    // 排序：字段与方向一起发给服务端，本机不保存偏好；弹窗本身复用本地那一套
+                    IconButton(
+                        onClick = {
+                            sheets.show {
+                                AlbumSortSheet(
+                                    currentField = viewModel.sortField,
+                                    isDescending = viewModel.isDescending,
+                                    onFieldSelected = viewModel::selectSortField,
+                                    onDirectionChanged = viewModel::setSortDescending
+                                )
+                            }
+                        }
+                    ) {
+                        Icon(
+                            painterResource(R.drawable.ic_sort),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             )
             // 顶栏被搜索/分组占满，这里留一行设备名，免得忘了在看谁的相册；
             // 连接不正常时同一行补一句状态，不额外占高度
@@ -308,10 +239,10 @@ private fun RemoteAlbumList(
         // 首屏失败：显示一行原因 + 重试，不用空列表伪装成功
         albums.loadState.refresh is LoadState.Error && albums.itemCount == 0 -> {
             val error = (albums.loadState.refresh as LoadState.Error).error
-            MessageWithRetry(message = error.toLanUiText().resolve(), onRetry = albums::retry)
+            PageMessage(message = error.toLanUiText().resolve(), onRetry = albums::retry)
         }
         // 正常空结果：不提供重试
-        albums.itemCount == 0 -> MessageWithRetry(message = stringResource(R.string.page_no_albums), onRetry = null)
+        albums.itemCount == 0 -> PageMessage(message = stringResource(R.string.page_no_albums), onRetry = null)
         else -> AppLazyColumnScrollbar(state = listState) {
             LazyColumn(
                 state = listState,
@@ -353,26 +284,7 @@ private fun RemoteAlbumList(
     }
 }
 
-/** 页面中部的"一句话 + 可选重试"，样式与 PageContent 的错误态保持一致。 */
-@Composable
-private fun MessageWithRetry(message: String, onRetry: (() -> Unit)?) {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(
-            Modifier.padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(
-                message,
-                textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-            if (onRetry != null) {
-                TextButton(onClick = onRetry) { Text(stringResource(R.string.page_retry)) }
-            }
-        }
-    }
-}
+/** 页面中部的"一句话 + 可选重试"统一复用 ui/state/PageMessage。 */
 
 @Composable
 private fun RemoteAlbumRow(
