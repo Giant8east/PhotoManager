@@ -1,6 +1,7 @@
 /** 文件夹任务调度器：唯一决定"哪个文件夹此刻归哪个任务"的地方。 */
 package com.giant8east.photomanager.data.task
 
+import android.util.Log
 import java.util.EnumMap
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -154,14 +155,16 @@ class FolderTaskScheduler @Inject constructor(
 
     private suspend fun runTask(dispatch: Dispatch) {
         val task = dispatch.queued.task
-        val handler = handlers[task.kind]
+        // 缺少处理器属于 DI 装配期缺陷，放在 try 之外直接暴露，不降级成普通业务失败
+        val handler = checkNotNull(handlers[task.kind]) { "没有注册的任务处理器：${task.kind}" }
         val result = try {
-            handler?.handle(task, SchedulerContext(task)) ?: TaskResult.Failed("没有注册的任务处理器：${task.kind}")
+            handler.handle(task, SchedulerContext(task))
         } catch (cancelled: CancellationException) {
             // 协程取消必须继续抛出，不能让取消被当成普通失败吞掉
             finish(dispatch, TaskResult.Cancelled)
             throw cancelled
         } catch (error: Exception) {
+            Log.e(TAG, "task ${task.kind} failed on ${task.path}", error)
             TaskResult.Failed(error.message)
         }
         finish(dispatch, result)
@@ -236,6 +239,8 @@ class FolderTaskScheduler @Inject constructor(
     }
 
     private companion object {
+        const val TAG = "FolderTaskScheduler"
+
         /** 删除串行：同时只跑一个删除任务，进度与失败原因都能对上。 */
         const val FILE_WORKERS = 1
 
