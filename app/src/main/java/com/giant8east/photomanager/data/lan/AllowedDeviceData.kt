@@ -18,7 +18,7 @@ class AllowedDeviceData @Inject constructor(
      * DAO 的 Flow 原样透传，本类里只有 [observeTrusted] 用它（做类型转换）。
      * 排序在 DAO 的 SQL 里做（最近访问时间倒序），这里不重排。
      */
-    fun observeAllowedDevices(): Flow<List<AllowedDeviceEntity>> =
+    private fun observeAllowedDevices(): Flow<List<AllowedDeviceEntity>> =
         database.allowedDeviceDao().observeAllowedDevices()
 
     /**

@@ -35,9 +35,6 @@ interface AlbumDao {
     @Insert
     suspend fun insertAlbum(album: AlbumEntity): Long
 
-    @Query("DELETE FROM albums WHERE id = :id")
-    suspend fun deleteAlbum(id: Long)
-
     @Query("DELETE FROM albums WHERE albumPath = :path")
     suspend fun deleteAlbumByPath(path: String)
 

@@ -4,8 +4,6 @@ package com.giant8east.photomanager.lan.client
 import com.giant8east.photomanager.lan.protocol.LanAlbumListDto
 import com.giant8east.photomanager.lan.protocol.LanGroupListDto
 import com.giant8east.photomanager.lan.protocol.LanPhotoDto
-import com.giant8east.photomanager.lan.protocol.DeviceInfoDto
-import com.giant8east.photomanager.lan.protocol.SessionDto
 import com.giant8east.photomanager.lan.protocol.TOKEN_HEADER
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import java.util.concurrent.TimeUnit
@@ -23,12 +21,6 @@ import retrofit2.http.Url
 
 /** 访客侧的只读接口；地址由调用方按设备拼好，所以每个方法都用 `@Url` 收绝对地址。 */
 interface LanApi {
-    @GET
-    suspend fun ping(@Url url: String): DeviceInfoDto
-
-    @GET
-    suspend fun session(@Url url: String): SessionDto
-
     @GET
     suspend fun albums(
         @Url url: String,
