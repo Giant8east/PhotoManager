@@ -209,6 +209,9 @@ class RemotePageViewModel @Inject constructor(
         }
     }
 
+    /** 主动重开一次 mDNS 发现会话，刷新当前局域网内的共享设备。 */
+    fun refreshDevices() = browser.refresh()
+
     /** 页面跳转完成后清空，避免重组时重复跳转。 */
     fun consumeApprovedDevice() {
         approvedDevice = null
