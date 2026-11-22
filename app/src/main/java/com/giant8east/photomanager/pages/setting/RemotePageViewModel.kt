@@ -1,12 +1,9 @@
 /** 远程连接页的 ViewModel：下载目录配置、本机共享开关与局域网设备发现。 */
 package com.giant8east.photomanager.pages.setting
 
-import android.annotation.SuppressLint
 import android.content.Context
-import android.content.Intent
 import android.net.Uri
 import android.os.PowerManager
-import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.runtime.getValue
@@ -73,6 +70,8 @@ class RemotePageViewModel @Inject constructor(
     /** 对端已确认、等待页面跳转的设备；页面处理完调用 [consumeApprovedDevice] 清空。 */
     var approvedDevice by mutableStateOf<LanDevice?>(null)
         private set
+
+    private var openJob: kotlinx.coroutines.Job? = null
 
     init {
         refreshBatteryOptimizations()
@@ -156,25 +155,6 @@ class RemotePageViewModel @Inject constructor(
         ignoresBatteryOptimizations = powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true
     }
 
-    /**
-     * 拉起系统的"是否允许后台运行"对话框。少数精简 ROM 没有这个对话框，
-     * 退回到电量优化列表让用户自己找；两个都打不开时给一条 toast，
-     * 否则用户点了没反应会以为按钮坏了。
-     */
-    @SuppressLint("BatteryLife")
-    fun requestIgnoreBatteryOptimizations() {
-        val direct = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
-            .setData("package:${context.packageName}".toUri())
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        val fallback = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        runCatching { context.startActivity(direct) }
-            .recoverCatching { context.startActivity(fallback) }
-            .onFailure {
-                Toast.makeText(context, R.string.lan_open_settings_failed, Toast.LENGTH_SHORT).show()
-            }
-    }
-
     fun approvePairing(request: LanPairing.Pending, remember: Boolean) {
         viewModelScope.launch { lanShareController.approvePairing(request.requestId, remember) }
     }
@@ -193,7 +173,8 @@ class RemotePageViewModel @Inject constructor(
      * 页面据此显示不可取消的弹窗（对端在等人点按钮，用户中途退出只会白等 60 秒）。
      */
     fun requestOpen(device: LanDevice) {
-        viewModelScope.launch {
+        openJob?.cancel()
+        openJob = viewModelScope.launch {
             pairingDevice = device
             try {
                 lanClient.connect(device)
@@ -204,7 +185,7 @@ class RemotePageViewModel @Inject constructor(
                 // 拒绝/超时/连不上在这里各自给出对应文案，不再一律说"无法连接"
                 Toast.makeText(context, error.toLanUiText().resolve(context), Toast.LENGTH_SHORT).show()
             } finally {
-                pairingDevice = null
+                if (pairingDevice == device) pairingDevice = null
             }
         }
     }

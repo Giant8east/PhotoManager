@@ -2,8 +2,14 @@
 package com.giant8east.photomanager.pages.setting
 
 import android.Manifest
+import android.annotation.SuppressLint
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.provider.Settings
+import android.widget.Toast
+import androidx.core.net.toUri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -209,7 +215,7 @@ fun RemotePage(navigator: AppNavigator, viewModel: RemotePageViewModel = hiltVie
                     Row(
                         Modifier
                             .fillMaxWidth()
-                            .clickable { viewModel.requestIgnoreBatteryOptimizations() }
+                            .clickable { openBatteryOptimizationSettings(context) }
                             .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -383,4 +389,20 @@ private fun DeviceRow(device: LanDevice, onOpen: () -> Unit) {
             tint = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
+}
+
+/**
+ * 拉起系统的"是否允许后台运行"对话框。少数精简 ROM 没有这个对话框，
+ * 退回到电量优化列表让用户自己找；两个都打不开时给一条 toast。
+ */
+@SuppressLint("BatteryLife")
+private fun openBatteryOptimizationSettings(context: Context) {
+    val direct = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+        .setData("package:${context.packageName}".toUri())
+    val fallback = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+    runCatching { context.startActivity(direct) }
+        .recoverCatching { context.startActivity(fallback) }
+        .onFailure {
+            Toast.makeText(context, R.string.lan_open_settings_failed, Toast.LENGTH_SHORT).show()
+        }
 }

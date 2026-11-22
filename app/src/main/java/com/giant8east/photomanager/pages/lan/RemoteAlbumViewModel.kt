@@ -79,6 +79,7 @@ class RemoteAlbumViewModel @Inject constructor(
         private set
 
     private var searchJob: Job? = null
+    private var groupsJob: Job? = null
 
     /** 与对端的连接状态；只在页面可见时维护。 */
     var linkState by mutableStateOf(RemoteLinkState.CONNECTING)
@@ -148,8 +149,9 @@ class RemoteAlbumViewModel @Inject constructor(
     /** 分组（右抽屉）单独加载：它失败不该挡住相册列表本身。 */
     fun refreshGroups() {
         val target = device ?: return
+        groupsJob?.cancel()
         groupsMessage = null
-        viewModelScope.launch {
+        groupsJob = viewModelScope.launch {
             runCatching { lanClient.groups(target) }
                 .onSuccess { result ->
                     groups = result.groups
