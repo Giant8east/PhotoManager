@@ -87,6 +87,10 @@ internal fun AlbumDetailContent(
     onOpenViewer: (Int) -> Unit,
     actionsEnabled: Boolean = true,
     onToggleHidden: () -> Unit = {},
+    // 远端详情页可将左侧"收藏"按钮替换为"下载 / 已下载"按钮
+    primaryActionLabel: String? = null,
+    primaryActionEnabled: Boolean = actionsEnabled,
+    onPrimaryAction: (() -> Unit)? = null,
     // 网格预览图地址：默认直接使用原图路径，远端页通过 ?preview=true 请求降采样缩略图
     thumbnailUriFor: (PhotoEntity) -> String = { it.contentUri },
     // 远端可由服务端告知是否为动态 WebP；null 表示本地文件，由 PhotoThumbnail 读前 21 字节判定
@@ -126,6 +130,9 @@ internal fun AlbumDetailContent(
                             onRefreshDirectory = onRefreshDirectory,
                             onToggleFavorite = onToggleFavorite,
                             onToggleHidden = onToggleHidden,
+                            primaryActionLabel = primaryActionLabel,
+                            primaryActionEnabled = primaryActionEnabled,
+                            onPrimaryAction = onPrimaryAction,
                             onOpenViewer = onOpenViewer,
                             actionsEnabled = actionsEnabled
                         )
@@ -233,6 +240,9 @@ private fun AlbumDetailHeader(
     onRefreshDirectory: ((Boolean) -> Unit) -> Unit,
     onToggleFavorite: () -> Unit,
     onToggleHidden: () -> Unit,
+    primaryActionLabel: String?,
+    primaryActionEnabled: Boolean,
+    onPrimaryAction: (() -> Unit)?,
     onOpenViewer: (Int) -> Unit,
     actionsEnabled: Boolean
 ) {
@@ -296,14 +306,14 @@ private fun AlbumDetailHeader(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         TextButton(
-                            onClick = onToggleFavorite,
-                            enabled = actionsEnabled,
+                            onClick = onPrimaryAction ?: onToggleFavorite,
+                            enabled = primaryActionEnabled,
                             shape = RoundedCornerShape(0.dp),
                             contentPadding = PaddingValues(0.dp),
                             modifier = Modifier.weight(1f).fillMaxHeight()
                         ) {
                             Text(
-                                stringResource(
+                                primaryActionLabel ?: stringResource(
                                     if (album.isFavorite) R.string.album_favorite_remove
                                     else R.string.album_favorite_add
                                 ),

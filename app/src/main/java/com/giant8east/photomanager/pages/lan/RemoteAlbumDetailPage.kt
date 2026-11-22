@@ -1,17 +1,28 @@
-/** 远端相册详情页：直接复用本地详情页正文，只把封面与图片换成对方的在线地址。 */
+/** 远端相册详情页：复用本地详情布局，支持 LRU 缓存、下拉刷新与下载/已下载删除。 */
 package com.giant8east.photomanager.pages.lan
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.giant8east.photomanager.R
 import com.giant8east.photomanager.data.database.AlbumEntity
 import com.giant8east.photomanager.data.database.PhotoEntity
+import com.giant8east.photomanager.data.lan.RemoteAlbumKey
+import com.giant8east.photomanager.data.lan.RemoteDownloadStatus
 import com.giant8east.photomanager.lan.protocol.LanAlbumDto
 import com.giant8east.photomanager.lan.protocol.LanDevice
 import com.giant8east.photomanager.lan.protocol.PREVIEW_QUERY_PARAM
@@ -32,9 +43,26 @@ fun RemoteAlbumDetailPage(
     BackHandler { navigator.pop() }
     LaunchedEffect(device, album) { viewModel.load(device, album) }
 
+    val downloadTasks by viewModel.downloadTasks.collectAsState()
+    val downloadStatus = downloadTasks[RemoteAlbumKey.of(device, album.id)]?.status
+    val isDownloaded = viewModel.downloadedAlbum != null
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    val downloadButtonLabel = when (downloadStatus) {
+        is RemoteDownloadStatus.Queued -> stringResource(R.string.lan_download_queued)
+        is RemoteDownloadStatus.Downloading -> stringResource(
+            R.string.lan_download_progress_short,
+            downloadStatus.finished,
+            downloadStatus.total
+        )
+        else -> if (isDownloaded) {
+            stringResource(R.string.lan_download_completed_badge)
+        } else {
+            stringResource(R.string.lan_download)
+        }
+    }
+
     PageContent(viewModel.state, onRetry = viewModel::retry) { content ->
-        // 远端相册映射成本地实体：contentUri/coverPath 直接是对方的媒体地址，Coil 与阅读器都能照常加载。
-        // token 由 OkHttp 拦截器按 host:port 注入，所以这里就是干净的 URL。
         val remoteAlbum = remember(album, device.address) {
             AlbumEntity(
                 id = album.id,
@@ -73,9 +101,19 @@ fun RemoteAlbumDetailPage(
                 navigator = navigator,
                 content = AlbumDetailUiState(album = remoteAlbum, photos = remotePhotos),
                 sourceLabel = device.name,
-                // 远端相册没有本地目录：刷新与收藏都不可用，但布局与本地保持一致。
                 onRefreshDirectory = { onFinished -> onFinished(true) },
                 onToggleFavorite = {},
+                primaryActionLabel = downloadButtonLabel,
+                primaryActionEnabled = true,
+                onPrimaryAction = {
+                    val isActive = downloadStatus is RemoteDownloadStatus.Queued ||
+                        downloadStatus is RemoteDownloadStatus.Downloading
+                    if (!isActive && isDownloaded) {
+                        showDeleteConfirm = true
+                    } else {
+                        viewModel.toggleDownload()
+                    }
+                },
                 onOpenViewer = { index ->
                     navigator.pushTo(useSafeArea = false) {
                         PhotoViewerPage(navigator, remotePhotos, index)
@@ -87,5 +125,28 @@ fun RemoteAlbumDetailPage(
                 isAnimatedFor = { photo -> photo.id in animatedPhotoIds }
             )
         }
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text(stringResource(R.string.lan_delete_downloaded_title)) },
+            text = { Text(stringResource(R.string.lan_delete_downloaded_message, album.name)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteConfirm = false
+                        viewModel.deleteDownloaded()
+                    }
+                ) {
+                    Text(stringResource(R.string.viewer_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text(stringResource(R.string.viewer_cancel))
+                }
+            }
+        )
     }
 }
