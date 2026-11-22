@@ -7,6 +7,7 @@ import com.giant8east.photomanager.data.task.FolderTask
 import com.giant8east.photomanager.data.task.FolderTaskScheduler
 import com.giant8east.photomanager.data.task.TaskKind
 import com.giant8east.photomanager.data.task.TaskResult
+import com.giant8east.photomanager.util.LocalPaths
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
@@ -30,7 +31,7 @@ class AlbumSyncData @Inject constructor(
 ) {
     /** 同步一个扫描根目录：列出整棵树 → 逐目录扫 → 清理消失的记录。 */
     suspend fun syncDirectory(rootPath: String) = withContext(Dispatchers.IO) {
-        val normalizedRoot = DirectoryScanner.normalizePath(rootPath)
+        val normalizedRoot = LocalPaths.normalize(rootPath)
         val directories = directoryScanner.collectDirectories(normalizedRoot)
         // 只等待本次同步入队的这一批任务句柄完成，避免受其他来源的 DATA 车道任务串扰
         val handles = directories.map { directory ->
@@ -42,7 +43,7 @@ class AlbumSyncData @Inject constructor(
 
     /** 单相册刷新入口：返回刷新后目录是否仍有图片。 */
     suspend fun refreshAlbum(path: String): Boolean {
-        val task = FolderTask(DirectoryScanner.normalizePath(path), TaskKind.SCAN_REFRESH)
+        val task = FolderTask(LocalPaths.normalize(path), TaskKind.SCAN_REFRESH)
         return scheduler.enqueue(task).await() is TaskResult.Done
     }
 
@@ -53,7 +54,7 @@ class AlbumSyncData @Inject constructor(
      * 任务作废，避免扫描把刚删掉的记录又写回来。
      */
     suspend fun unindexDirectory(path: String) {
-        val task = FolderTask(DirectoryScanner.normalizePath(path), TaskKind.UNINDEX)
+        val task = FolderTask(LocalPaths.normalize(path), TaskKind.UNINDEX)
         scheduler.enqueue(task).await()
     }
 
@@ -72,7 +73,7 @@ class AlbumSyncData @Inject constructor(
 
         val onDisk = directories.toHashSet()
         val stalePaths = albumDao
-            .queryAlbumPathsUnderPath(root, DirectoryScanner.childPathPrefix(root))
+            .queryAlbumPathsUnderPath(root, LocalPaths.childPrefix(root))
             .filter { it !in onDisk }
         for (path in stalePaths) {
             albumDao.deleteAlbumByPath(path)

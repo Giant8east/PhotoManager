@@ -7,8 +7,8 @@ import com.giant8east.photomanager.data.database.AlbumEntity
 import com.giant8east.photomanager.data.database.GroupDao
 import com.giant8east.photomanager.data.database.PhotoDao
 import com.giant8east.photomanager.data.database.PhotoEntity
-import com.giant8east.photomanager.data.scan.DirectoryScanner
 import com.giant8east.photomanager.model.AlbumQuery
+import com.giant8east.photomanager.util.LocalPaths
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
@@ -81,10 +81,10 @@ class AlbumData @Inject constructor(
 
     /** 移除指定扫描目录及其子目录对应的相册记录；只动索引，磁盘文件由删除任务负责。 */
     suspend fun unindexAlbumsUnderPath(path: String) = withContext(Dispatchers.IO) {
-        val normalized = DirectoryScanner.normalizePath(path)
+        val normalized = LocalPaths.normalize(path)
         albumDao.deleteAlbumsUnderPath(
             normalized,
-            DirectoryScanner.childPathPrefix(normalized)
+            LocalPaths.childPrefix(normalized)
         )
     }
 }

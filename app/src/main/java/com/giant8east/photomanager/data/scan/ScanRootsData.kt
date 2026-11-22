@@ -5,6 +5,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.giant8east.photomanager.util.LocalPaths
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -35,13 +36,13 @@ class ScanRootsData @Inject constructor(
 
     /** 添加扫描根；已被现有根覆盖时返回 false，否则吞并它覆盖的子根并返回 true。 */
     suspend fun addRoot(rawPath: String): Boolean = withContext(Dispatchers.IO) {
-        val newPath = DirectoryScanner.normalizePath(rawPath)
+        val newPath = LocalPaths.normalize(rawPath)
         var changed = false
         context.settingStore.edit { preferences ->
             val currentPaths = preferences[directoryKey].orEmpty()
-            if (currentPaths.any { DirectoryScanner.isSameOrSubPath(it, newPath) }) return@edit
+            if (currentPaths.any { LocalPaths.isSameOrSubPath(it, newPath) }) return@edit
             preferences[directoryKey] = currentPaths
-                .filterNot { DirectoryScanner.isSameOrSubPath(newPath, it) }
+                .filterNot { LocalPaths.isSameOrSubPath(newPath, it) }
                 .toSet() + newPath
             changed = true
         }
@@ -50,7 +51,7 @@ class ScanRootsData @Inject constructor(
 
     /** 移除一个扫描根；只改配置，索引记录由调用方交给调度器清理。 */
     suspend fun removeRoot(path: String) = withContext(Dispatchers.IO) {
-        val normalized = DirectoryScanner.normalizePath(path)
+        val normalized = LocalPaths.normalize(path)
         context.settingStore.edit { preferences ->
             preferences[directoryKey] = preferences[directoryKey].orEmpty() - normalized
         }

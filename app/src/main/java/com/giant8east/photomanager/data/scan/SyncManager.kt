@@ -4,6 +4,7 @@ package com.giant8east.photomanager.data.scan
 import android.net.Uri
 import android.util.Log
 import com.giant8east.photomanager.data.album.AlbumSyncData
+import com.giant8east.photomanager.util.SafPathResolver
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -30,7 +31,7 @@ data class SyncState(
 class SyncManager @Inject constructor(
     private val albumSyncData: AlbumSyncData,
     private val scanRootsData: ScanRootsData,
-    private val directoryScanner: DirectoryScanner
+    private val safPathResolver: SafPathResolver
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val _state = MutableStateFlow(SyncState())
@@ -51,7 +52,7 @@ class SyncManager @Inject constructor(
 
     /** 解析并添加目录；添加成功后重新同步全部已配置目录。 */
     fun addDirectory(uri: Uri) = start("all") {
-        val path = directoryScanner.resolveDirectoryPath(uri)
+        val path = safPathResolver.resolveDirectoryPath(uri)
         if (scanRootsData.addRoot(path)) {
             syncAllDirectoriesNow()
         }

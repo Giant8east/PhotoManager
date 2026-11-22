@@ -7,7 +7,7 @@ import android.os.Environment
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import com.giant8east.photomanager.data.scan.DirectoryScanner
+import com.giant8east.photomanager.util.SafPathResolver
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import javax.inject.Inject
@@ -24,7 +24,7 @@ private val Context.remoteDownloadStore by preferencesDataStore("remote_download
 @Singleton
 class RemoteDownloadData @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val directoryScanner: DirectoryScanner
+    private val safPathResolver: SafPathResolver
 ) {
     /**
      * 用户没选过目录时的默认落地位置：`Pictures/photomanager`。
@@ -47,7 +47,7 @@ class RemoteDownloadData @Inject constructor(
     }
 
     /** 把 SAF 返回的 Uri 解析成绝对路径，规则与扫描目录完全一致。 */
-    suspend fun resolvePath(uri: Uri): String = directoryScanner.resolveDirectoryPath(uri)
+    suspend fun resolvePath(uri: Uri): String = safPathResolver.resolveDirectoryPath(uri)
 
     private companion object {
         const val DIRECTORY_NAME = "photomanager"

@@ -3,11 +3,11 @@ package com.giant8east.photomanager.data.delete
 
 import android.util.Log
 import com.giant8east.photomanager.data.database.AlbumEntity
-import com.giant8east.photomanager.data.scan.DirectoryScanner
 import com.giant8east.photomanager.data.task.FolderTask
 import com.giant8east.photomanager.data.task.FolderTaskScheduler
 import com.giant8east.photomanager.data.task.TaskKind
 import com.giant8east.photomanager.data.task.TaskResult
+import com.giant8east.photomanager.util.LocalPaths
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
@@ -143,7 +143,7 @@ class DeleteManager @Inject constructor(
             for (album in albums) {
                 // 取消检查：被取消时直接抛 CancellationException，跳进下面的 catch
                 currentCoroutineContext().ensureActive()
-                val path = DirectoryScanner.normalizePath(album.albumPath)
+                val path = LocalPaths.normalize(album.albumPath)
                 _state.update {
                     it.copy(
                         currentAlbumName = album.name,

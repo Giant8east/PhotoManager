@@ -7,6 +7,7 @@ import com.giant8east.photomanager.data.database.PhotoDatabase
 import com.giant8east.photomanager.data.database.PhotoEntity
 import com.giant8east.photomanager.data.scan.DirectoryScanner
 import com.giant8east.photomanager.data.scan.ScannedAlbum
+import com.giant8east.photomanager.util.LocalPaths
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -31,7 +32,7 @@ class AlbumIndexer @Inject constructor(
      * 目录存在但读不了时会抛异常，交给调度器记成一次失败，避免权限抖动把记录误删。
      */
     suspend fun scanAndWrite(path: String): Boolean = withContext(Dispatchers.IO) {
-        val normalized = DirectoryScanner.normalizePath(path)
+        val normalized = LocalPaths.normalize(path)
         val scanned = directoryScanner.scanAlbum(File(normalized))
         val hasPhotos = scanned != null && scanned.photos.isNotEmpty()
         if (hasPhotos) {

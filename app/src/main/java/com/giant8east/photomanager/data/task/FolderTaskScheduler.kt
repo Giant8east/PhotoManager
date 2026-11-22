@@ -2,6 +2,7 @@
 package com.giant8east.photomanager.data.task
 
 import android.util.Log
+import com.giant8east.photomanager.util.LocalPaths
 import java.util.EnumMap
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -191,9 +192,9 @@ class FolderTaskScheduler @Inject constructor(
         otherScope: ClaimScope
     ): Boolean = when {
         runningScope == ClaimScope.SELF && otherScope == ClaimScope.SELF -> runningPath == otherPath
-        runningScope == ClaimScope.SELF -> isSameOrChildPath(otherPath, runningPath)
-        otherScope == ClaimScope.SELF -> isSameOrChildPath(runningPath, otherPath)
-        else -> isSameOrChildPath(runningPath, otherPath) || isSameOrChildPath(otherPath, runningPath)
+        runningScope == ClaimScope.SELF -> LocalPaths.isSameOrChild(otherPath, runningPath)
+        otherScope == ClaimScope.SELF -> LocalPaths.isSameOrChild(runningPath, otherPath)
+        else -> LocalPaths.isSameOrChild(runningPath, otherPath) || LocalPaths.isSameOrChild(otherPath, runningPath)
     }
 
     /** 队列里凡是会被 [task] 覆盖的，直接作废；判断只看字符串前缀，路径入队前已规范化。 */
@@ -203,7 +204,7 @@ class FolderTaskScheduler @Inject constructor(
             val queued = iterator.next()
             val covered = when (task.kind.claimScope) {
                 ClaimScope.SELF -> queued.task.path == task.path
-                ClaimScope.SUBTREE -> isSameOrChildPath(task.path, queued.task.path)
+                ClaimScope.SUBTREE -> LocalPaths.isSameOrChild(task.path, queued.task.path)
             }
             if (covered) {
                 iterator.remove()
@@ -246,12 +247,5 @@ class FolderTaskScheduler @Inject constructor(
 
         /** 扫描与移除索引并发上限，避免大量文件夹同时抢 Room 事务。 */
         const val DATA_WORKERS = 4
-
-        /** 判断 [child] 是否是 [parent] 自己或它的子目录；只比较字符串，路径必须已规范化。 */
-        fun isSameOrChildPath(parent: String, child: String): Boolean {
-            if (child == parent) return true
-            val prefix = if (parent.endsWith("/")) parent else "$parent/"
-            return child.startsWith(prefix)
-        }
     }
 }
