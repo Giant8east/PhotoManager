@@ -4,7 +4,7 @@ package com.giant8east.photomanager.lan.server
 import com.giant8east.photomanager.lan.protocol.LanAlbumListDto
 import com.giant8east.photomanager.lan.protocol.LanGroupListDto
 import com.giant8east.photomanager.lan.protocol.LanPhotoDto
-import com.giant8east.photomanager.lan.protocol.LanSortField
+import com.giant8east.photomanager.model.AlbumSortField
 
 /**
  * 一张待发送的媒体文件。
@@ -53,7 +53,7 @@ interface ShareDataSource {
  * - [offset] 从 0 开始，[limit] 由调用方按 `MAX_PAGE_LIMIT` 截断后再传进来。
  */
 data class AlbumListRequest(
-    val sortField: LanSortField?,
+    val sortField: AlbumSortField?,
     val descending: Boolean?,
     val query: String?,
     val groupId: Long?,
