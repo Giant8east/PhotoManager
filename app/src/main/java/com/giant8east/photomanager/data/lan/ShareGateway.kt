@@ -3,7 +3,6 @@ package com.giant8east.photomanager.data.lan
 
 import com.giant8east.photomanager.data.album.AlbumShareData
 import com.giant8east.photomanager.data.settings.AlbumListSettingsData
-import com.giant8east.photomanager.data.album.AlbumSortField
 import com.giant8east.photomanager.data.media.PhotoFormat
 import com.giant8east.photomanager.data.database.AlbumEntity
 import com.giant8east.photomanager.data.database.PhotoEntity
@@ -12,7 +11,7 @@ import com.giant8east.photomanager.lan.protocol.LanAlbumListDto
 import com.giant8east.photomanager.lan.protocol.LanGroupDto
 import com.giant8east.photomanager.lan.protocol.LanGroupListDto
 import com.giant8east.photomanager.lan.protocol.LanPhotoDto
-import com.giant8east.photomanager.lan.protocol.LanSortField
+import com.giant8east.photomanager.lan.protocol.mediaPath
 import com.giant8east.photomanager.lan.server.AlbumListRequest
 import com.giant8east.photomanager.lan.server.MediaFile
 import com.giant8east.photomanager.lan.server.ShareDataSource
@@ -36,12 +35,11 @@ class ShareGateway @Inject constructor(
      */
     override suspend fun albums(request: AlbumListRequest): LanAlbumListDto {
         val hostSettings = settingsData.observeSettings().first()
-        val defaultSort = hostSettings.sortField.toLanSort()
-        val appliedSort = request.sortField ?: defaultSort
+        val appliedSort = request.sortField ?: hostSettings.sortField
         val appliedDescending = request.descending ?: hostSettings.isDescending
 
         val matched = shareData.albums(
-            sortField = appliedSort.toAlbumSort(),
+            sortField = appliedSort,
             descending = appliedDescending,
             keyword = request.query.orEmpty(),
             groupId = request.groupId
@@ -49,7 +47,7 @@ class ShareGateway @Inject constructor(
         val page = matched.page(request.offset, request.limit)
         return LanAlbumListDto(
             albums = page.map { album -> album.toDto() },
-            defaultSortField = defaultSort,
+            defaultSortField = hostSettings.sortField,
             defaultSortDescending = hostSettings.isDescending,
             sortField = appliedSort,
             sortDescending = appliedDescending,
@@ -95,7 +93,8 @@ class ShareGateway @Inject constructor(
             photoCount = photoCount,
             sizeBytes = totalSizeBytes,
             groupId = groupId,
-            coverUrl = cover?.let { photo -> "/v1/media/${photo.id}" },
+            // 等价于 if (cover != null) mediaPath(cover.id) else null
+            coverUrl = cover?.let { photo -> mediaPath(photo.id) },
             modifiedAt = modifiedAt
         )
     }
@@ -108,22 +107,6 @@ class ShareGateway @Inject constructor(
         height = height,
         // OTHER 没有可用的扩展名，协议里用 null 表示"未知格式"
         format = format.takeIf { it != PhotoFormat.OTHER }?.name?.lowercase(),
-        mediaUrl = "/v1/media/$id"
+        mediaUrl = mediaPath(id)
     )
-
-    private fun AlbumSortField.toLanSort(): LanSortField = when (this) {
-        AlbumSortField.CUSTOM -> LanSortField.CUSTOM
-        AlbumSortField.NAME -> LanSortField.NAME
-        AlbumSortField.MODIFIED_AT -> LanSortField.MODIFIED
-        AlbumSortField.PHOTO_COUNT -> LanSortField.PHOTO_COUNT
-        AlbumSortField.FILE_SIZE -> LanSortField.FILE_SIZE
-    }
-
-    private fun LanSortField.toAlbumSort(): AlbumSortField = when (this) {
-        LanSortField.CUSTOM -> AlbumSortField.CUSTOM
-        LanSortField.NAME -> AlbumSortField.NAME
-        LanSortField.MODIFIED -> AlbumSortField.MODIFIED_AT
-        LanSortField.PHOTO_COUNT -> AlbumSortField.PHOTO_COUNT
-        LanSortField.FILE_SIZE -> AlbumSortField.FILE_SIZE
-    }
 }
