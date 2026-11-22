@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -221,16 +222,29 @@ internal fun AlbumListCard(
                         .padding(end = 6.dp, bottom = 4.dp),
                     horizontalAlignment = Alignment.End
                 ) {
-                    Text(
-                        stringResource(
-                            R.string.album_read_progress,
-                            album.lastViewedPhotoIndex + 1,
-                            album.photoCount
-                        ),
-                        style = CardMessageStyle,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1
-                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (album.isHidden) {
+                            Icon(
+                                imageVector = Icons.Outlined.VisibilityOff,
+                                contentDescription = stringResource(R.string.album_hidden_badge),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                        Text(
+                            stringResource(
+                                R.string.album_read_progress,
+                                album.lastViewedPhotoIndex + 1,
+                                album.photoCount
+                            ),
+                            style = CardMessageStyle,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1
+                        )
+                    }
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically

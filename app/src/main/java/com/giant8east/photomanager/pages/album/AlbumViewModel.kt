@@ -231,6 +231,15 @@ class AlbumViewModel @Inject constructor(
         albumData.move(albums.filter { it.id in ids }, groupId)
     }
 
+    /** 批量隐藏或取消隐藏相册（读写目录内 .nomedia 并更新数据库）。 */
+    fun setHidden(ids: Set<Long>, hidden: Boolean) = perform {
+        val selected = albums.filter { it.id in ids }
+        if (selected.isEmpty()) return@perform
+        albumData.setHidden(selected, hidden)
+        val toastRes = if (hidden) R.string.album_hidden_done else R.string.album_unhidden_done
+        Toast.makeText(context, toastRes, Toast.LENGTH_SHORT).show()
+    }
+
     fun delete(ids: Set<Long>) {
         val selected = albums.filter { it.id in ids }
         if (selected.isEmpty()) return

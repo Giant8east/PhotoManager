@@ -14,6 +14,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -55,6 +57,7 @@ fun AlbumDetailPage(
             sourceLabel = stringResource(R.string.album_detail_local),
             onRefreshDirectory = viewModel::refreshDirectory,
             onToggleFavorite = viewModel::toggleFavorite,
+            onToggleHidden = viewModel::toggleHidden,
             onOpenViewer = { index ->
                 navigator.pushTo(useSafeArea = false) {
                     PhotoViewerPage(navigator, content.album.id, index)
@@ -78,6 +81,7 @@ internal fun AlbumDetailContent(
     onToggleFavorite: () -> Unit,
     onOpenViewer: (Int) -> Unit,
     actionsEnabled: Boolean = true,
+    onToggleHidden: () -> Unit = {},
     // 网格预览图地址：默认直接使用原图路径，远端页通过 ?preview=true 请求降采样缩略图
     thumbnailUriFor: (PhotoEntity) -> String = { it.contentUri }
 ) {
@@ -114,6 +118,7 @@ internal fun AlbumDetailContent(
                             navigator = navigator,
                             onRefreshDirectory = onRefreshDirectory,
                             onToggleFavorite = onToggleFavorite,
+                            onToggleHidden = onToggleHidden,
                             onOpenViewer = onOpenViewer,
                             actionsEnabled = actionsEnabled
                         )
@@ -200,6 +205,7 @@ private fun AlbumDetailHeader(
     navigator: AppNavigator,
     onRefreshDirectory: ((Boolean) -> Unit) -> Unit,
     onToggleFavorite: () -> Unit,
+    onToggleHidden: () -> Unit,
     onOpenViewer: (Int) -> Unit,
     actionsEnabled: Boolean
 ) {
@@ -230,11 +236,24 @@ private fun AlbumDetailHeader(
                             maxLines = 5, overflow = TextOverflow.Ellipsis
                         )
                         Spacer(Modifier.height(8.dp))
-                        Text(
-                            sourceLabel,
-                            color = appColors.headerContent,
-                            style = TextStyle(fontSize = 16.sp, lineHeight = 22.sp)
-                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                sourceLabel,
+                                color = appColors.headerContent,
+                                style = TextStyle(fontSize = 16.sp, lineHeight = 22.sp)
+                            )
+                            if (album.isHidden) {
+                                Icon(
+                                    imageVector = Icons.Outlined.VisibilityOff,
+                                    contentDescription = stringResource(R.string.album_hidden_badge),
+                                    tint = appColors.headerContent,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
                     }
                 }
                 Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp),
@@ -291,6 +310,20 @@ private fun AlbumDetailHeader(
                             onRefreshDirectory { isAlbumAvailable ->
                                 if (!isAlbumAvailable) navigator.pop()
                             }
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                stringResource(
+                                    if (album.isHidden) R.string.album_action_unhide
+                                    else R.string.album_action_hide
+                                )
+                            )
+                        },
+                        onClick = {
+                            dismiss()
+                            onToggleHidden()
                         }
                     )
                 }

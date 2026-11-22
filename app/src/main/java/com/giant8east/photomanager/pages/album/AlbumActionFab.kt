@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -117,8 +119,11 @@ internal fun AlbumActionFab(
                 }
 
             if (progress > 0f) {
+                val selectedAlbums = viewModel.albums.filter { it.id in selection.selectedIds }
+                // 方案 A：选中项只要有未隐藏就全部隐藏；仅当全部都已隐藏时切为取消隐藏
+                val allSelectedHidden = selectedAlbums.isNotEmpty() && selectedAlbums.all { it.isHidden }
                 MiniActionFab(
-                    modifier = miniModifier(distance = 3),
+                    modifier = miniModifier(distance = 4),
                     iconRes = R.drawable.ic_eh_check_all,
                     onClick = {
                         if (isExpanded) selection.selectAll(albumIds)
@@ -126,7 +131,7 @@ internal fun AlbumActionFab(
                 )
                 Spacer(Modifier.height(16.dp))
                 MiniActionFab(
-                    modifier = miniModifier(distance = 2),
+                    modifier = miniModifier(distance = 3),
                     iconRes = R.drawable.ic_eh_delete,
                     onClick = {
                         if (isExpanded && hasSelection) showDelete()
@@ -134,10 +139,22 @@ internal fun AlbumActionFab(
                 )
                 Spacer(Modifier.height(16.dp))
                 MiniActionFab(
-                    modifier = miniModifier(distance = 1),
+                    modifier = miniModifier(distance = 2),
                     iconRes = R.drawable.ic_eh_folder_move,
                     onClick = {
                         if (isExpanded && hasSelection) showGroups()
+                    }
+                )
+                Spacer(Modifier.height(16.dp))
+                MiniIconActionFab(
+                    modifier = miniModifier(distance = 1),
+                    imageVector = if (allSelectedHidden) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
+                    containerColor = appColors.fabSecondaryBackground,
+                    contentColor = appColors.fabSecondaryContent,
+                    onClick = {
+                        if (isExpanded && hasSelection) {
+                            viewModel.setHidden(selection.selectedIds, hidden = !allSelectedHidden)
+                        }
                     }
                 )
                 Spacer(Modifier.height(16.dp))

@@ -103,6 +103,24 @@ class AlbumDetailViewModel @AssistedInject constructor(
         }
     }
 
+    /** 切换当前相册的 `.nomedia` 隐藏状态。 */
+    fun toggleHidden() {
+        val album = (state as? PageState.Content)?.value?.album ?: return
+        val targetHidden = !album.isHidden
+        viewModelScope.launch {
+            try {
+                albumData.setHidden(listOf(album), targetHidden)
+                val toastRes = if (targetHidden) R.string.album_hidden_done else R.string.album_unhidden_done
+                Toast.makeText(context, toastRes, Toast.LENGTH_SHORT).show()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                Log.w(TAG, "Failed to toggle hidden for album ${album.id}", error)
+                Toast.makeText(context, R.string.album_operation_failed, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     private companion object {
         const val TAG = "AlbumDetailViewModel"
     }
