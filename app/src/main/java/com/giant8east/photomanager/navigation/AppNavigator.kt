@@ -1,29 +1,27 @@
 /** 应用轻量导航器，维护 Composable 页面栈并提供统一跳转入口。 */
 package com.giant8east.photomanager.navigation
 
-import android.annotation.SuppressLint
-import androidx.lifecycle.ViewModelStore
-import androidx.lifecycle.ViewModelStoreOwner
-import androidx.lifecycle.HasDefaultViewModelProviderFactory
-import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.updateTransition
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.Box
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.lifecycle.HasDefaultViewModelProviderFactory
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 
-@OptIn(androidx.compose.animation.ExperimentalAnimationApi::class)
 class AppNavigator(
     // 构造函数接收一个起始页面
     private val initialPage: @Composable (AppNavigator) -> Unit
@@ -31,35 +29,34 @@ class AppNavigator(
     // 一个页面栈条目
     private class PageEntry(
         val id: Long,   // 导航条目的唯一身份
-        val useSafeArea: Boolean,   // 为false时绘制到完整窗口，不使用普通页面的安全区 padding
-        val transition: PageTransition,
+        val useSafeArea: Boolean,   // 为 false 时绘制到完整窗口，不使用普通页面的安全区 padding
         val content: @Composable () -> Unit
     ) {
         val viewModelStore = ViewModelStore()
     }
 
-    private val pages = mutableStateListOf<PageEntry>() // 页面栈,类型是 Compose 能观察到变化的可变列表
+    private val pages = mutableStateListOf<PageEntry>() // 页面栈，类型是 Compose 能观察到变化的可变列表
     private var nextPageId = 0L
-    private var isTransitioning by mutableStateOf(false)
+    // 是否正在执行页面转场：入栈/出栈时先标记，由外部唯一 transition.isRunning 同步复位（无动画 0x 时不会死锁）
+    private var isTransitioning = false
     private var pendingPop = false
 
     init {
-        pages += PageEntry(nextPageId++, true, HorizontalPageTransition) { initialPage(this) }
+        pages += PageEntry(nextPageId++, true) { initialPage(this) }
     }
 
     fun pushTo(
         useSafeArea: Boolean = true,
-        transition: PageTransition = HorizontalPageTransition,
         page: @Composable () -> Unit
     ) {
         if (isTransitioning) return
         isTransitioning = true
-        pages += PageEntry(nextPageId++, useSafeArea, transition, page)
+        pages += PageEntry(nextPageId++, useSafeArea, page)
     }
 
     fun pop() {
         if (isTransitioning) {
-            pendingPop = true
+            if (pages.size > 1) pendingPop = true
             return
         }
         if (pages.size <= 1) return
@@ -67,7 +64,6 @@ class AppNavigator(
         pages.removeAt(pages.lastIndex)
     }
 
-    @SuppressLint("ReturnFromAwaitPointerEventScope")
     @Composable
     fun render() {
         val currentPage = pages.last()
@@ -76,38 +72,37 @@ class AppNavigator(
         DisposableEffect(this) {
             onDispose { pages.forEach { it.viewModelStore.clear() } }
         }
-        AnimatedContent(
-            targetState = currentPage,
-            modifier = Modifier.fillMaxSize(),
-            contentKey = { it.id },
-            transitionSpec = {
-                val isPush = targetState.id > initialState.id
-                val transition = if (isPush) targetState.transition else initialState.transition
-                transition.create(this, isPush)
-            }
-        ) { page ->
-            Box(Modifier.fillMaxSize()) {
-                LaunchedEffect(transition) {
-                    var sawRunning = false
-                    snapshotFlow { transition.currentState != transition.targetState }
-                        .collect { running ->
-                            if (running) sawRunning = true
-                            if (sawRunning && !running) {
-                                isTransitioning = false
-                                if (pendingPop) {
-                                    pendingPop = false
-                                    pop()
-                                }
-                            }
-                        }
-                }
 
+        val transition = updateTransition(targetState = currentPage, label = "nav")
+        val running = transition.isRunning
+        isTransitioning = running
+        // 唯一收尾监听放在 AnimatedContent 外部，避免转场期间新旧两页并发收集竞态
+        LaunchedEffect(running) {
+            if (!running && pendingPop) {
+                pendingPop = false
+                pop()
+            }
+        }
+
+        Box(Modifier.fillMaxSize()) {
+            transition.AnimatedContent(
+                modifier = Modifier.fillMaxSize(),
+                contentKey = { it.id },
+                transitionSpec = {
+                    val isPush = targetState.id > initialState.id
+                    val direction = if (isPush) AnimatedContentTransitionScope.SlideDirection.Left
+                    else AnimatedContentTransitionScope.SlideDirection.Right
+                    slideIntoContainer(direction, tween(TRANSITION_DURATION_MILLIS)) togetherWith
+                        slideOutOfContainer(direction, tween(TRANSITION_DURATION_MILLIS))
+                }
+            ) { page ->
                 val owner = remember(page, parentOwner) {
                     object : ViewModelStoreOwner, HasDefaultViewModelProviderFactory {
                         override val viewModelStore = page.viewModelStore
                         override val defaultViewModelProviderFactory =
                             (parentOwner as HasDefaultViewModelProviderFactory).defaultViewModelProviderFactory
-                        override val defaultViewModelCreationExtras = (parentOwner as HasDefaultViewModelProviderFactory).defaultViewModelCreationExtras
+                        override val defaultViewModelCreationExtras =
+                            (parentOwner as HasDefaultViewModelProviderFactory).defaultViewModelCreationExtras
                     }
                 }
                 DisposableEffect(page) {
@@ -126,17 +121,25 @@ class AppNavigator(
                         PageContainer(useSafeArea = page.useSafeArea) { page.content() }
                     }
                 }
-                if (transition.currentState != transition.targetState) {
-                    // 只消费指针事件，不使用 clickable，避免转场期间出现水波纹。
-                    Box(Modifier.fillMaxSize().pointerInput(Unit) {
-                        awaitPointerEventScope {
-                            while (true) {
-                                awaitPointerEvent().changes.forEach { it.consume() }
+            }
+            if (running) {
+                // 放在 AnimatedContent 之后的唯一顶层事件遮罩，只消费指针事件、不出水波纹。
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .pointerInput(Unit) {
+                            awaitPointerEventScope {
+                                while (true) {
+                                    awaitPointerEvent().changes.forEach { it.consume() }
+                                }
                             }
                         }
-                    })
-                }
+                )
             }
         }
+    }
+
+    private companion object {
+        const val TRANSITION_DURATION_MILLIS = 300
     }
 }
