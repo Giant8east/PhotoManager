@@ -52,10 +52,6 @@ class AlbumShareData @Inject constructor(
     suspend fun photo(photoId: Long): PhotoEntity? =
         photoDao.queryPhotoById(photoId)
 
-    /** 封面取文件名排序后的第一张，与本地相册卡片一致。 */
-    suspend fun albumCoverPhoto(albumId: Long): PhotoEntity? =
-        photoDao.queryAlbumCoverPhoto(albumId)
-
     suspend fun groups(): List<GroupWithAlbumCount> =
         groupDao.queryGroupWithAlbumCounts()
 

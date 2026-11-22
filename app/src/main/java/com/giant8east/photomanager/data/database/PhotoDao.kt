@@ -16,10 +16,6 @@ interface PhotoDao {
     @Query("SELECT * FROM photos WHERE id = :id")
     suspend fun queryPhotoById(id: Long): PhotoEntity?
 
-    /** 相册封面：与本地列表一致，取文件名排序后的第一张。 */
-    @Query("SELECT * FROM photos WHERE albumId = :albumId ORDER BY name ASC LIMIT 1")
-    suspend fun queryAlbumCoverPhoto(albumId: Long): PhotoEntity?
-
     @Query("SELECT * FROM photos WHERE albumId = :albumId ORDER BY name ASC")
     fun observePhotosQuery(albumId: Long): Flow<List<PhotoEntity>>
 
