@@ -128,7 +128,9 @@ class AlbumIndexer @Inject constructor(
     private companion object {
         /** 比较文件元数据是否一致，保留数据库已有 ID 与图片记录。 */
         fun samePhotoMetadata(old: PhotoEntity, new: PhotoEntity): Boolean =
-            old.sizeBytes == new.sizeBytes && old.modifiedAt == new.modifiedAt
+            old.sizeBytes == new.sizeBytes &&
+                old.modifiedAt == new.modifiedAt &&
+                old.isAnimated == new.isAnimated
 
         /**
          * 根据旧图片列表与旧阅读进度，计算新列表中最匹配的阅读下标：

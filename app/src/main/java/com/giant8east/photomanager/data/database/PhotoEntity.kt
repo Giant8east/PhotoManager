@@ -28,7 +28,9 @@ data class PhotoEntity(
     val modifiedAt: String? = null,
     val width: Int = 0,
     val height: Int = 0,
-    val sizeBytes: Long = 0
+    val sizeBytes: Long = 0,
+    /** 是否为动图（GIF 或 Animated WebP/HEIF/AVIF），由扫描导入时在数据层判定并持久化。 */
+    val isAnimated: Boolean = false
 ) {
     /** 由文件名派生的格式，不持久化。 */
     val format: PhotoFormat get() = PhotoFormat.fromFileName(name)

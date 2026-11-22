@@ -16,7 +16,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         PhotoEntity::class,
         AllowedDeviceEntity::class
     ],
-    version = 12,
+    version = 13,
     exportSchema = false
 )
 abstract class PhotoDatabase : RoomDatabase() {
@@ -57,6 +57,15 @@ abstract class PhotoDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE `albums` ADD COLUMN `sourceName` TEXT NOT NULL DEFAULT ''")
                 db.execSQL("ALTER TABLE `albums` ADD COLUMN `remoteDeviceId` TEXT DEFAULT NULL")
                 db.execSQL("ALTER TABLE `albums` ADD COLUMN `remoteAlbumId` INTEGER DEFAULT NULL")
+            }
+        }
+
+        /**
+         * 12 → 13：photos 表非破坏性追加动图标记列，不动既有行数据。
+         */
+        val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `photos` ADD COLUMN `isAnimated` INTEGER NOT NULL DEFAULT 0")
             }
         }
     }

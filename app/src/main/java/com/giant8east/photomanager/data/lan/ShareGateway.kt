@@ -108,7 +108,8 @@ class ShareGateway @Inject constructor(
 
     private fun PhotoEntity.toDto(): LanPhotoDto {
         val wireFormat = when {
-            format == PhotoFormat.WEBP && PhotoFormat.isAnimatedWebp(File(contentUri)) -> "animated_webp"
+            format == PhotoFormat.GIF -> "gif"
+            isAnimated -> "animated_webp"
             format == PhotoFormat.OTHER -> null
             else -> format.name.lowercase()
         }

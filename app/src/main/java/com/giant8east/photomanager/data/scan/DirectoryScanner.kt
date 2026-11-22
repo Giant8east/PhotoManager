@@ -60,12 +60,16 @@ class DirectoryScanner @Inject constructor(
                 val size = entry.length()
                 totalSize += size
                 val photoPath = if (dirPath == "/") "/${entry.name}" else "$dirPath/${entry.name}"
+                val format = PhotoFormat.fromFileName(entry.name)
+                val isAnimated = format == PhotoFormat.GIF ||
+                    (format in ANIMATED_CANDIDATE_FORMATS && PhotoFormat.isAnimatedImage(entry))
                 photos += PhotoEntity(
                     albumId = 0,
                     name = entry.name,
                     contentUri = photoPath,
                     modifiedAt = formatEpochMillis(entry.lastModified()),
-                    sizeBytes = size
+                    sizeBytes = size,
+                    isAnimated = isAnimated
                 )
             }
         }
@@ -114,6 +118,13 @@ class DirectoryScanner @Inject constructor(
 
     private companion object {
         const val NO_MEDIA_FILE_NAME = ".nomedia"
+
+        val ANIMATED_CANDIDATE_FORMATS = setOf(
+            PhotoFormat.WEBP,
+            PhotoFormat.HEIC,
+            PhotoFormat.HEIF,
+            PhotoFormat.AVIF
+        )
 
         /** 扫描只按扩展名识别类型，与删除器共用 [PhotoFormat] 作为唯一口径，不预解码或过滤零字节、损坏及透明图片。 */
         fun isImageFile(file: File): Boolean =

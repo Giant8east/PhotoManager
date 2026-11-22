@@ -37,9 +37,6 @@ import com.giant8east.photomanager.data.database.AlbumEntity
 import com.giant8east.photomanager.data.database.PhotoEntity
 import com.giant8east.photomanager.data.media.PhotoFormat
 import com.giant8east.photomanager.navigation.AppNavigator
-import java.io.File
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import com.giant8east.photomanager.pages.common.AppLazyColumnScrollbar
 import com.giant8east.photomanager.ui.format.rememberAlbumModifiedTimeText
 import com.giant8east.photomanager.ui.theme.appColors
@@ -92,9 +89,7 @@ internal fun AlbumDetailContent(
     primaryActionEnabled: Boolean = actionsEnabled,
     onPrimaryAction: (() -> Unit)? = null,
     // 网格预览图地址：默认直接使用原图路径，远端页通过 ?preview=true 请求降采样缩略图
-    thumbnailUriFor: (PhotoEntity) -> String = { it.contentUri },
-    // 远端可由服务端告知是否为动态 WebP；null 表示本地文件，由 PhotoThumbnail 读前 21 字节判定
-    isAnimatedFor: ((PhotoEntity) -> Boolean)? = null
+    thumbnailUriFor: (PhotoEntity) -> String = { it.contentUri }
 ) {
     val currentAlbum = content.album
     val photos = content.photos
@@ -146,8 +141,7 @@ internal fun AlbumDetailContent(
                         ) {
                             PhotoThumbnail(
                                 photo = photo,
-                                thumbnailUri = thumbnailUriFor(photo),
-                                isAnimatedOverride = isAnimatedFor?.invoke(photo)
+                                thumbnailUri = thumbnailUriFor(photo)
                             )
                             Text(
                                 stringResource(R.string.album_detail_photo_index, index + 1),
@@ -185,8 +179,7 @@ private fun AlbumThumbnail(uri: String) {
 @Composable
 private fun PhotoThumbnail(
     photo: PhotoEntity,
-    thumbnailUri: String,
-    isAnimatedOverride: Boolean?
+    thumbnailUri: String
 ) {
     val context = LocalContext.current
     val request = remember(thumbnailUri, photo.modifiedAt) {
@@ -194,17 +187,6 @@ private fun PhotoThumbnail(
             .decoderFactory(BitmapFactoryDecoder.Factory()) // 强制按静态 Bitmap 解码，只取第一帧
             .memoryCacheKey("$thumbnailUri|${photo.modifiedAt}|gallery-static")
             .build()
-    }
-    val isAnimated by produceState(
-        initialValue = isAnimatedOverride ?: (photo.format == PhotoFormat.GIF),
-        key1 = photo.contentUri,
-        key2 = isAnimatedOverride
-    ) {
-        if (isAnimatedOverride != null) {
-            value = isAnimatedOverride
-        } else if (photo.format == PhotoFormat.WEBP) {
-            value = withContext(Dispatchers.IO) { PhotoFormat.isAnimatedWebp(File(photo.contentUri)) }
-        }
     }
     var contentScale by remember(request) { mutableStateOf(ContentScale.Fit) }
     Box(
@@ -224,7 +206,7 @@ private fun PhotoThumbnail(
         )
         PhotoFormatBadge(
             format = photo.format,
-            isAnimated = isAnimated,
+            isAnimated = photo.isAnimated || photo.format == PhotoFormat.GIF,
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(6.dp)
