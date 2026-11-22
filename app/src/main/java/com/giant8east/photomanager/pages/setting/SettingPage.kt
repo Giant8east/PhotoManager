@@ -32,7 +32,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.giant8east.photomanager.R
 import com.giant8east.photomanager.navigation.AppNavigator
-import com.giant8east.photomanager.pages.lan.RemotePage
 import com.giant8east.photomanager.pages.common.TopBarShadow
 import androidx.compose.foundation.layout.Box
 import com.giant8east.photomanager.ui.theme.appColors
