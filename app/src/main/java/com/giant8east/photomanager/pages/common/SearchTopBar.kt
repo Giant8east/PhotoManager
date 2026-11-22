@@ -47,7 +47,6 @@ fun SearchTopBar(
     onSearchInputChange: (String) -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    navigationIcon: @Composable () -> Unit = {},
     leadingContent: @Composable RowScope.() -> Unit = {},
     trailingContent: @Composable RowScope.() -> Unit = {}
 ) {
@@ -124,7 +123,7 @@ fun SearchTopBar(
                 }
             }
         },
-        navigationIcon = navigationIcon,
+        navigationIcon = {},
         actions = {},
         windowInsets = WindowInsets(0),
         colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
