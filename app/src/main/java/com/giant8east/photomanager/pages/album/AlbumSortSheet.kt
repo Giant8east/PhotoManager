@@ -1,6 +1,7 @@
 /** 相册排序底部弹窗的状态与宿主，页面通过 show 打开。 */
 package com.giant8east.photomanager.pages.album
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -30,21 +31,27 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
 import com.giant8east.photomanager.R
-import com.giant8east.photomanager.data.album.AlbumSortField
+import com.giant8east.photomanager.model.AlbumSortField
 import com.giant8east.photomanager.pages.common.SheetFrame
 
+/**
+ * 排序选择：状态进、回调出，自己不持有任何状态——本地页传 ViewModel 里的字段，
+ * 远端页传同名协议字段，两边共用同一套外观与交互。
+ */
 @Composable
 internal fun AlbumSortSheet(
-    viewModel: AlbumViewModel = hiltViewModel()
+    currentField: AlbumSortField,
+    isDescending: Boolean,
+    onFieldSelected: (AlbumSortField) -> Unit,
+    onDirectionChanged: (Boolean) -> Unit
 ) {
     SheetFrame {
         AlbumSortContent(
-            currentField = viewModel.sortField,
-            isDescending = viewModel.isDescending,
-            onFieldSelected = viewModel::selectSortField,
-            onDirectionChanged = viewModel::setSortDescending
+            currentField = currentField,
+            isDescending = isDescending,
+            onFieldSelected = onFieldSelected,
+            onDirectionChanged = onDirectionChanged
         )
     }
 }
@@ -78,6 +85,42 @@ private fun AlbumSortContent(
 
 }
 
+/** 字段标题的资源 id：界面文案属于界面层，所以 [AlbumSortField] 里不存资源 id。 */
+@StringRes
+private fun AlbumSortField.titleRes(): Int = when (this) {
+    AlbumSortField.CUSTOM -> R.string.sort_custom
+    AlbumSortField.NAME -> R.string.sort_name
+    AlbumSortField.MODIFIED_AT -> R.string.sort_modified
+    AlbumSortField.PHOTO_COUNT -> R.string.sort_photo_count
+    AlbumSortField.FILE_SIZE -> R.string.sort_file_size
+}
+
+/** 方向文案；手动顺序与方向无关，两种方向共用同一句话。 */
+@StringRes
+private fun AlbumSortField.directionRes(descending: Boolean): Int = when (this) {
+    AlbumSortField.CUSTOM -> R.string.album_sort_order_manual
+    AlbumSortField.NAME -> if (descending) {
+        R.string.album_sort_order_name_descending
+    } else {
+        R.string.album_sort_order_name_ascending
+    }
+    AlbumSortField.MODIFIED_AT -> if (descending) {
+        R.string.album_sort_order_newest_first
+    } else {
+        R.string.album_sort_order_oldest_first
+    }
+    AlbumSortField.PHOTO_COUNT -> if (descending) {
+        R.string.album_sort_order_most_first
+    } else {
+        R.string.album_sort_order_fewest_first
+    }
+    AlbumSortField.FILE_SIZE -> if (descending) {
+        R.string.album_sort_order_largest_first
+    } else {
+        R.string.album_sort_order_smallest_first
+    }
+}
+
 @Composable
 private fun SortRow(
     field: AlbumSortField,
@@ -109,15 +152,13 @@ private fun SortRow(
                 .padding(start = 12.dp)
         ) {
             Text(
-                text = stringResource(field.titleRes),
+                text = stringResource(field.titleRes()),
                 fontSize = 16.sp,
                 color = MaterialTheme.colorScheme.onSurface
             )
             if (selected) {
                 Text(
-                    text = stringResource(
-                        if (descending) field.descendingRes else field.ascendingRes
-                    ),
+                    text = stringResource(field.directionRes(descending)),
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
