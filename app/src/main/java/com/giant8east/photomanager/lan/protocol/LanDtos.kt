@@ -1,6 +1,7 @@
 /** 局域网协议的线上 DTO：服务端与客户端共用同一份定义，改接口时两边同时生效。 */
 package com.giant8east.photomanager.lan.protocol
 
+import com.giant8east.photomanager.model.AlbumSortField
 import kotlinx.serialization.Serializable
 
 /**
@@ -72,9 +73,11 @@ data class LanGroupDto(
 @Serializable
 data class LanAlbumListDto(
     val albums: List<LanAlbumDto>,
-    val defaultSortField: LanSortField,
+    @Serializable(with = AlbumSortFieldWireSerializer::class)
+    val defaultSortField: AlbumSortField,
     val defaultSortDescending: Boolean,
-    val sortField: LanSortField,
+    @Serializable(with = AlbumSortFieldWireSerializer::class)
+    val sortField: AlbumSortField,
     val sortDescending: Boolean,
     val offset: Int,
     val limit: Int,
