@@ -1,13 +1,13 @@
 /** 访客侧门面：一次配对 + 三个只读查询；401 时自动重新配对一次。 */
 package com.giant8east.photomanager.lan.client
 
+import com.giant8east.photomanager.model.AlbumSortField
 import com.giant8east.photomanager.lan.protocol.API_PREFIX
 import com.giant8east.photomanager.lan.protocol.DEFAULT_PAGE_LIMIT
 import com.giant8east.photomanager.lan.protocol.LanAlbumListDto
 import com.giant8east.photomanager.lan.protocol.LanGroupListDto
 import com.giant8east.photomanager.lan.protocol.LanPhotoDto
 import com.giant8east.photomanager.lan.protocol.LanDevice
-import com.giant8east.photomanager.lan.protocol.LanSortField
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
@@ -24,7 +24,7 @@ class LanClient @Inject constructor(
 
     suspend fun albums(
         device: LanDevice,
-        sortField: LanSortField? = null,
+        sortField: AlbumSortField? = null,
         descending: Boolean? = null,
         query: String? = null,
         groupId: Long? = null,
