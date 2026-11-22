@@ -172,6 +172,7 @@
     <string name="lan_download_queued">排队中</string>
     <string name="lan_download_completed_badge">已下载</string>
     <string name="lan_download_progress_short">下载中 %1$d/%2$d</string>
+    <string name="lan_download_paused_short">已暂停 %1$d/%2$d</string>
     <string name="lan_delete_downloaded_title">删除已下载相册</string>
     <string name="lan_delete_downloaded_message">确定删除本地已下载的“%1$s”吗？</string>
     <string name="remote_download_path">下载路径</string>

@@ -422,6 +422,12 @@ private fun RemoteAlbumRow(
                     color = MaterialTheme.colorScheme.primary,
                     maxLines = 1
                 )
+                is RemoteDownloadStatus.Paused -> Text(
+                    text = stringResource(R.string.lan_download_paused_short, status.finished, status.total),
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1
+                )
                 is RemoteDownloadStatus.Failed -> Text(
                     text = stringResource(R.string.lan_download_failed),
                     fontSize = 12.sp,

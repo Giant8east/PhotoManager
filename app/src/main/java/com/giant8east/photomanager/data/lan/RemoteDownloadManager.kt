@@ -24,6 +24,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -53,6 +54,8 @@ sealed interface RemoteDownloadStatus {
         val total: Int,
         val bytesPerSecond: Long
     ) : RemoteDownloadStatus
+    /** 中途暂停/停止：已落盘的图片保留并入库，再次点击播放从断点续传。 */
+    data class Paused(val finished: Int, val total: Int) : RemoteDownloadStatus
     data class Failed(val reason: String) : RemoteDownloadStatus
     data object Finished : RemoteDownloadStatus
 }
@@ -133,31 +136,28 @@ class RemoteDownloadManager @Inject constructor(
         }
     }
 
-    /** 取消单个相册任务（排队中直接移出；下载中取消当前协程并清理 .part）。 */
+    /** 取消单个相册任务（排队中直接移出；下载中取消当前协程，已下好的图片保留并切为已暂停）。 */
     fun cancelOne(key: RemoteAlbumKey) {
         synchronized(queueLock) {
             pendingQueue.removeAll { it.key == key }
             if (activeKey == key) {
                 activeItemJob?.cancel()
+            } else {
+                mutableTasks.update { map -> map - key }
             }
-            mutableTasks.update { map -> map - key }
         }
     }
 
-    /** 全部停止：取消当前下载、清空队列并复位通知栏状态。 */
+    /** 全部停止：取消当前下载、清空队列并复位通知栏状态（正在下载的那本保留已下好图片并切为已暂停）。 */
     fun stopAll() {
         synchronized(queueLock) {
             pendingQueue.clear()
             activeItemJob?.cancel()
             workerJob?.cancel()
             workerJob = null
-            activeKey = null
             activeItemJob = null
             mutableTasks.update { map ->
-                map.filterValues { task ->
-                    task.status !is RemoteDownloadStatus.Queued &&
-                        task.status !is RemoteDownloadStatus.Downloading
-                }
+                map.filterValues { task -> task.status !is RemoteDownloadStatus.Queued }
             }
             mutableSummary.value = DownloadServiceSummary(isActive = false)
         }
@@ -199,10 +199,14 @@ class RemoteDownloadManager @Inject constructor(
     private suspend fun downloadSingleAlbum(request: QueuedRequest) {
         val key = request.key
         var currentPartFile: File? = null
+        var localDirRef: File? = null
+        var total = request.album.photoCount
+        var finished = 0
         try {
-            updateProgress(key, request.album.name, finished = 0, total = request.album.photoCount, speed = 0L)
+            updateProgress(key, request.album.name, finished = 0, total = total, speed = 0L)
             val remotePhotos = lanClient.photos(request.device, request.album.id)
             val localDir = resolveTargetDirectory(request.device, request.album)
+            localDirRef = localDir
             if (!localDir.exists() && !localDir.mkdirs()) {
                 error("Cannot create directory: ${localDir.path}")
             }
@@ -220,8 +224,7 @@ class RemoteDownloadManager @Inject constructor(
                 }
             }
 
-            val total = remotePhotos.size
-            var finished = 0
+            total = remotePhotos.size
             var windowBytes = 0L
             var windowStartMs = SystemClock.elapsedRealtime()
             var currentSpeed = 0L
@@ -256,26 +259,41 @@ class RemoteDownloadManager @Inject constructor(
                 updateProgress(key, request.album.name, finished = finished, total = total, speed = currentSpeed)
             }
 
-            // 下载完成后扫描写库（自动生成 .thumb），并打上来源设备与远端相册 ID 标记
-            val normalizedPath = LocalPaths.normalize(localDir.path)
-            albumIndexer.scanAndWrite(normalizedPath)
-            albumDao.updateAlbumSourceByPath(
-                albumPath = normalizedPath,
-                sourceName = request.device.name,
-                remoteDeviceId = key.deviceKey,
-                remoteAlbumId = request.album.id
-            )
+            indexDownloadedAlbum(localDir, request)
 
             synchronized(queueLock) { sessionCompleted++ }
             mutableTasks.update { map ->
                 map + (key to RemoteDownloadTask(key, request.album.name, RemoteDownloadStatus.Finished))
             }
         } catch (cancelled: CancellationException) {
+            // 只删未写完的 .part 临时文件；已经完整落盘的图片原样保留并立即入库，状态切为 Paused 方便续传
             currentPartFile?.delete()
-            mutableTasks.update { map -> map - key }
+            val dir = localDirRef
+            if (finished > 0 && dir != null) {
+                withContext(NonCancellable) {
+                    runCatching { indexDownloadedAlbum(dir, request) }
+                        .onFailure { Log.w(TAG, "Failed to index partial album ${dir.path}", it) }
+                }
+                mutableTasks.update { map ->
+                    map + (
+                        key to RemoteDownloadTask(
+                            key = key,
+                            albumName = request.album.name,
+                            status = RemoteDownloadStatus.Paused(finished, total)
+                        )
+                    )
+                }
+            } else {
+                mutableTasks.update { map -> map - key }
+            }
             throw cancelled
         } catch (error: Exception) {
             currentPartFile?.delete()
+            val dir = localDirRef
+            if (finished > 0 && dir != null) {
+                runCatching { indexDownloadedAlbum(dir, request) }
+                    .onFailure { Log.w(TAG, "Failed to index partial album after error ${dir.path}", it) }
+            }
             Log.w(TAG, "Failed to download album ${request.album.name} (${key.albumId})", error)
             synchronized(queueLock) { sessionFailed++ }
             mutableTasks.update { map ->
@@ -288,6 +306,18 @@ class RemoteDownloadManager @Inject constructor(
                 )
             }
         }
+    }
+
+    /** 将落地目录扫描入库（同步生成 .thumb），并打上来源设备与远端相册 ID 标记。 */
+    private suspend fun indexDownloadedAlbum(localDir: File, request: QueuedRequest) {
+        val normalizedPath = LocalPaths.normalize(localDir.path)
+        albumIndexer.scanAndWrite(normalizedPath)
+        albumDao.updateAlbumSourceByPath(
+            albumPath = normalizedPath,
+            sourceName = request.device.name,
+            remoteDeviceId = request.key.deviceKey,
+            remoteAlbumId = request.album.id
+        )
     }
 
     /** 原子落盘：先流式写 `.part`，完整写完后重命名为目标文件，避免中途停止留下半截坏图。 */

@@ -172,6 +172,7 @@
     <string name="lan_download_queued">Queued</string>
     <string name="lan_download_completed_badge">Downloaded</string>
     <string name="lan_download_progress_short">Downloading %1$d/%2$d</string>
+    <string name="lan_download_paused_short">Paused %1$d/%2$d</string>
     <string name="lan_delete_downloaded_title">Delete downloaded album</string>
     <string name="lan_delete_downloaded_message">Delete local downloaded files for “%1$s”?</string>
     <string name="album_action_move_group">Move to group</string>

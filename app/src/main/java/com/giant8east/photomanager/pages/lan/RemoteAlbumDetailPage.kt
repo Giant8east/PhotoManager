@@ -55,6 +55,11 @@ fun RemoteAlbumDetailPage(
             downloadStatus.finished,
             downloadStatus.total
         )
+        is RemoteDownloadStatus.Paused -> stringResource(
+            R.string.lan_download_paused_short,
+            downloadStatus.finished,
+            downloadStatus.total
+        )
         else -> if (isDownloaded) {
             stringResource(R.string.lan_download_completed_badge)
         } else {
@@ -81,15 +86,10 @@ fun RemoteAlbumDetailPage(
                     albumId = album.id,
                     name = photo.name,
                     contentUri = "http://${device.address}${photo.mediaUrl}",
-                    sizeBytes = photo.sizeBytes
+                    sizeBytes = photo.sizeBytes,
+                    isAnimated = photo.format == "gif" || photo.format == "animated_webp"
                 )
             }
-        }
-        val animatedPhotoIds = remember(content.photos) {
-            content.photos
-                .filter { it.format == "gif" || it.format == "animated_webp" }
-                .map { it.id }
-                .toSet()
         }
         PullToRefreshBox(
             isRefreshing = viewModel.isRefreshing,
@@ -108,7 +108,8 @@ fun RemoteAlbumDetailPage(
                 onPrimaryAction = {
                     val isActive = downloadStatus is RemoteDownloadStatus.Queued ||
                         downloadStatus is RemoteDownloadStatus.Downloading
-                    if (!isActive && isDownloaded) {
+                    val isPaused = downloadStatus is RemoteDownloadStatus.Paused
+                    if (!isActive && !isPaused && isDownloaded) {
                         showDeleteConfirm = true
                     } else {
                         viewModel.toggleDownload()
@@ -121,8 +122,7 @@ fun RemoteAlbumDetailPage(
                 },
                 actionsEnabled = false,
                 // 详情页网格请求降采样预览图，点进阅读器再加载完整原图（对标 EhViewer）
-                thumbnailUriFor = { photo -> "${photo.contentUri}?$PREVIEW_QUERY_PARAM=true" },
-                isAnimatedFor = { photo -> photo.id in animatedPhotoIds }
+                thumbnailUriFor = { photo -> "${photo.contentUri}?$PREVIEW_QUERY_PARAM=true" }
             )
         }
     }
