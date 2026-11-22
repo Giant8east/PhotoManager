@@ -2,9 +2,13 @@
 package com.giant8east.photomanager.pages.lan
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.giant8east.photomanager.data.database.AlbumEntity
 import com.giant8east.photomanager.data.database.PhotoEntity
@@ -17,6 +21,7 @@ import com.giant8east.photomanager.pages.albumdetail.AlbumDetailUiState
 import com.giant8east.photomanager.pages.photoviewer.PhotoViewerPage
 import com.giant8east.photomanager.ui.state.PageContent
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RemoteAlbumDetailPage(
     navigator: AppNavigator,
@@ -52,21 +57,28 @@ fun RemoteAlbumDetailPage(
                 )
             }
         }
-        AlbumDetailContent(
-            navigator = navigator,
-            content = AlbumDetailUiState(album = remoteAlbum, photos = remotePhotos),
-            sourceLabel = device.name,
-            // 远端相册没有本地目录：刷新与收藏都不可用，但布局与本地保持一致。
-            onRefreshDirectory = { onFinished -> onFinished(true) },
-            onToggleFavorite = {},
-            onOpenViewer = { index ->
-                navigator.pushTo(useSafeArea = false) {
-                    PhotoViewerPage(navigator, remotePhotos, index)
-                }
-            },
-            actionsEnabled = false,
-            // 详情页网格请求降采样预览图，点进阅读器再加载完整原图（对标 EhViewer）
-            thumbnailUriFor = { photo -> "${photo.contentUri}?$PREVIEW_QUERY_PARAM=true" }
-        )
+        PullToRefreshBox(
+            isRefreshing = viewModel.isRefreshing,
+            // 等价于 onRefresh = { viewModel.refresh() }
+            onRefresh = viewModel::refresh,
+            modifier = Modifier.fillMaxSize()
+        ) {
+            AlbumDetailContent(
+                navigator = navigator,
+                content = AlbumDetailUiState(album = remoteAlbum, photos = remotePhotos),
+                sourceLabel = device.name,
+                // 远端相册没有本地目录：刷新与收藏都不可用，但布局与本地保持一致。
+                onRefreshDirectory = { onFinished -> onFinished(true) },
+                onToggleFavorite = {},
+                onOpenViewer = { index ->
+                    navigator.pushTo(useSafeArea = false) {
+                        PhotoViewerPage(navigator, remotePhotos, index)
+                    }
+                },
+                actionsEnabled = false,
+                // 详情页网格请求降采样预览图，点进阅读器再加载完整原图（对标 EhViewer）
+                thumbnailUriFor = { photo -> "${photo.contentUri}?$PREVIEW_QUERY_PARAM=true" }
+            )
+        }
     }
 }

@@ -1,6 +1,7 @@
 /** 远端相册页：外观与本地相册页一致（侧边分组抽屉 + 同一张相册卡片），只是数据来自对方设备。 */
 package com.giant8east.photomanager.pages.lan
 
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -10,8 +11,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -21,15 +22,18 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -203,7 +207,11 @@ fun RemoteAlbumPage(
                     device = device,
                     selection = selection,
                     navigator = navigator,
-                    listState = listState
+                    listState = listState,
+                    onRefresh = {
+                        albums.refresh()
+                        viewModel.refreshGroups()
+                    }
                 )
                 TopBarShadow(Modifier.align(Alignment.TopCenter))
             }
@@ -212,63 +220,86 @@ fun RemoteAlbumPage(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun RemoteAlbumList(
     albums: LazyPagingItems<LanAlbumDto>,
     device: LanDevice,
     selection: AlbumSelectionState,
     navigator: AppNavigator,
-    listState: LazyListState
+    listState: LazyListState,
+    onRefresh: () -> Unit
 ) {
+    val context = LocalContext.current
+    val refreshState = albums.loadState.refresh
+    val appendState = albums.loadState.append
+
+    // 已有列表时下拉刷新失败、或底部加载下一页失败：保留现有列表并用 Toast 提示（对齐 EhViewer）
+    LaunchedEffect(refreshState) {
+        if (refreshState is LoadState.Error && albums.itemCount > 0) {
+            Toast.makeText(
+                context,
+                refreshState.error.toLanUiText().resolve(context),
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+    LaunchedEffect(appendState) {
+        if (appendState is LoadState.Error) {
+            Toast.makeText(
+                context,
+                appendState.error.toLanUiText().resolve(context),
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
     when {
         // 首屏加载：还没有任何条目
-        albums.loadState.refresh is LoadState.Loading && albums.itemCount == 0 -> Box(
+        refreshState is LoadState.Loading && albums.itemCount == 0 -> Box(
             Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) { CircularProgressIndicator() }
         // 首屏失败：显示一行原因 + 重试，不用空列表伪装成功
-        albums.loadState.refresh is LoadState.Error && albums.itemCount == 0 -> {
-            val error = (albums.loadState.refresh as LoadState.Error).error
-            PageMessage(message = error.toLanUiText().resolve(), onRetry = albums::retry)
+        refreshState is LoadState.Error && albums.itemCount == 0 -> {
+            PageMessage(message = refreshState.error.toLanUiText().resolve(), onRetry = albums::retry)
         }
         // 正常空结果：不提供重试
         albums.itemCount == 0 -> PageMessage(message = stringResource(R.string.page_no_albums), onRetry = null)
-        else -> AppLazyColumnScrollbar(state = listState) {
-            LazyColumn(
-                state = listState,
-                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxSize()
-            ) {
-                // key 用相册 id；占位行还没有数据，退化成索引
-                items(count = albums.itemCount, key = { index -> albums.peek(index)?.id ?: index }) { index ->
-                    val album = albums[index]
-                    if (album != null) {
-                        RemoteAlbumRow(
-                            album = album,
-                            device = device,
-                            selection = selection,
-                            navigator = navigator
-                        )
-                    }
-                }
-                // 追加下一页：用列表尾部的一行表达加载/失败，翻到底部就能看到
-                item(key = "footer") {
-                    Box(
-                        Modifier
-                            .fillMaxSize()
-                            .padding(vertical = 12.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        when (albums.loadState.append) {
-                            is LoadState.Loading -> CircularProgressIndicator(Modifier.size(24.dp))
-                            is LoadState.Error -> TextButton(onClick = albums::retry) {
-                                Text(stringResource(R.string.page_retry))
-                            }
-                            else -> Unit
+        else -> PullToRefreshBox(
+            isRefreshing = refreshState is LoadState.Loading,
+            onRefresh = onRefresh,
+            modifier = Modifier.fillMaxSize()
+        ) {
+            AppLazyColumnScrollbar(state = listState) {
+                LazyColumn(
+                    state = listState,
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    // key 用相册 id；占位行还没有数据，退化成索引
+                    items(count = albums.itemCount, key = { index -> albums.peek(index)?.id ?: index }) { index ->
+                        val album = albums[index]
+                        if (album != null) {
+                            RemoteAlbumRow(
+                                album = album,
+                                device = device,
+                                selection = selection,
+                                navigator = navigator
+                            )
                         }
                     }
                 }
+            }
+            // 对齐 EhViewer：底部加载下一页时贴容器底边叠一条 3dp 横向动画条，不占列表项空间
+            if (appendState is LoadState.Loading) {
+                LinearProgressIndicator(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .height(3.dp)
+                )
             }
         }
     }
