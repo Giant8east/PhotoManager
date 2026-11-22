@@ -43,6 +43,9 @@ class AlbumShareData @Inject constructor(
             )
         )
 
+    suspend fun album(albumId: Long): AlbumEntity? =
+        albumDao.queryAlbumById(albumId)
+
     suspend fun albumPhotos(albumId: Long): List<PhotoEntity> =
         photoDao.queryPhotosByAlbumId(albumId)
 

@@ -10,10 +10,12 @@ import com.giant8east.photomanager.lan.protocol.LanPairPendingDto
 import com.giant8east.photomanager.lan.protocol.LanPairRequestDto
 import com.giant8east.photomanager.lan.protocol.LanPairResponseDto
 import com.giant8east.photomanager.lan.protocol.MAX_PAGE_LIMIT
+import com.giant8east.photomanager.lan.protocol.PREVIEW_QUERY_PARAM
 import com.giant8east.photomanager.lan.protocol.SSE_HEARTBEAT_MILLIS
 import com.giant8east.photomanager.lan.protocol.SessionDto
 import com.giant8east.photomanager.lan.protocol.TOKEN_HEADER
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
@@ -30,7 +32,9 @@ import io.ktor.server.plugins.partialcontent.PartialContent
 import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.request.header
 import io.ktor.server.request.receive
+import io.ktor.server.response.header
 import io.ktor.server.response.respond
+import io.ktor.server.response.respondBytes
 import io.ktor.server.response.respondFile
 import io.ktor.server.response.respondTextWriter
 import io.ktor.server.routing.Route
@@ -51,6 +55,9 @@ private val DeviceIdKey = AttributeKey<String>("LanDeviceId")
 
 /** deviceId / name 的长度上限：两者都会进主机弹窗、白名单表和列表 UI，超长没有业务意义。 */
 private const val MAX_DEVICE_FIELD_LENGTH = 64
+
+/** 媒体/封面/预览图响应缓存头：允许客户端 Coil 磁盘 LRU 复用已拉取的图片。 */
+private const val MEDIA_CACHE_CONTROL = "public, max-age=86400"
 
 /**
  * 服务端模块：装 JSON 内容协商与 Range 支持，注册开放接口（ping、配对）与受保护接口。
@@ -175,9 +182,30 @@ fun Application.lanModule(
                 call.respond(dataSource.photos(call.longPathParameter("id")))
             }
 
-            // 图片字节流：respondFile + PartialContent 自动处理 Range/Content-Type
+            // 相册封面：优先下发 .thumb 压缩图，尚未生成时平滑回退首张原图
+            get("/v1/albums/{id}/cover") {
+                val file = dataSource.albumCoverFile(call.longPathParameter("id"))
+                if (file == null || !file.isFile) {
+                    call.respond(HttpStatusCode.NotFound, ErrorDto(LanErrorCode.NOT_FOUND, "cover not found"))
+                    return@get
+                }
+                call.response.header(HttpHeaders.CacheControl, MEDIA_CACHE_CONTROL)
+                call.respondFile(file)
+            }
+
+            // 图片字节流：preview=true 返回降采样压缩预览图，否则 respondFile 返回完整原图
             get("/v1/media/{id}") {
-                val media = dataSource.mediaFile(call.longPathParameter("id"))
+                val photoId = call.longPathParameter("id")
+                val preview = call.request.queryParameters[PREVIEW_QUERY_PARAM] == "true"
+                if (preview) {
+                    val bytes = dataSource.mediaPreviewBytes(photoId)
+                    if (bytes != null) {
+                        call.response.header(HttpHeaders.CacheControl, MEDIA_CACHE_CONTROL)
+                        call.respondBytes(bytes, ContentType.Image.JPEG)
+                        return@get
+                    }
+                }
+                val media = dataSource.mediaFile(photoId)
                 if (media == null) {
                     call.respond(HttpStatusCode.NotFound, ErrorDto(LanErrorCode.NOT_FOUND, "media not found"))
                     return@get
@@ -190,6 +218,7 @@ fun Application.lanModule(
                     call.respond(HttpStatusCode.NotFound, ErrorDto(LanErrorCode.NOT_FOUND, "media file missing"))
                     return@get
                 }
+                call.response.header(HttpHeaders.CacheControl, MEDIA_CACHE_CONTROL)
                 call.respondFile(file)
             }
 

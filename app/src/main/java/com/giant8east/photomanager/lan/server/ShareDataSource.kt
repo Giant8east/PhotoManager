@@ -5,6 +5,7 @@ import com.giant8east.photomanager.lan.protocol.LanAlbumListDto
 import com.giant8east.photomanager.lan.protocol.LanGroupListDto
 import com.giant8east.photomanager.lan.protocol.LanPhotoDto
 import com.giant8east.photomanager.model.AlbumSortField
+import java.io.File
 
 /**
  * 一张待发送的媒体文件。
@@ -39,6 +40,12 @@ interface ShareDataSource {
 
     /** 图片不存在时返回 null，路由据此返回 404。 */
     suspend fun mediaFile(photoId: Long): MediaFile?
+
+    /** 相册封面文件：优先返回 .thumb 压缩图，尚未生成时回退首张原图；相册不存在返回 null。 */
+    suspend fun albumCoverFile(albumId: Long): File?
+
+    /** 单张图片的降采样预览图字节流；图片不存在或编码失败返回 null。 */
+    suspend fun mediaPreviewBytes(photoId: Long): ByteArray?
 }
 
 /**

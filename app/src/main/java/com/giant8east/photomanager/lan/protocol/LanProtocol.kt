@@ -9,8 +9,14 @@ const val TOKEN_HEADER = "token"
 /** 协议版本前缀，所有业务接口都挂在它下面。 */
 const val API_PREFIX = "/v1"
 
-/** 构造单张图片（含相册封面）的相对媒体路径，避免 data 层硬编码路由模板。 */
+/** 构造单张图片的相对媒体路径，避免 data 层硬编码路由模板。 */
 fun mediaPath(photoId: Long): String = "$API_PREFIX/media/$photoId"
+
+/** 构造相册封面的相对路径，服务端优先返回 .thumb 压缩图。 */
+fun albumCoverPath(albumId: Long): String = "$API_PREFIX/albums/$albumId/cover"
+
+/** 预览图查询参数名：为 true 时服务端返回降采样压缩预览图而非完整原图。 */
+const val PREVIEW_QUERY_PARAM = "preview"
 
 /** mDNS/DNS-SD 服务类型：分享方用它注册、访客方按它发现，两端必须完全一致。 */
 const val LAN_SERVICE_TYPE = "_photomanager._tcp"

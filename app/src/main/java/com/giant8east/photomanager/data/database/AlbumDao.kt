@@ -26,6 +26,9 @@ interface AlbumDao {
     @Query("SELECT COUNT(*) FROM albums")
     fun observeValidAlbumCount(): Flow<Int>
 
+    @Query("SELECT * FROM albums WHERE id = :albumId LIMIT 1")
+    suspend fun queryAlbumById(albumId: Long): AlbumEntity?
+
     @Query("SELECT * FROM albums WHERE albumPath = :path LIMIT 1")
     suspend fun queryAlbumByPath(path: String): AlbumEntity?
 
