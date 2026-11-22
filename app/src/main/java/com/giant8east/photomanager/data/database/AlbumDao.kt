@@ -23,7 +23,7 @@ interface AlbumDao {
     @RawQuery
     suspend fun queryAlbums(query: SupportSQLiteQuery): List<AlbumEntity>
 
-    @Query("SELECT COUNT(*) FROM albums WHERE photoCount > 0")
+    @Query("SELECT COUNT(*) FROM albums")
     fun observeValidAlbumCount(): Flow<Int>
 
     @Query("SELECT * FROM albums WHERE albumPath = :path LIMIT 1")
@@ -57,6 +57,6 @@ interface AlbumDao {
     @Query("UPDATE albums SET isFavorite = 0 WHERE id = :albumId")
     suspend fun unfavoriteAlbum(albumId: Long)
 
-    @Query("SELECT COUNT(*) FROM albums WHERE isFavorite = 1 AND photoCount > 0")
+    @Query("SELECT COUNT(*) FROM albums WHERE isFavorite = 1")
     fun observeFavoriteCountQuery(): Flow<Int>
 }
