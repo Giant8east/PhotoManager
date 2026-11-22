@@ -39,5 +39,13 @@ data class AlbumEntity(
     /** 相册所属分组；null 表示默认相册。 */
     val groupId: Long? = null,
     /** 收藏标记，独立于分组，不与 groupId 互斥。 */
-    val isFavorite: Boolean = false
+    val isFavorite: Boolean = false,
+    /** 当前相册本层目录是否存在 `.nomedia` 文件（仅控制本机系统图库隐藏）。 */
+    val isHidden: Boolean = false,
+    /** 相册来源设备名：空串表示本地相册，非空表示从局域网设备下载。 */
+    val sourceName: String = "",
+    /** 局域网下载来源设备 ID；本地相册为 null。 */
+    val remoteDeviceId: String? = null,
+    /** 局域网下载来源相册 ID；本地相册为 null。 */
+    val remoteAlbumId: Long? = null
 )

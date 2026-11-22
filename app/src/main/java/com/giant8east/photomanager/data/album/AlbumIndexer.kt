@@ -74,7 +74,8 @@ class AlbumIndexer @Inject constructor(
                 photoCount = scanned.photos.size,
                 coverPath = scanned.photos.first().contentUri,
                 totalSizeBytes = scanned.totalSizeBytes,
-                sortOrder = System.currentTimeMillis()
+                sortOrder = System.currentTimeMillis(),
+                isHidden = scanned.isHidden
             )
         )
         database.photoDao().insertPhotos(scanned.photos.map { it.copy(albumId = albumId) })
@@ -116,7 +117,8 @@ class AlbumIndexer @Inject constructor(
             photoCount = scanned.photos.size,
             coverPath = scanned.photos.first().contentUri,
             totalSizeBytes = scanned.totalSizeBytes,
-            lastViewedPhotoIndex = updatedProgress
+            lastViewedPhotoIndex = updatedProgress,
+            isHidden = scanned.isHidden
         )
         if (updatedAlbum != existing) {
             database.albumDao().updateAlbums(listOf(updatedAlbum))

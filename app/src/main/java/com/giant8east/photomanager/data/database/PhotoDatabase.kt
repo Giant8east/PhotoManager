@@ -16,7 +16,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         PhotoEntity::class,
         AllowedDeviceEntity::class
     ],
-    version = 11,
+    version = 12,
     exportSchema = false
 )
 abstract class PhotoDatabase : RoomDatabase() {
@@ -45,6 +45,18 @@ abstract class PhotoDatabase : RoomDatabase() {
                     )
                     """.trimIndent()
                 )
+            }
+        }
+
+        /**
+         * 11 → 12：albums 表非破坏性追加 `.nomedia` 隐藏状态与局域网下载来源列，不动既有行数据。
+         */
+        val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `albums` ADD COLUMN `isHidden` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `albums` ADD COLUMN `sourceName` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `albums` ADD COLUMN `remoteDeviceId` TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE `albums` ADD COLUMN `remoteAlbumId` INTEGER DEFAULT NULL")
             }
         }
     }

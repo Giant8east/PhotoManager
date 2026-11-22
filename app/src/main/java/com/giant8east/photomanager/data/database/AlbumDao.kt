@@ -59,4 +59,7 @@ interface AlbumDao {
 
     @Query("SELECT COUNT(*) FROM albums WHERE isFavorite = 1")
     fun observeFavoriteCountQuery(): Flow<Int>
+
+    @Query("UPDATE albums SET isHidden = :hidden WHERE id IN (:albumIds)")
+    suspend fun updateAlbumsHidden(albumIds: List<Long>, hidden: Boolean)
 }

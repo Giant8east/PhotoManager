@@ -18,14 +18,15 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
-/** 单次目录扫描的结果；[photos] 是本层图片，[children] 是磁盘上的子目录，供同步遍历继续向下。 */
+/** 单次目录扫描的结果；[photos] 是本层图片，[children] 是磁盘上的子目录，[isHidden] 表示本层存在 `.nomedia`。 */
 internal data class ScannedAlbum(
     val path: String,
     val name: String,
     val modifiedAt: String?,
     val photos: List<PhotoEntity>,
     val totalSizeBytes: Long,
-    val children: List<File>
+    val children: List<File>,
+    val isHidden: Boolean
 )
 
 class DirectoryScanner @Inject constructor(
@@ -47,11 +48,14 @@ class DirectoryScanner @Inject constructor(
         val children = mutableListOf<File>()
         val photos = mutableListOf<PhotoEntity>()
         var totalSize = 0L
+        var hasNoMedia = false
 
         for (entry in entries) {
             currentCoroutineContext().ensureActive()
             if (entry.isDirectory) {
                 children += entry
+            } else if (entry.isFile && entry.name == NO_MEDIA_FILE_NAME) {
+                hasNoMedia = true
             } else if (entry.isFile && isImageFile(entry)) {
                 val size = entry.length()
                 totalSize += size
@@ -71,7 +75,8 @@ class DirectoryScanner @Inject constructor(
             modifiedAt = formatEpochMillis(attributes.lastModifiedTime().toMillis()),
             photos = photos.sortedBy { it.name },
             totalSizeBytes = totalSize,
-            children = children.sortedBy { it.name }
+            children = children.sortedBy { it.name },
+            isHidden = hasNoMedia
         )
     }
 
@@ -108,6 +113,8 @@ class DirectoryScanner @Inject constructor(
     }
 
     private companion object {
+        const val NO_MEDIA_FILE_NAME = ".nomedia"
+
         /** 扫描只按扩展名识别类型，与删除器共用 [PhotoFormat] 作为唯一口径，不预解码或过滤零字节、损坏及透明图片。 */
         fun isImageFile(file: File): Boolean =
             PhotoFormat.fromFileName(file.name) != PhotoFormat.OTHER
