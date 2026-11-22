@@ -33,7 +33,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.giant8east.photomanager.R
-import com.giant8east.photomanager.pages.common.SheetStack
 import com.giant8east.photomanager.ui.theme.appColors
 
 /**
@@ -49,7 +48,7 @@ internal fun AlbumTopBar(
     onSearchInputChange: (String) -> Unit,
     // 搜索、排序和设置共用同一个可用状态：进入多选后全部禁用。
     actionsEnabled: Boolean,
-    sheetStack: SheetStack,
+    onSortClick: () -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -83,11 +82,7 @@ internal fun AlbumTopBar(
                     ) {
                         IconButton(
                             enabled = actionsEnabled,
-                            onClick = {
-                                sheetStack.show {
-                                    AlbumSortSheet()
-                                }
-                            }
+                            onClick = onSortClick
                         ) {
                             Icon(
                                 painterResource(R.drawable.ic_sort),
