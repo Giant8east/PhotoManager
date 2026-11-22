@@ -48,7 +48,9 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.giant8east.photomanager.R
 import com.giant8east.photomanager.data.database.AlbumEntity
+import com.giant8east.photomanager.data.media.ThumbGenerator
 import com.giant8east.photomanager.navigation.AppNavigator
+import java.io.File
 import com.giant8east.photomanager.pages.albumdetail.AlbumDetailPage
 import com.giant8east.photomanager.ui.format.rememberAlbumModifiedTimeText
 import com.giant8east.photomanager.ui.theme.FavoriteRed
@@ -83,8 +85,21 @@ internal fun AlbumListCard(
     val selected = album.id in selection.selectedIds
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
-    val coverRequest = remember(album.coverPath) {
-        ImageRequest.Builder(context).data(album.coverPath).build()
+    // 本地相册优先使用 .thumb 压缩图并带 lastModified 作缓存键，避免换首图后 Coil 命中旧图
+    val coverRequest = remember(album.albumPath, album.coverPath, album.modifiedAt) {
+        val localThumb = if (album.albumPath.isNotEmpty()) {
+            File(album.albumPath, ThumbGenerator.THUMB_FILE_NAME).takeIf { it.isFile }
+        } else {
+            null
+        }
+        val builder = ImageRequest.Builder(context)
+        if (localThumb != null) {
+            builder.data(localThumb)
+                .memoryCacheKey("${localThumb.path}|${localThumb.lastModified()}")
+        } else {
+            builder.data(album.coverPath)
+        }
+        builder.build()
     }
     var coverScale by remember(coverRequest) { mutableStateOf(ContentScale.Fit) }
     Box(

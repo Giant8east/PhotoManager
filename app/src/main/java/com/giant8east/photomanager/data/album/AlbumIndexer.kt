@@ -5,6 +5,7 @@ import androidx.room.withTransaction
 import com.giant8east.photomanager.data.database.AlbumEntity
 import com.giant8east.photomanager.data.database.PhotoDatabase
 import com.giant8east.photomanager.data.database.PhotoEntity
+import com.giant8east.photomanager.data.media.ThumbGenerator
 import com.giant8east.photomanager.data.scan.DirectoryScanner
 import com.giant8east.photomanager.data.scan.ScannedAlbum
 import com.giant8east.photomanager.util.LocalPaths
@@ -22,7 +23,8 @@ import kotlinx.coroutines.withContext
 @Singleton
 class AlbumIndexer @Inject constructor(
     private val database: PhotoDatabase,
-    private val directoryScanner: DirectoryScanner
+    private val directoryScanner: DirectoryScanner,
+    private val thumbGenerator: ThumbGenerator
 ) {
     /**
      * 扫描单个文件夹并写库；返回这一层是否还有图片，也就是它自己算不算一个相册。
@@ -36,6 +38,15 @@ class AlbumIndexer @Inject constructor(
         val scanned = directoryScanner.scanAlbum(File(normalized))
         val hasPhotos = scanned != null && scanned.photos.isNotEmpty()
         if (hasPhotos) {
+            val firstPhotoPath = scanned.photos.first().contentUri
+            val existing = database.albumDao().queryAlbumByPath(normalized)
+            // 首图换人时强制重建 .thumb，防止旧 .thumb 时间戳更新导致删掉首图后封面不更新
+            val coverChanged = existing != null && existing.coverPath != firstPhotoPath
+            thumbGenerator.ensureAlbumThumb(
+                albumPath = normalized,
+                firstPhotoPath = firstPhotoPath,
+                forceRebuild = coverChanged
+            )
             saveScannedAlbum(scanned)
         } else {
             database.albumDao().deleteAlbumByPath(normalized)
