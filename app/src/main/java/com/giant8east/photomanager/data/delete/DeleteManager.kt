@@ -1,6 +1,7 @@
 /** 应用级相册删除协调器：把删除拆成调度任务，订阅进度并给出最终结论。 */
 package com.giant8east.photomanager.data.delete
 
+import android.util.Log
 import com.giant8east.photomanager.data.database.AlbumEntity
 import com.giant8east.photomanager.data.scan.DirectoryScanner
 import com.giant8east.photomanager.data.task.FolderTask
@@ -198,6 +199,7 @@ class DeleteManager @Inject constructor(
             }
             throw cancelled
         } catch (error: Exception) {
+            Log.e(TAG, "delete failed after $completedAlbums/${albums.size} albums", error)
             val result = DeleteResult.Failure(error.message)
             _state.value = DeleteState(
                 result = result,
@@ -236,5 +238,9 @@ class DeleteManager @Inject constructor(
         val result = handle.await()
         progressJob.cancel()
         result
+    }
+
+    private companion object {
+        const val TAG = "DeleteManager"
     }
 }

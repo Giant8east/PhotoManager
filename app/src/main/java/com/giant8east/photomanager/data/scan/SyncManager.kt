@@ -1,8 +1,9 @@
 /** 应用级目录同步协调器：脱离设置页面生命周期，统一持有同步任务和状态。 */
 package com.giant8east.photomanager.data.scan
 
-import com.giant8east.photomanager.data.album.AlbumSyncData
 import android.net.Uri
+import android.util.Log
+import com.giant8east.photomanager.data.album.AlbumSyncData
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -98,6 +99,7 @@ class SyncManager @Inject constructor(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
+                Log.e(TAG, "sync failed for path=$path", error)
                 _state.update {
                     it.copy(errorMessage = error.message ?: "目录同步失败")
                 }
@@ -114,5 +116,9 @@ class SyncManager @Inject constructor(
         scanRootsData.roots.first().forEach { directory ->
             albumSyncData.syncDirectory(directory.path)
         }
+    }
+
+    private companion object {
+        const val TAG = "SyncManager"
     }
 }
