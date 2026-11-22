@@ -53,6 +53,7 @@ fun AlbumDetailPage(
         AlbumDetailContent(
             navigator = navigator,
             content = content,
+            sourceLabel = stringResource(R.string.album_detail_local),
             onRefreshDirectory = viewModel::refreshDirectory,
             onToggleFavorite = viewModel::toggleFavorite,
             onOpenViewer = { index ->
@@ -73,6 +74,7 @@ fun AlbumDetailPage(
 internal fun AlbumDetailContent(
     navigator: AppNavigator,
     content: AlbumDetailUiState,
+    sourceLabel: String,
     onRefreshDirectory: ((Boolean) -> Unit) -> Unit,
     onToggleFavorite: () -> Unit,
     onOpenViewer: (Int) -> Unit,
@@ -107,6 +109,7 @@ internal fun AlbumDetailContent(
                     item(key = "header") {
                         AlbumDetailHeader(
                             album = currentAlbum,
+                            sourceLabel = sourceLabel,
                             navigator = navigator,
                             onRefreshDirectory = onRefreshDirectory,
                             onToggleFavorite = onToggleFavorite,
@@ -192,6 +195,7 @@ private fun PhotoThumbnail(photo: PhotoEntity) {
 @Composable
 private fun AlbumDetailHeader(
     album: AlbumEntity,
+    sourceLabel: String,
     navigator: AppNavigator,
     onRefreshDirectory: ((Boolean) -> Unit) -> Unit,
     onToggleFavorite: () -> Unit,
@@ -226,7 +230,7 @@ private fun AlbumDetailHeader(
                         )
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            stringResource(R.string.album_detail_local),
+                            sourceLabel,
                             color = appColors.headerContent,
                             style = TextStyle(fontSize = 16.sp, lineHeight = 22.sp)
                         )
