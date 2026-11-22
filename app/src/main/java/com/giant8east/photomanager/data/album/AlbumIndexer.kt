@@ -84,9 +84,8 @@ class AlbumIndexer @Inject constructor(
             if (samePhotoMetadata(oldPhoto, newPhoto)) null
             else newPhoto.copy(
                 id = oldPhoto.id,
-                albumId = existing.id,
-                width = oldPhoto.width,
-                height = oldPhoto.height
+                albumId = existing.id
+                // 文件内容已变更，旧 width/height 失效，回落 newPhoto 默认值 0
             )
         }
 
