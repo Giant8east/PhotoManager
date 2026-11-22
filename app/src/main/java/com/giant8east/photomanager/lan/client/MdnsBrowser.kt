@@ -353,7 +353,8 @@ class MdnsBrowser @Inject constructor(
                 // 别指望"下次 onServiceFound 再来一遍"——mdnsd 对已经知道的实例不会补发。
                 try {
                     nsdManager.resolveService(serviceInfo, listener)
-                } catch (_: Exception) {
+                } catch (error: Exception) {
+                    Log.w(TAG, "resolve threw: ${serviceInfo.serviceName}", error)
                     if (continuation.isActive) continuation.resume(null)
                 }
             }
