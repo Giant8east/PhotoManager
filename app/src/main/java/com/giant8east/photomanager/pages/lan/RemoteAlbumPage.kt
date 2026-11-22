@@ -383,9 +383,7 @@ private fun RemoteAlbumRow(
     }
     val status = task?.status
     val isActive = status is RemoteDownloadStatus.Queued || status is RemoteDownloadStatus.Downloading
-    val progress = (status as? RemoteDownloadStatus.Downloading)?.let { dl ->
-        if (dl.total > 0) (dl.finished.toFloat() / dl.total).coerceIn(0f, 1f) else 0f
-    }
+    val downloading = status as? RemoteDownloadStatus.Downloading
 
     AlbumListCard(
         album = remoteAlbum,
@@ -403,7 +401,7 @@ private fun RemoteAlbumRow(
         showFavorite = false,
         selectionEnabled = true,
         showDragHandle = false,
-        // 对齐 EhViewer：下载/排队中显示暂停图标（点停），其余（含已下载）显示播放图标（点开始或增量刷新）
+        // 非下载态的右侧按钮：排队中显示暂停，其余（含已下载）显示播放以开始或增量刷新
         trailingAction = {
             IconButton(
                 onClick = onToggleDownload,
@@ -424,21 +422,6 @@ private fun RemoteAlbumRow(
                     color = MaterialTheme.colorScheme.primary,
                     maxLines = 1
                 )
-                is RemoteDownloadStatus.Downloading -> {
-                    val speedText = "${Formatter.formatShortFileSize(context, status.bytesPerSecond)}/s"
-                    Text(
-                        text = stringResource(
-                            R.string.lan_download_progress_text,
-                            status.finished,
-                            status.total,
-                            speedText
-                        ),
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.primary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
                 is RemoteDownloadStatus.Failed -> Text(
                     text = stringResource(R.string.lan_download_failed),
                     fontSize = 12.sp,
@@ -451,7 +434,7 @@ private fun RemoteAlbumRow(
                     color = MaterialTheme.colorScheme.primary,
                     maxLines = 1
                 )
-                null -> if (isDownloaded) {
+                else -> if (isDownloaded) {
                     Text(
                         text = stringResource(R.string.lan_download_completed_badge),
                         fontSize = 12.sp,
@@ -461,6 +444,60 @@ private fun RemoteAlbumRow(
                 }
             }
         },
-        downloadProgress = progress
+        // 对齐 EhViewer item_download.xml：下载中隐藏原先的统计信息，原位替换为 进度/速度 + 内部进度条 + 右下暂停
+        downloadingContent = downloading?.let { dl ->
+            {
+                val speedText = "${Formatter.formatShortFileSize(context, dl.bytesPerSecond)}/s"
+                Column(Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (dl.total > 0) "${dl.finished}/${dl.total}" else "",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1
+                        )
+                        Text(
+                            text = speedText,
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    if (dl.total > 0) {
+                        LinearProgressIndicator(
+                            progress = { (dl.finished.toFloat() / dl.total).coerceIn(0f, 1f) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                                .height(4.dp)
+                        )
+                    } else {
+                        LinearProgressIndicator(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                                .height(4.dp)
+                        )
+                    }
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+                        IconButton(
+                            onClick = onToggleDownload,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Pause,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        }
     )
 }

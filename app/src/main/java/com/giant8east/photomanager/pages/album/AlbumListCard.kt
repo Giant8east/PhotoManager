@@ -24,7 +24,6 @@ import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -86,7 +85,8 @@ internal fun AlbumListCard(
     showDragHandle: Boolean = true,
     trailingAction: (@Composable () -> Unit)? = null,
     statusBadge: (@Composable () -> Unit)? = null,
-    downloadProgress: Float? = null
+    // 对齐 EhViewer item_download：下载中时隐藏原有底部信息，原位替换成进度条/速度/暂停面板
+    downloadingContent: (@Composable () -> Unit)? = null
 ) {
     val selected = album.id in selection.selectedIds
     val context = LocalContext.current
@@ -180,117 +180,121 @@ internal fun AlbumListCard(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                // 卡片右侧垂直居中：本地普通态是收藏、多选态是拖拽手柄；远端可插入播放/暂停下载按钮。
-                Box(
-                    Modifier
-                        .align(Alignment.CenterEnd)
-                        .padding(end = 6.dp)
-                        .size(40.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (selectionEnabled && selection.isSelectionMode) {
-                        if (showDragHandle) {
-                            Box(
-                                Modifier.fillMaxSize().then(
-                                    if (reorderEnabled) {
-                                        dragHandleModifier
-                                    } else {
-                                        Modifier.clickable(onClick = onReorderBlocked)
-                                    }
-                                ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.DragHandle,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                                        alpha = if (reorderEnabled) 1f else 0.38f
-                                    )
-                                )
-                            }
-                        }
-                    } else if (showFavorite) {
-                        Box(
-                            Modifier.fillMaxSize().clickable { onToggleFavorite(album) },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = if (album.isFavorite) Icons.Filled.Favorite
-                                else Icons.Filled.FavoriteBorder,
-                                contentDescription = null,
-                                tint = if (album.isFavorite) FavoriteRed
-                                else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    } else {
-                        trailingAction?.invoke()
-                    }
-                }
-                if (statusBadge != null) {
+                if (downloadingContent != null) {
+                    // 对齐 EhViewer item_download：下载中隐藏原先的统计信息与右侧普通按钮，原位展示进度条/速度/暂停
                     Box(
                         Modifier
                             .align(Alignment.BottomStart)
-                            .padding(start = 8.dp, bottom = 4.dp)
+                            .fillMaxWidth()
+                            .padding(start = 8.dp, end = 8.dp, bottom = 4.dp)
                     ) {
-                        statusBadge()
+                        downloadingContent()
                     }
-                }
-                Column(
-                    Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 6.dp, bottom = 4.dp),
-                    horizontalAlignment = Alignment.End
-                ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                } else {
+                    // 卡片右侧垂直居中：本地普通态是收藏、多选态是拖拽手柄；远端可插入播放/暂停下载按钮。
+                    Box(
+                        Modifier
+                            .align(Alignment.CenterEnd)
+                            .padding(end = 6.dp)
+                            .size(40.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        if (album.isHidden) {
-                            Icon(
-                                imageVector = Icons.Outlined.VisibilityOff,
-                                contentDescription = stringResource(R.string.album_hidden_badge),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(14.dp)
+                        if (selectionEnabled && selection.isSelectionMode) {
+                            if (showDragHandle) {
+                                Box(
+                                    Modifier.fillMaxSize().then(
+                                        if (reorderEnabled) {
+                                            dragHandleModifier
+                                        } else {
+                                            Modifier.clickable(onClick = onReorderBlocked)
+                                        }
+                                    ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.DragHandle,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                            alpha = if (reorderEnabled) 1f else 0.38f
+                                        )
+                                    )
+                                }
+                            }
+                        } else if (showFavorite) {
+                            Box(
+                                Modifier.fillMaxSize().clickable { onToggleFavorite(album) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (album.isFavorite) Icons.Filled.Favorite
+                                    else Icons.Filled.FavoriteBorder,
+                                    contentDescription = null,
+                                    tint = if (album.isFavorite) FavoriteRed
+                                    else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        } else {
+                            trailingAction?.invoke()
+                        }
+                    }
+                    if (statusBadge != null) {
+                        Box(
+                            Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(start = 8.dp, bottom = 4.dp)
+                        ) {
+                            statusBadge()
+                        }
+                    }
+                    Column(
+                        Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(end = 6.dp, bottom = 4.dp),
+                        horizontalAlignment = Alignment.End
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (album.isHidden) {
+                                Icon(
+                                    imageVector = Icons.Outlined.VisibilityOff,
+                                    contentDescription = stringResource(R.string.album_hidden_badge),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                            Text(
+                                stringResource(
+                                    R.string.album_read_progress,
+                                    album.lastViewedPhotoIndex + 1,
+                                    album.photoCount
+                                ),
+                                style = CardMessageStyle,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1
                             )
                         }
-                        Text(
-                            stringResource(
-                                R.string.album_read_progress,
-                                album.lastViewedPhotoIndex + 1,
-                                album.photoCount
-                            ),
-                            style = CardMessageStyle,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1
-                        )
-                    }
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            Formatter.formatFileSize(context, album.totalSizeBytes),
-                            style = CardMessageStyle,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1
-                        )
-                        Text(
-                            rememberAlbumModifiedTimeText(album.modifiedAt),
-                            style = CardMessageStyle,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1
-                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                Formatter.formatFileSize(context, album.totalSizeBytes),
+                                style = CardMessageStyle,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1
+                            )
+                            Text(
+                                rememberAlbumModifiedTimeText(album.modifiedAt),
+                                style = CardMessageStyle,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1
+                            )
+                        }
                     }
                 }
             }
-        }
-        if (downloadProgress != null) {
-            LinearProgressIndicator(
-                progress = { downloadProgress },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(3.dp)
-            )
         }
         }
     }

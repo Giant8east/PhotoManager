@@ -1,4 +1,4 @@
-/** 远端下载前台服务：展示当前相册、进度条、实时速度与"全部停止"按钮，队列空闲自动退出并汇总通知。 */
+/** 远端下载前台服务：对齐 EhViewer DownloadService 通知样式（进度分类、主题色、子文本进度、全部停止按钮）。 */
 package com.giant8east.photomanager.lan.client
 
 import android.app.NotificationChannel
@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.graphics.BitmapFactory
 import android.os.IBinder
 import android.os.SystemClock
 import android.text.format.Formatter
@@ -64,7 +65,7 @@ class LanDownloadService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    /** 参考 EhViewer NotificationDelay：约 500ms 节流刷新通知栏，避免高频刷通知被系统限流。 */
+    /** 对齐 EhViewer DownloadService：CATEGORY_PROGRESS + 系统下载图标 + 速度正文 + x/y 子文本 + 500ms 节流。 */
     private fun updateForeground(summary: DownloadServiceSummary, force: Boolean) {
         val now = SystemClock.elapsedRealtime()
         if (!force && now - lastNotifyAt < NOTIFY_THROTTLE_MILLIS) return
@@ -72,20 +73,25 @@ class LanDownloadService : Service() {
 
         val title = summary.currentAlbumName.ifEmpty { getString(R.string.lan_download_starting) }
         val speedText = "${Formatter.formatShortFileSize(this, summary.bytesPerSecond)}/s"
-        val text = if (summary.total > 0) {
-            getString(R.string.lan_download_progress_text, summary.finished, summary.total, speedText)
-        } else {
-            getString(R.string.lan_download_starting)
-        }
+        val subText = if (summary.total > 0) "${summary.finished}/${summary.total}" else null
 
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_lan_share)
+            .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentTitle(title)
-            .setContentText(text)
+            .setContentText(if (summary.total > 0) speedText else getString(R.string.lan_download_starting))
+            .setSubText(subText)
             .setProgress(summary.total, summary.finished, summary.total <= 0)
+            .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+            .setColor(NOTIFICATION_ACCENT_COLOR)
+            .setShowWhen(false)
             .setOngoing(true)
+            .setAutoCancel(false)
             .setSilent(true)
-            .addAction(0, getString(R.string.lan_download_stop_all), stopAllPendingIntent())
+            .addAction(
+                android.R.drawable.ic_media_pause,
+                getString(R.string.lan_download_stop_all),
+                stopAllPendingIntent()
+            )
             .build()
 
         ServiceCompat.startForeground(
@@ -105,9 +111,12 @@ class LanDownloadService : Service() {
             getString(R.string.lan_download_summary_done, summary.sessionCompleted)
         }
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_lan_share)
+            .setSmallIcon(android.R.drawable.stat_sys_download_done)
+            .setLargeIcon(BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher))
             .setContentTitle(getString(R.string.lan_download_channel))
             .setContentText(text)
+            .setColor(NOTIFICATION_ACCENT_COLOR)
+            .setOngoing(false)
             .setAutoCancel(true)
             .build()
         manager.notify(SUMMARY_NOTIFICATION_ID, notification)
@@ -137,6 +146,7 @@ class LanDownloadService : Service() {
         private const val NOTIFICATION_ID = 1002
         private const val SUMMARY_NOTIFICATION_ID = 1003
         private const val NOTIFY_THROTTLE_MILLIS = 500L
+        private const val NOTIFICATION_ACCENT_COLOR = 0xFF009688.toInt()
         private const val ACTION_STOP_ALL = "com.giant8east.photomanager.lan.DOWNLOAD_STOP_ALL"
     }
 }
