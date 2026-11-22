@@ -10,6 +10,7 @@ import com.giant8east.photomanager.data.task.TaskResult
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
 
 /**
@@ -18,8 +19,8 @@ import kotlinx.coroutines.withContext
  * 2. 扫描：一个目录一个 [TaskKind.SCAN_REFRESH] 任务，任务之间平级，谁先跑都行；
  * 3. 清理：清单里没有、数据库里还留着的路径，说明目录已经被删掉了，直接删记录。
  *
- * 这样调度器只需要"入队 + 等队列空"，不需要父子任务派生；删除与同步抢同一个文件夹时，
- * 仍由调度器的路径占用决定谁先来，而不是各写各的。
+ * 这样调度器只需要"入队 + 返回句柄"，同步入口只等待自己这一批句柄全部结束（不依赖全局队列空），
+ * 删除与同步抢同一个文件夹时，仍由调度器的路径占用决定谁先来，而不是各写各的。
  */
 @Singleton
 class AlbumSyncData @Inject constructor(
@@ -31,10 +32,11 @@ class AlbumSyncData @Inject constructor(
     suspend fun syncDirectory(rootPath: String) = withContext(Dispatchers.IO) {
         val normalizedRoot = DirectoryScanner.normalizePath(rootPath)
         val directories = directoryScanner.collectDirectories(normalizedRoot)
-        directories.forEach { directory ->
+        // 只等待本次同步入队的这一批任务句柄完成，避免受其他来源的 DATA 车道任务串扰
+        val handles = directories.map { directory ->
             scheduler.enqueue(FolderTask(directory, TaskKind.SCAN_REFRESH))
         }
-        scheduler.awaitDataIdle()
+        handles.awaitAll()
         unindexVanished(normalizedRoot, directories)
     }
 
