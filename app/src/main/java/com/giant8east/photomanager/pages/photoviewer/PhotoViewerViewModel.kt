@@ -2,6 +2,7 @@
 package com.giant8east.photomanager.pages.photoviewer
 
 import android.content.Context
+import android.util.Log
 import android.widget.Toast
 import dagger.hilt.android.qualifiers.ApplicationContext
 import com.giant8east.photomanager.R
@@ -57,6 +58,7 @@ class PhotoViewerViewModel @Inject constructor(
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
+                Log.w(TAG, "Failed to save viewer settings", error)
                 Toast.makeText(context, R.string.viewer_settings_save_failed, Toast.LENGTH_SHORT)
                     .show()
             }
@@ -97,13 +99,15 @@ class PhotoViewerViewModel @Inject constructor(
         readingProgress.value = null
         state = PageState.Loading
         photoQueryJob = viewModelScope.launch {
-            settingsData.observeSettings().collect { settings ->
-                state = if (photos.isEmpty()) {
-                    PageState.Message(UiText.Resource(R.string.page_no_photos))
-                } else {
-                    PageState.Content(PhotoViewerContent(photos, settings))
+            settingsData.observeSettings()
+                .asPageStates(R.string.page_reader_load_failed) { settings ->
+                    if (photos.isEmpty()) {
+                        PageState.Message(UiText.Resource(R.string.page_no_photos))
+                    } else {
+                        PageState.Content(PhotoViewerContent(photos, settings))
+                    }
                 }
-            }
+                .collect { state = it }
         }
     }
 
@@ -111,6 +115,10 @@ class PhotoViewerViewModel @Inject constructor(
     fun moveTo(index: Int) {
         val albumId = currentAlbumId ?: return
         readingProgress.value = ReadingProgress(albumId, index)
+    }
+
+    private companion object {
+        const val TAG = "PhotoViewerViewModel"
     }
 }
 

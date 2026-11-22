@@ -2,6 +2,7 @@
 package com.giant8east.photomanager.pages.groupmanager
 
 import android.content.Context
+import android.util.Log
 import android.widget.Toast
 import androidx.annotation.StringRes
 import androidx.compose.runtime.getValue
@@ -69,13 +70,14 @@ class GroupManageViewModel @Inject constructor(
     }
 
     private fun perform(action: suspend () -> Unit) {
-        if (operationJob?.isActive == true) return
+        operationJob?.cancel()
         operationJob = viewModelScope.launch {
             try {
                 action()
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
+                Log.w(TAG, "Group operation failed", error)
                 showError(R.string.album_operation_failed)
             }
         }
@@ -83,5 +85,9 @@ class GroupManageViewModel @Inject constructor(
 
     private fun showError(@StringRes messageRes: Int) {
         Toast.makeText(context, messageRes, Toast.LENGTH_SHORT).show()
+    }
+
+    private companion object {
+        const val TAG = "GroupManageViewModel"
     }
 }
