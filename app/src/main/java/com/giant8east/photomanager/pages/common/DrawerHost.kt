@@ -29,6 +29,12 @@ private class InflatableDrawerLayout(context: Context) : DrawerLayout(context, n
     fun finishInflate() = onFinishInflate()
 }
 
+/**
+ * 可复用的右侧抽屉宿主：使用 EhViewer DrawerLayout，具体内容由页面提供。
+ *
+ * 注意：本组件通过 `AndroidView` 嵌套独立 `ComposeView`，`AppNavigator` 的 `SaveableStateProvider`
+ * 不会穿透该边界；调用页面必须把 `rememberLazyListState()` 等需跨导航保留的滚动状态提升到本组件之外。
+ */
 @SuppressLint("RtlHardcoded")
 @Composable
 fun DrawerHost(
@@ -39,6 +45,8 @@ fun DrawerHost(
 ) {
     val context = LocalContext.current
     val drawerLayout = remember(context) { InflatableDrawerLayout(context) }
+    // 直接持有抽屉 ComposeView 引用，避免在 update 里用 getChildAt(2) 依赖 DrawerLayout 内部子视图顺序
+    val drawerView = remember(drawerLayout) { ComposeView(context) }
     val compositionContext = rememberCompositionContext()
     val currentContent = rememberUpdatedState(content)
     val currentDrawerContent = rememberUpdatedState(drawerContent)
@@ -72,7 +80,7 @@ fun DrawerHost(
                     )
                 )
 
-                val drawer = ComposeView(context).apply {
+                drawerView.apply {
                     setParentCompositionContext(compositionContext)
                     setViewCompositionStrategy(
                         ViewCompositionStrategy.DisposeOnDetachedFromWindowOrReleasedFromPool
@@ -84,7 +92,7 @@ fun DrawerHost(
                     }
                 }
                 addView(
-                    drawer,
+                    drawerView,
                     DrawerLayout.LayoutParams(
                         widthPx,
                         DrawerLayout.LayoutParams.MATCH_PARENT,
@@ -118,11 +126,10 @@ fun DrawerHost(
                 else DrawerLayout.LOCK_MODE_LOCKED_CLOSED,
                 Gravity.RIGHT
             )
-            val drawer = view.getChildAt(2)
-            val params = drawer.layoutParams as DrawerLayout.LayoutParams
+            val params = drawerView.layoutParams as DrawerLayout.LayoutParams
             if (params.width != widthPx) {
                 params.width = widthPx
-                drawer.layoutParams = params
+                drawerView.layoutParams = params
             }
         }
     )
