@@ -1,7 +1,6 @@
 /** 相册库主页内容：右侧分组抽屉、顶部搜索、相册列表和批量操作 FAB。 */
 package com.giant8east.photomanager.pages.album
 
-import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement.Absolute.spacedBy
@@ -31,7 +30,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -44,6 +42,7 @@ import com.giant8east.photomanager.pages.common.DrawerHost
 import com.giant8east.photomanager.pages.common.SheetHost
 import com.giant8east.photomanager.pages.common.TopBarShadow
 import com.giant8east.photomanager.pages.common.rememberSheetStack
+import com.giant8east.photomanager.pages.common.rememberStableReorderableLazyListState
 import com.giant8east.photomanager.pages.groupmanager.GroupManagePage
 import com.giant8east.photomanager.pages.setting.SettingPage
 import com.giant8east.photomanager.ui.state.PageContent
@@ -204,32 +203,18 @@ private fun AlbumList(
     onReorderBlocked: () -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
-    val view = LocalView.current
     LaunchedEffect(albums) { dragState.onAlbumsChanged(albums) }
     val displayedAlbums = dragState.displayed(albums)
-    val reorderableState = rememberReorderableLazyListState(listState) { from, to ->
-        // LazyList 重排时会跟着"可见第一项的 key"跳动视口；若交换涉及当前可见首项，
-        // 同帧用 requestScrollToItem 锁死原 (index, offset)，避免整屏卡片集体抖动。
-        val firstIndex = listState.firstVisibleItemIndex
-        val firstOffset = listState.firstVisibleItemScrollOffset
-        dragState.move(from.index, to.index)
-        if (from.index == firstIndex || to.index == firstIndex) {
-            listState.requestScrollToItem(firstIndex, firstOffset)
-        }
-        view.performHapticFeedback(HapticFeedbackConstants.TEXT_HANDLE_MOVE)
+    val reorderableState = rememberStableReorderableLazyListState(listState) { from, to ->
+        dragState.move(from, to)
     }
     AppLazyColumnScrollbar(state = listState) {
         LazyColumn(
-            contentPadding = PaddingValues(horizontal = 6.dp),
+            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
             verticalArrangement = spacedBy(8.dp),
             state = listState,
             modifier = Modifier.fillMaxSize()
         ) {
-            // 固定 key 的锚点：LazyList 按"第一个可见项的 key"保持视口，
-            // 有了这一项，交换前两个相册时锚点不会移动，视口就不会整体错位。
-            item(key = "reorder-anchor") {
-                Spacer(Modifier.height(1.dp))
-            }
             items(displayedAlbums, key = { it.id }) { album ->
                 ReorderableItem(
                     state = reorderableState,

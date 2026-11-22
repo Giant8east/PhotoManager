@@ -1,7 +1,6 @@
 /** 分组管理页：新增、重命名、删除并拖动调整分组顺序。 */
 package com.giant8east.photomanager.pages.groupmanager
 
-import android.view.HapticFeedbackConstants
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -46,7 +45,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -58,6 +56,7 @@ import com.giant8east.photomanager.pages.common.AppLazyColumnScrollbar
 import com.giant8east.photomanager.pages.common.DialogHost
 import com.giant8east.photomanager.pages.common.AppPageScaffold
 import com.giant8east.photomanager.pages.common.rememberDialogStack
+import com.giant8east.photomanager.pages.common.rememberStableReorderableLazyListState
 import com.giant8east.photomanager.ui.theme.appColors
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
@@ -75,22 +74,16 @@ fun GroupManagePage(
     val dialogs = rememberDialogStack()
 
     val haptic = LocalHapticFeedback.current
-    val view = LocalView.current
     val localGroups = remember {
         mutableStateListOf<GroupEntity>().apply { addAll(viewModel.groups) }
     }
-    val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
-        val firstIndex = lazyListState.firstVisibleItemIndex
-        val firstOffset = lazyListState.firstVisibleItemScrollOffset
-        // 列表第 0 项是不可拖拽的锚点占位，真实分组下标各减 1。
-        val source = from.index - 1
-        val target = (to.index - 1).coerceIn(0, localGroups.lastIndex)
-        if (source in localGroups.indices && source != target) {
-            localGroups.add(target, localGroups.removeAt(source))
-            if (from.index == firstIndex || to.index == firstIndex) {
-                lazyListState.requestScrollToItem(firstIndex, firstOffset)
-            }
-            view.performHapticFeedback(HapticFeedbackConstants.TEXT_HANDLE_MOVE)
+    val reorderableState = rememberStableReorderableLazyListState(lazyListState) { from, to ->
+        val target = to.coerceIn(0, localGroups.lastIndex)
+        if (from in localGroups.indices && from != target) {
+            localGroups.add(target, localGroups.removeAt(from))
+            true
+        } else {
+            false
         }
     }
 
@@ -128,11 +121,6 @@ fun GroupManagePage(
                         state = lazyListState,
                         modifier = Modifier.fillMaxSize()
                     ) {
-                // 固定 key 的锚点：LazyList 会按"第一个可见项的 key"保持视口，
-                // 有了这一项，交换前两个分组时锚点 key 不变，视口就不会整体挪动。
-                item(key = "reorder-anchor") {
-                    Spacer(Modifier.height(1.dp))
-                }
                 itemsIndexed(localGroups, key = { _, group -> group.id }) { _, group ->
                     ReorderableItem(
                         state = reorderableState,

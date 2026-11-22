@@ -10,8 +10,7 @@ import com.giant8east.photomanager.data.database.AlbumEntity
 
 /**
  * 列表渲染顺序的唯一出口：[displayed] 在拖拽中返回本地副本，松手后返回未保存的快照，
- * 其余情况直接返回数据源。列表首项是固定 key 的锚点占位，[move] 负责把 LazyList
- * 下标平移成数据下标并处理边界。
+ * 其余情况直接返回数据源。
  */
 @Stable
 internal class AlbumDragState {
@@ -66,15 +65,15 @@ internal class AlbumDragState {
     }
 
     /**
-     * 处理一次位置交换。[fromIndex]/[toIndex] 是 LazyList 的项下标（首项为锚点），
-     * 这里统一平移 -1 并夹到合法范围；位置未变化时不产生任何数据写入。
+     * 处理一次位置交换，返回是否真实发生换位。
      */
-    fun move(fromIndex: Int, toIndex: Int) {
-        if (dragged.isEmpty()) return
-        val from = fromIndex - 1
-        val to = (toIndex - 1).coerceIn(0, dragged.lastIndex)
-        if (from in dragged.indices && from != to) {
-            dragged.add(to, dragged.removeAt(from))
+    fun move(fromIndex: Int, toIndex: Int): Boolean {
+        if (dragged.isEmpty()) return false
+        val target = toIndex.coerceIn(0, dragged.lastIndex)
+        if (fromIndex in dragged.indices && fromIndex != target) {
+            dragged.add(target, dragged.removeAt(fromIndex))
+            return true
         }
+        return false
     }
 }
