@@ -77,7 +77,9 @@ internal fun AlbumDetailContent(
     onRefreshDirectory: ((Boolean) -> Unit) -> Unit,
     onToggleFavorite: () -> Unit,
     onOpenViewer: (Int) -> Unit,
-    actionsEnabled: Boolean = true
+    actionsEnabled: Boolean = true,
+    // 网格预览图地址：默认直接使用原图路径，远端页通过 ?preview=true 请求降采样缩略图
+    thumbnailUriFor: (PhotoEntity) -> String = { it.contentUri }
 ) {
     val currentAlbum = content.album
     val photos = content.photos
@@ -123,7 +125,7 @@ internal fun AlbumDetailContent(
                             Modifier.clickable { onOpenViewer(index) },
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            PhotoThumbnail(photo)
+                            PhotoThumbnail(photo, thumbnailUriFor(photo))
                             Text(
                                 stringResource(R.string.album_detail_photo_index, index + 1),
                                 color = colors.onBackground, fontSize = 14.sp, lineHeight = 20.sp
@@ -158,12 +160,12 @@ private fun AlbumThumbnail(uri: String) {
 }
 
 @Composable
-private fun PhotoThumbnail(photo: PhotoEntity) {
+private fun PhotoThumbnail(photo: PhotoEntity, thumbnailUri: String) {
     val context = LocalContext.current
-    val request = remember(photo.contentUri, photo.modifiedAt) {
-        ImageRequest.Builder(context).data(photo.contentUri)
+    val request = remember(thumbnailUri, photo.modifiedAt) {
+        ImageRequest.Builder(context).data(thumbnailUri)
             .decoderFactory(BitmapFactoryDecoder.Factory()) // 强制按静态 Bitmap 解码，只取第一帧
-            .memoryCacheKey("${photo.contentUri}|${photo.modifiedAt}|gallery-static")
+            .memoryCacheKey("$thumbnailUri|${photo.modifiedAt}|gallery-static")
             .build()
     }
     var contentScale by remember(request) { mutableStateOf(ContentScale.Fit) }

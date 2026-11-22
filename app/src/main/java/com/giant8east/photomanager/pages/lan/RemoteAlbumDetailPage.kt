@@ -10,6 +10,7 @@ import com.giant8east.photomanager.data.database.AlbumEntity
 import com.giant8east.photomanager.data.database.PhotoEntity
 import com.giant8east.photomanager.lan.protocol.LanAlbumDto
 import com.giant8east.photomanager.lan.protocol.LanDevice
+import com.giant8east.photomanager.lan.protocol.PREVIEW_QUERY_PARAM
 import com.giant8east.photomanager.navigation.AppNavigator
 import com.giant8east.photomanager.pages.albumdetail.AlbumDetailContent
 import com.giant8east.photomanager.pages.albumdetail.AlbumDetailUiState
@@ -24,7 +25,7 @@ fun RemoteAlbumDetailPage(
     viewModel: RemoteAlbumDetailViewModel = hiltViewModel()
 ) {
     BackHandler { navigator.pop() }
-    LaunchedEffect(device, album.id) { viewModel.load(device, album.id) }
+    LaunchedEffect(device, album) { viewModel.load(device, album) }
 
     PageContent(viewModel.state, onRetry = viewModel::retry) { content ->
         // 远端相册映射成本地实体：contentUri/coverPath 直接是对方的媒体地址，Coil 与阅读器都能照常加载。
@@ -63,7 +64,9 @@ fun RemoteAlbumDetailPage(
                     PhotoViewerPage(navigator, remotePhotos, index)
                 }
             },
-            actionsEnabled = false
+            actionsEnabled = false,
+            // 详情页网格请求降采样预览图，点进阅读器再加载完整原图（对标 EhViewer）
+            thumbnailUriFor = { photo -> "${photo.contentUri}?$PREVIEW_QUERY_PARAM=true" }
         )
     }
 }
