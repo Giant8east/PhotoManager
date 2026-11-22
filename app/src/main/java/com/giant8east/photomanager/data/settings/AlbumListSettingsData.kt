@@ -2,7 +2,7 @@
 package com.giant8east.photomanager.data.settings
 
 import android.annotation.SuppressLint
-import com.giant8east.photomanager.data.album.AlbumSortField
+import com.giant8east.photomanager.model.AlbumSortField
 
 import android.content.Context
 import androidx.datastore.core.CorruptionException
