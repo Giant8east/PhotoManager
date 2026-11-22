@@ -2,6 +2,7 @@
 package com.giant8east.photomanager.pages.album
 
 import android.content.Context
+import android.util.Log
 import android.widget.Toast
 import androidx.annotation.StringRes
 import androidx.compose.runtime.*
@@ -90,7 +91,8 @@ class AlbumViewModel @Inject constructor(
         settingsData.observeSettings().first()
     } catch (error: CancellationException) {
         throw error
-    } catch (_: Exception) {
+    } catch (error: Exception) {
+        Log.w(TAG, "Failed to load album list settings, falling back to default", error)
         AlbumListSettings()
     }
 
@@ -190,7 +192,8 @@ class AlbumViewModel @Inject constructor(
                 }
             } catch (error: CancellationException) {
                 throw error
-            } catch (_: Exception) {
+            } catch (error: Exception) {
+                Log.w(TAG, "Failed to reorder albums", error)
                 // 观察已被取消时也要恢复，否则列表会停在拖拽结果上不再跟随数据库。
                 if (needsAdopt) observeAlbums()
                 errorMessage(R.string.album_operation_failed)
@@ -243,6 +246,7 @@ class AlbumViewModel @Inject constructor(
             albumData.observeUngroupedAlbumCount()
                 .catch { error ->
                     if (error is CancellationException) throw error
+                    Log.w(TAG, "Failed to observe ungrouped album count", error)
                     ungroupedAlbumCount = 0
                 }
                 .collect { ungroupedAlbumCount = it }
@@ -255,6 +259,7 @@ class AlbumViewModel @Inject constructor(
             albumData.observeFavoriteCount()
                 .catch { error ->
                     if (error is CancellationException) throw error
+                    Log.w(TAG, "Failed to observe favorite album count", error)
                     favoriteCount = 0
                 }
                 .collect { favoriteCount = it }
@@ -321,7 +326,8 @@ class AlbumViewModel @Inject constructor(
                 )
             } catch (error: CancellationException) {
                 throw error
-            } catch (_: Exception) {
+            } catch (error: Exception) {
+                Log.w(TAG, "Failed to persist album list settings", error)
                 errorMessage(R.string.album_operation_failed)
             }
         }
@@ -333,7 +339,8 @@ class AlbumViewModel @Inject constructor(
                 action()
             } catch (error: CancellationException) {
                 throw error
-            } catch (_: Exception) {
+            } catch (error: Exception) {
+                Log.w(TAG, "Album operation failed", error)
                 errorMessage(R.string.album_operation_failed)
             }
         }
@@ -341,6 +348,10 @@ class AlbumViewModel @Inject constructor(
 
     private fun errorMessage(@StringRes messageRes: Int) {
         Toast.makeText(context, messageRes, Toast.LENGTH_SHORT).show()
+    }
+
+    private companion object {
+        const val TAG = "AlbumViewModel"
     }
 }
 

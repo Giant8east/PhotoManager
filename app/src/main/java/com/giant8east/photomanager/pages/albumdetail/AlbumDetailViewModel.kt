@@ -2,6 +2,7 @@
 package com.giant8east.photomanager.pages.albumdetail
 
 import android.content.Context
+import android.util.Log
 import android.widget.Toast
 import dagger.hilt.android.qualifiers.ApplicationContext
 import androidx.compose.runtime.*
@@ -77,10 +78,10 @@ class AlbumDetailViewModel @AssistedInject constructor(
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
+                Log.w(TAG, "Failed to refresh album directory: $albumPath", error)
                 Toast.makeText(
                     context,
-                    error.message?.takeIf { it.isNotBlank() }
-                        ?: context.getString(R.string.album_detail_refresh_failed),
+                    error.toUiText(R.string.album_detail_refresh_failed).resolve(context),
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -95,10 +96,15 @@ class AlbumDetailViewModel @AssistedInject constructor(
                 albumData.setFavorite(album.id, !album.isFavorite)
             } catch (error: CancellationException) {
                 throw error
-            } catch (_: Exception) {
+            } catch (error: Exception) {
+                Log.w(TAG, "Failed to toggle favorite for album ${album.id}", error)
                 Toast.makeText(context, R.string.album_operation_failed, Toast.LENGTH_SHORT).show()
             }
         }
+    }
+
+    private companion object {
+        const val TAG = "AlbumDetailViewModel"
     }
 }
 
