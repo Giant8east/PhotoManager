@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.giant8east.photomanager.ui.theme.appColors
 
 @Composable
@@ -29,12 +30,20 @@ fun AppDialog(
     contentPadding: PaddingValues = PaddingValues(horizontal = 24.dp),
     /** `Dp.Unspecified` 表示不限制内容高度，由 Dialog 窗口约束。 */
     contentMaxHeight: Dp = 360.dp,
+    /** false 时点外部与返回键都不会关闭，用于"正在等待结果"的弹窗。 */
+    dismissible: Boolean = true,
     content: @Composable ColumnScope.(close: () -> Unit) -> Unit
 ) {
     val dialogs = LocalDialogStack.current
     val close: () -> Unit = { dialogs.pop() }
 
-    Dialog(onDismissRequest = close) {
+    Dialog(
+        onDismissRequest = { if (dismissible) close() },
+        properties = DialogProperties(
+            dismissOnBackPress = dismissible,
+            dismissOnClickOutside = dismissible
+        )
+    ) {
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
