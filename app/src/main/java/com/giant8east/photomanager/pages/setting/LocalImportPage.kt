@@ -45,7 +45,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.giant8east.photomanager.R
 import com.giant8east.photomanager.navigation.AppNavigator
 import com.giant8east.photomanager.pages.common.AppLazyColumnScrollbar
-import com.giant8east.photomanager.pages.common.TopBarShadow
+import com.giant8east.photomanager.pages.common.AppPageScaffold
 import com.giant8east.photomanager.ui.state.resolve
 import com.giant8east.photomanager.ui.theme.appColors
 
@@ -62,28 +62,13 @@ fun LocalImportPage(
             uri ?: return@rememberLauncherForActivityResult
             viewModel.onDirectoryPicked(uri)
         }
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text(stringResource(R.string.setting_local_import)) },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = appColors.toolbarBackground,
-                    titleContentColor = appColors.toolbarContent,
-                    navigationIconContentColor = appColors.toolbarContent,
-                    actionIconContentColor = appColors.toolbarContent
-                ),
-                navigationIcon = {
-                    IconButton(onClick = navigator::pop) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { launcher.launch(null) }) {
-                        Icon(Icons.Default.Add, contentDescription = null)
-                    }
-                }
-            )
+    AppPageScaffold(
+        title = stringResource(R.string.setting_local_import),
+        onBack = navigator::pop,
+        actions = {
+            IconButton(onClick = { launcher.launch(null) }) {
+                Icon(Icons.Default.Add, contentDescription = null)
+            }
         },
         floatingActionButton = {
             FloatingActionButton(
@@ -100,13 +85,8 @@ fun LocalImportPage(
                 }
             }
         }
-    ) { padding ->
-        Box(
-            Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            Column(
+    ) {
+        Column(
                 Modifier
                     .fillMaxSize()
                     .padding(horizontal = 16.dp)
@@ -210,7 +190,5 @@ fun LocalImportPage(
                     }
                 }
             }
-            TopBarShadow(Modifier.align(Alignment.TopCenter))
-        }
     }
 }

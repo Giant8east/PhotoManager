@@ -52,7 +52,7 @@ import com.giant8east.photomanager.data.database.GroupEntity
 import com.giant8east.photomanager.navigation.AppNavigator
 import com.giant8east.photomanager.pages.common.AppLazyColumnScrollbar
 import com.giant8east.photomanager.pages.common.DialogHost
-import com.giant8east.photomanager.pages.common.TopBarShadow
+import com.giant8east.photomanager.pages.common.AppPageScaffold
 import com.giant8east.photomanager.pages.common.rememberDialogStack
 import com.giant8east.photomanager.ui.theme.appColors
 import sh.calvin.reorderable.ReorderableItem
@@ -89,39 +89,19 @@ fun GroupManagePage(
         }
     }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text(stringResource(R.string.album_group_manage)) },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = appColors.toolbarBackground,
-                    titleContentColor = appColors.toolbarContent,
-                    navigationIconContentColor = appColors.toolbarContent,
-                    actionIconContentColor = appColors.toolbarContent
-                ),
-                navigationIcon = {
-                    IconButton(onClick = navigator::pop) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
-                    }
-                },
-                actions = {
-                    IconButton(
-                        onClick = {
-                            dialogs.show { GroupCreateDialog() }
-                        }
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null)
-                    }
+    AppPageScaffold(
+        title = stringResource(R.string.album_group_manage),
+        onBack = navigator::pop,
+        actions = {
+            IconButton(
+                onClick = {
+                    dialogs.show { GroupCreateDialog() }
                 }
-            )
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null)
+            }
         }
-    ) { padding ->
-        Box(
-            Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
+    ) {
             if (localGroups.isEmpty()) {
                 Box(
                     Modifier.fillMaxSize(),
@@ -217,8 +197,6 @@ fun GroupManagePage(
                 }
             }
         }
-        }
-        TopBarShadow(Modifier.align(Alignment.TopCenter))
         }
     }
 

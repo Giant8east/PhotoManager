@@ -11,17 +11,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,54 +25,30 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.giant8east.photomanager.R
 import com.giant8east.photomanager.navigation.AppNavigator
-import com.giant8east.photomanager.pages.common.TopBarShadow
-import androidx.compose.foundation.layout.Box
-import com.giant8east.photomanager.ui.theme.appColors
+import com.giant8east.photomanager.pages.common.AppPageScaffold
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingPage(navigator: AppNavigator) {
     BackHandler { navigator.pop() }
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text(stringResource(R.string.setting_title)) },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = appColors.toolbarBackground,
-                    titleContentColor = appColors.toolbarContent,
-                    navigationIconContentColor = appColors.toolbarContent
-                ),
-                navigationIcon = {
-                    IconButton(onClick = navigator::pop) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
-                    }
-                }
-            )
-        }
-    ) { padding ->
-        Box(
-            Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            Column(Modifier.fillMaxSize()) {
-                SettingEntryRow(
-                    icon = painterResource(R.drawable.ic_eh_folder_move),
-                    label = stringResource(R.string.setting_local_import)
-                ) {
-                    navigator.pushTo { LocalImportPage(navigator) }
-                }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                SettingEntryRow(
-                    icon = painterResource(R.drawable.ic_lan_share),
-                    label = stringResource(R.string.setting_remote_connect)
-                ) {
-                    navigator.pushTo { RemotePage(navigator) }
-                }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    AppPageScaffold(
+        title = stringResource(R.string.setting_title),
+        onBack = navigator::pop
+    ) {
+        Column(Modifier.fillMaxSize()) {
+            SettingEntryRow(
+                icon = painterResource(R.drawable.ic_eh_folder_move),
+                label = stringResource(R.string.setting_local_import)
+            ) {
+                navigator.pushTo { LocalImportPage(navigator) }
             }
-            TopBarShadow(Modifier.align(Alignment.TopCenter))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            SettingEntryRow(
+                icon = painterResource(R.drawable.ic_lan_share),
+                label = stringResource(R.string.setting_remote_connect)
+            ) {
+                navigator.pushTo { RemotePage(navigator) }
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         }
     }
 }
@@ -103,7 +72,8 @@ private fun SettingEntryRow(icon: Painter, label: String, onClick: () -> Unit) {
         Spacer(Modifier.width(24.dp))
         Text(
             text = label,
-            style = MaterialTheme.typography.titleLarge.copy(fontSize = 18.sp, letterSpacing = 0.sp)
+            fontSize = 16.sp,
+            color = MaterialTheme.colorScheme.onBackground
         )
     }
 }

@@ -70,7 +70,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.giant8east.photomanager.R
 import com.giant8east.photomanager.lan.protocol.LanDevice
 import com.giant8east.photomanager.navigation.AppNavigator
-import com.giant8east.photomanager.pages.common.TopBarShadow
+import com.giant8east.photomanager.pages.common.AppPageScaffold
 import com.giant8east.photomanager.pages.lan.RemoteAlbumPage
 import com.giant8east.photomanager.ui.theme.appColors
 
@@ -105,23 +105,9 @@ fun RemotePage(navigator: AppNavigator, viewModel: RemotePageViewModel = hiltVie
             viewModel.setSharing(true)
         }
     }
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text(stringResource(R.string.setting_remote_connect)) },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = appColors.toolbarBackground,
-                    titleContentColor = appColors.toolbarContent,
-                    navigationIconContentColor = appColors.toolbarContent
-                ),
-                navigationIcon = {
-                    IconButton(onClick = navigator::pop) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
-                    }
-                }
-            )
-        },
+    AppPageScaffold(
+        title = stringResource(R.string.setting_remote_connect),
+        onBack = navigator::pop,
         floatingActionButton = {
             FloatingActionButton(
                 // 等价于 onClick = { viewModel.refreshDevices() }
@@ -132,13 +118,8 @@ fun RemotePage(navigator: AppNavigator, viewModel: RemotePageViewModel = hiltVie
                 Icon(Icons.Filled.Refresh, contentDescription = null)
             }
         }
-    ) { padding ->
-        Box(
-            Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            Column(Modifier.fillMaxSize()) {
+    ) {
+        Column(Modifier.fillMaxSize()) {
                 Row(
                     Modifier
                         .fillMaxWidth()
@@ -294,9 +275,7 @@ fun RemotePage(navigator: AppNavigator, viewModel: RemotePageViewModel = hiltVie
                     }
                 }
             }
-            TopBarShadow(Modifier.align(Alignment.TopCenter))
         }
-    }
 
     PairingRequestDialog(viewModel)
 
