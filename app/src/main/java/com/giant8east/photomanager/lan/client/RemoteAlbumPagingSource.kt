@@ -8,6 +8,7 @@ import com.giant8east.photomanager.lan.protocol.LanAlbumDto
 import com.giant8east.photomanager.lan.protocol.LanDevice
 import com.giant8east.photomanager.lan.protocol.MAX_PAGE_LIMIT
 import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.delay
 
 /**
  * 一次远端浏览的固定查询条件。
@@ -27,7 +28,10 @@ data class RemoteAlbumQuery(
 
 internal class RemoteAlbumPagingSource(
     private val lanClient: LanClient,
-    private val query: RemoteAlbumQuery
+    private val query: RemoteAlbumQuery,
+    // 局域网响应通常只需十几毫秒，给下拉刷新与触底翻页留出可见的加载动画停留时长
+    private val refreshDelayMillis: Long = 0L,
+    private val appendDelayMillis: Long = 0L
 ) : PagingSource<Int, LanAlbumDto>() {
 
     /** 刷新时从头开始：远端列表没有可复用的锚点 id。 */
@@ -46,6 +50,12 @@ internal class RemoteAlbumPagingSource(
                 // Paging 的首屏 loadSize 可能大于 pageSize，服务端上限是 MAX_PAGE_LIMIT
                 limit = params.loadSize.coerceAtMost(MAX_PAGE_LIMIT)
             )
+            val holdMillis = when (params) {
+                is LoadParams.Refresh -> refreshDelayMillis
+                is LoadParams.Append -> appendDelayMillis
+                is LoadParams.Prepend -> 0L
+            }
+            if (holdMillis > 0L) delay(holdMillis)
             LoadResult.Page(
                 data = page.albums,
                 // 只往下翻：远端是按 offset 顺序切的窗口，没有稳定的上一页锚点

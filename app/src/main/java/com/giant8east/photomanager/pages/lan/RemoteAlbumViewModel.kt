@@ -98,9 +98,25 @@ class RemoteAlbumViewModel @Inject constructor(
     val albums: Flow<PagingData<LanAlbumDto>> = queries
         .filterNotNull()
         .flatMapLatest { query ->
+            var isInitialLoad = true
             Pager(
-                config = PagingConfig(pageSize = PAGE_SIZE, enablePlaceholders = false),
-                pagingSourceFactory = { RemoteAlbumPagingSource(lanClient, query) }
+                // initialLoadSize = PAGE_SIZE + prefetchDistance = 1：避免首屏一次拉 3 倍量或刚划就预取下一页
+                config = PagingConfig(
+                    pageSize = PAGE_SIZE,
+                    initialLoadSize = PAGE_SIZE,
+                    prefetchDistance = 1,
+                    enablePlaceholders = false
+                ),
+                pagingSourceFactory = {
+                    val delayRefresh = !isInitialLoad
+                    isInitialLoad = false
+                    RemoteAlbumPagingSource(
+                        lanClient = lanClient,
+                        query = query,
+                        refreshDelayMillis = if (delayRefresh) REFRESH_DELAY_MILLIS else 0L,
+                        appendDelayMillis = APPEND_DELAY_MILLIS
+                    )
+                }
             ).flow
         }
         .cachedIn(viewModelScope)
@@ -255,5 +271,11 @@ class RemoteAlbumViewModel @Inject constructor(
 
         /** 重连间隔上限：再长用户就会觉得"卡住了"。 */
         const val MAX_RECONNECT_DELAY_MILLIS = 5_000L
+
+        /** 局域网下拉刷新最短视觉停留时长，避免圆球一闪而逝。 */
+        const val REFRESH_DELAY_MILLIS = 1_000L
+
+        /** 局域网触底加载下一页视觉停留时长，让底部动画条清晰可见。 */
+        const val APPEND_DELAY_MILLIS = 1_200L
     }
 }

@@ -20,6 +20,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 data class RemotePhotoContent(val photos: List<LanPhotoDto>)
@@ -86,6 +87,8 @@ class RemoteAlbumDetailViewModel @Inject constructor(
         loadJob = viewModelScope.launch {
             try {
                 val photos = lanClient.photos(target, currentAlbum.id)
+                // 局域网响应极快，留出 1 秒视觉停留避免下拉刷新圆球一闪而逝
+                delay(REFRESH_DELAY_MILLIS)
                 detailCache.put(target, currentAlbum, photos)
                 state = PageState.Content(RemotePhotoContent(photos))
             } catch (cancelled: CancellationException) {
@@ -96,5 +99,9 @@ class RemoteAlbumDetailViewModel @Inject constructor(
                 isRefreshing = false
             }
         }
+    }
+
+    private companion object {
+        const val REFRESH_DELAY_MILLIS = 1_000L
     }
 }
