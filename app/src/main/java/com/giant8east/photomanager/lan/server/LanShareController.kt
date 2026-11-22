@@ -12,6 +12,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -176,10 +177,7 @@ class LanShareController @Inject constructor(
     }
 
     /**
-     * 由地址观察触发的关闭：必须另起一个协程。
-     *
-     * 不能在收集协程里直接调 [stopLocked]——它会取消 [addressJob]，也就是取消正在执行它的这个协程，
-     * 于是 stopLocked 会在 `pairing.clear()` 那个挂起点上中断，留下"通知还在、token 还有效"的半状态。
+     * 由地址观察触发的关闭：另起一个协程去拿锁收尾，避免观察协程在 collect 里取消自己。
      */
     private fun closeFromWatcher(reason: LanShareEvent) {
         scope.launch {
@@ -191,24 +189,19 @@ class LanShareController @Inject constructor(
         }
     }
 
-    private suspend fun stopLocked(): LanShareResult {
-        // 观察协程先撤：它自己触发关闭时走的是 closeFromWatcher 另起的协程，所以这里不会取消到它自己
+    private suspend fun stopLocked(): LanShareResult = withContext(NonCancellable) {
+        // 清理段不可取消：即使调用方（如页面返回取消 viewModelScope）中途取消，
+        // 也能保证 mDNS、引擎、token、配对记录、前台服务与 UI 状态全部原子复位，不留半状态。
         addressJob?.cancel()
         addressJob = null
-        // 这两步都没有异常出口：announcer.stop() 内部判空 + runCatching；server.stop() 是 Ktor 的
-        // shutdownServer（complete / join / destroyApplication），dispose 的异常在库内部就被吞掉了
         announcer.stop()
         server?.stop()
         server = null
-        // 关闭共享后所有 token 立即失效、待确认请求作废：这是"开关"的业务语义，不属于引擎
         tokens.clear()
+        pairing.clear()
         backgroundHost.stop()
         mutableState.value = LanShareState()
-        // 唯一的挂起点（Mutex.lock 可取消）必须留到最后：用户点关闭后马上返回会取消
-        // viewModelScope，取消只可能断在这一行，此时通知与开关状态已经复位，不会留下
-        // "通知还在、开关还亮、实际谁也连不上"的半状态
-        pairing.clear()
-        return LanShareResult.Closed
+        LanShareResult.Closed
     }
 
     /**
