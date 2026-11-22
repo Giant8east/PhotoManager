@@ -1,4 +1,4 @@
-/** 页面级底部弹窗栈，负责 show、pop 和栈顶弹窗渲染。 */
+/** 页面级底部弹窗栈，负责 show、pop 和栈顶弹窗渲染（与 DialogHost.kt 互为镜像，改一处需同步另一处）。 */
 package com.giant8east.photomanager.pages.common
 
 import androidx.compose.runtime.Composable

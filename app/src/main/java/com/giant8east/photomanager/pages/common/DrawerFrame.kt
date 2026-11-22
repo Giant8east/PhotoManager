@@ -15,8 +15,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.giant8east.photomanager.ui.theme.appColors
@@ -65,18 +63,7 @@ fun DrawerFrame(
 
         Box(Modifier.weight(1f)) {
             content()
-
-            Box(
-                Modifier
-                    .align(Alignment.TopCenter)
-                    .fillMaxWidth()
-                    .height(8.dp)
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(Color(0x38000000), Color.Transparent)
-                        )
-                    )
-            )
+            TopBarShadow(Modifier.align(Alignment.TopCenter))
         }
     }
 }
