@@ -88,8 +88,9 @@ class LanPairing(
         // 先清理超时请求：否则下面的"复用"可能拿到一条已经过期的 pending
         expireLocked(now)
 
-        // 白名单：之前勾选过"记住"，直接静默发 token
+        // 白名单：之前勾选过"记住"，刷新最近访问时间与展示名后直接静默发 token
         if (whitelist.contains(request.deviceId)) {
+            whitelist.touch(request.deviceId, request.name, now)
             return@withLock issueLocked(request.deviceId)
         }
 

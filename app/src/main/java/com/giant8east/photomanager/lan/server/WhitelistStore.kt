@@ -18,5 +18,8 @@ interface WhitelistStore {
 
     suspend fun add(deviceId: String, name: String)
 
+    /** 白名单命中时刷新最近访问时间与展示名；设备不在白名单中时无副作用。 */
+    suspend fun touch(deviceId: String, name: String, now: Long)
+
     suspend fun remove(deviceId: String)
 }

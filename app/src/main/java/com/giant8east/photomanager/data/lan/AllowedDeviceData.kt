@@ -69,6 +69,17 @@ class AllowedDeviceData @Inject constructor(
     }
 
     /**
+     * 白名单设备再次配对时刷新展示名与最近访问时间，不改动 `pairedAt` 与 `autoApprove`。
+     */
+    override suspend fun touch(deviceId: String, name: String, now: Long) {
+        database.allowedDeviceDao().updateAllowedDeviceLastSeen(
+            deviceId = deviceId,
+            name = name,
+            lastSeenAt = now
+        )
+    }
+
+    /**
      * 撤销：只忘记这台设备，不负责断开它。
      */
     override suspend fun remove(deviceId: String) {

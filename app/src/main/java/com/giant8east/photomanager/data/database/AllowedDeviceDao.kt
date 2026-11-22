@@ -20,6 +20,10 @@ interface AllowedDeviceDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAllowedDevice(device: AllowedDeviceEntity)
 
+    /** 白名单设备再次配对时刷新展示名与最近访问时间，不改动 pairedAt 与 autoApprove。 */
+    @Query("UPDATE allowed_devices SET name = :name, lastSeenAt = :lastSeenAt WHERE deviceId = :deviceId")
+    suspend fun updateAllowedDeviceLastSeen(deviceId: String, name: String, lastSeenAt: Long)
+
     @Query("DELETE FROM allowed_devices WHERE deviceId = :deviceId")
     suspend fun deleteAllowedDevice(deviceId: String)
 }
