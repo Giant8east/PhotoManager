@@ -106,14 +106,20 @@ class ShareGateway @Inject constructor(
         modifiedAt = modifiedAt
     )
 
-    private fun PhotoEntity.toDto(): LanPhotoDto = LanPhotoDto(
-        id = id,
-        name = name,
-        sizeBytes = sizeBytes,
-        width = width,
-        height = height,
-        // OTHER 没有可用的扩展名，协议里用 null 表示"未知格式"
-        format = format.takeIf { it != PhotoFormat.OTHER }?.name?.lowercase(),
-        mediaUrl = mediaPath(id)
-    )
+    private fun PhotoEntity.toDto(): LanPhotoDto {
+        val wireFormat = when {
+            format == PhotoFormat.WEBP && PhotoFormat.isAnimatedWebp(File(contentUri)) -> "animated_webp"
+            format == PhotoFormat.OTHER -> null
+            else -> format.name.lowercase()
+        }
+        return LanPhotoDto(
+            id = id,
+            name = name,
+            sizeBytes = sizeBytes,
+            width = width,
+            height = height,
+            format = wireFormat,
+            mediaUrl = mediaPath(id)
+        )
+    }
 }

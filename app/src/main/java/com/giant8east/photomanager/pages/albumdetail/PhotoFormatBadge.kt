@@ -17,12 +17,10 @@ import com.giant8east.photomanager.data.media.PhotoFormat
 @Composable
 internal fun PhotoFormatBadge(
     format: PhotoFormat,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isAnimated: Boolean = format == PhotoFormat.GIF
 ) {
-    val label = when (format) {
-        PhotoFormat.GIF -> "GIF"
-        else -> return
-    }
+    val label = if (isAnimated) "GIF" else return
 
     Text(
         label,

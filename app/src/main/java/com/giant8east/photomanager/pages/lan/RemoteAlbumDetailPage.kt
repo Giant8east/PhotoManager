@@ -57,6 +57,12 @@ fun RemoteAlbumDetailPage(
                 )
             }
         }
+        val animatedPhotoIds = remember(content.photos) {
+            content.photos
+                .filter { it.format == "gif" || it.format == "animated_webp" }
+                .map { it.id }
+                .toSet()
+        }
         PullToRefreshBox(
             isRefreshing = viewModel.isRefreshing,
             // 等价于 onRefresh = { viewModel.refresh() }
@@ -77,7 +83,8 @@ fun RemoteAlbumDetailPage(
                 },
                 actionsEnabled = false,
                 // 详情页网格请求降采样预览图，点进阅读器再加载完整原图（对标 EhViewer）
-                thumbnailUriFor = { photo -> "${photo.contentUri}?$PREVIEW_QUERY_PARAM=true" }
+                thumbnailUriFor = { photo -> "${photo.contentUri}?$PREVIEW_QUERY_PARAM=true" },
+                isAnimatedFor = { photo -> photo.id in animatedPhotoIds }
             )
         }
     }
