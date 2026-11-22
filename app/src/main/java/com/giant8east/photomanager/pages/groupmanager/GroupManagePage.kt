@@ -80,11 +80,16 @@ fun GroupManagePage(
         mutableStateListOf<GroupEntity>().apply { addAll(viewModel.groups) }
     }
     val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
+        val firstIndex = lazyListState.firstVisibleItemIndex
+        val firstOffset = lazyListState.firstVisibleItemScrollOffset
         // 列表第 0 项是不可拖拽的锚点占位，真实分组下标各减 1。
         val source = from.index - 1
         val target = (to.index - 1).coerceIn(0, localGroups.lastIndex)
         if (source in localGroups.indices && source != target) {
             localGroups.add(target, localGroups.removeAt(source))
+            if (from.index == firstIndex || to.index == firstIndex) {
+                lazyListState.requestScrollToItem(firstIndex, firstOffset)
+            }
             view.performHapticFeedback(HapticFeedbackConstants.TEXT_HANDLE_MOVE)
         }
     }

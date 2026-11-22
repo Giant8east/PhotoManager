@@ -208,7 +208,14 @@ private fun AlbumList(
     LaunchedEffect(albums) { dragState.onAlbumsChanged(albums) }
     val displayedAlbums = dragState.displayed(albums)
     val reorderableState = rememberReorderableLazyListState(listState) { from, to ->
+        // LazyList 重排时会跟着"可见第一项的 key"跳动视口；若交换涉及当前可见首项，
+        // 同帧用 requestScrollToItem 锁死原 (index, offset)，避免整屏卡片集体抖动。
+        val firstIndex = listState.firstVisibleItemIndex
+        val firstOffset = listState.firstVisibleItemScrollOffset
         dragState.move(from.index, to.index)
+        if (from.index == firstIndex || to.index == firstIndex) {
+            listState.requestScrollToItem(firstIndex, firstOffset)
+        }
         view.performHapticFeedback(HapticFeedbackConstants.TEXT_HANDLE_MOVE)
     }
     AppLazyColumnScrollbar(state = listState) {
