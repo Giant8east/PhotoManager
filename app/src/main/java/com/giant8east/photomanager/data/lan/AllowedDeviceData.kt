@@ -1,8 +1,8 @@
 /** 局域网白名单的数据入口：实现协议层的 WhitelistStore，并给设置页提供设备列表。 */
 package com.giant8east.photomanager.data.lan
 
+import com.giant8east.photomanager.data.database.AllowedDeviceDao
 import com.giant8east.photomanager.data.database.AllowedDeviceEntity
-import com.giant8east.photomanager.data.database.PhotoDatabase
 import com.giant8east.photomanager.lan.server.LanTrustedDevice
 import com.giant8east.photomanager.lan.server.WhitelistStore
 import javax.inject.Inject
@@ -12,14 +12,14 @@ import kotlinx.coroutines.flow.map
 
 @Singleton
 class AllowedDeviceData @Inject constructor(
-    private val database: PhotoDatabase
+    private val allowedDeviceDao: AllowedDeviceDao
 ) : WhitelistStore {
     /**
      * DAO 的 Flow 原样透传，本类里只有 [observeTrusted] 用它（做类型转换）。
      * 排序在 DAO 的 SQL 里做（最近访问时间倒序），这里不重排。
      */
     private fun observeAllowedDevices(): Flow<List<AllowedDeviceEntity>> =
-        database.allowedDeviceDao().observeAllowedDevices()
+        allowedDeviceDao.observeAllowedDevices()
 
     /**
      * 配对时判断走"免确认直接发 token"还是"等主机点头"。
@@ -29,7 +29,7 @@ class AllowedDeviceData @Inject constructor(
      * 目前所有批准路径都写 true。
      */
     override suspend fun contains(deviceId: String): Boolean =
-        database.allowedDeviceDao().queryAllowedDevice(deviceId)?.autoApprove == true
+        allowedDeviceDao.queryAllowedDevice(deviceId)?.autoApprove == true
 
     /**
      * 向上传递白名单数据变更
@@ -53,10 +53,9 @@ class AllowedDeviceData @Inject constructor(
      * `lastSeenAt` 则应该刷新——它就是最近一次来访问的时间。
      */
     override suspend fun add(deviceId: String, name: String) {
-        val dao = database.allowedDeviceDao()
         val now = System.currentTimeMillis()
-        val existing = dao.queryAllowedDevice(deviceId)
-        dao.insertAllowedDevice(
+        val existing = allowedDeviceDao.queryAllowedDevice(deviceId)
+        allowedDeviceDao.insertAllowedDevice(
             AllowedDeviceEntity(
                 deviceId = deviceId,
                 name = name,
@@ -72,7 +71,7 @@ class AllowedDeviceData @Inject constructor(
      * 白名单设备再次配对时刷新展示名与最近访问时间，不改动 `pairedAt` 与 `autoApprove`。
      */
     override suspend fun touch(deviceId: String, name: String, now: Long) {
-        database.allowedDeviceDao().updateAllowedDeviceLastSeen(
+        allowedDeviceDao.updateAllowedDeviceLastSeen(
             deviceId = deviceId,
             name = name,
             lastSeenAt = now
@@ -83,6 +82,6 @@ class AllowedDeviceData @Inject constructor(
      * 撤销：只忘记这台设备，不负责断开它。
      */
     override suspend fun remove(deviceId: String) {
-        database.allowedDeviceDao().deleteAllowedDevice(deviceId)
+        allowedDeviceDao.deleteAllowedDevice(deviceId)
     }
 }

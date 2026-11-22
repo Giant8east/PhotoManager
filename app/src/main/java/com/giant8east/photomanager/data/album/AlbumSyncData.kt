@@ -1,7 +1,7 @@
 /** 相册同步入口：先列出整棵目录树，再把每个文件夹排成扫描任务，最后清掉磁盘上已不存在的记录。 */
 package com.giant8east.photomanager.data.album
 
-import com.giant8east.photomanager.data.database.PhotoDatabase
+import com.giant8east.photomanager.data.database.AlbumDao
 import com.giant8east.photomanager.data.scan.DirectoryScanner
 import com.giant8east.photomanager.data.task.FolderTask
 import com.giant8east.photomanager.data.task.FolderTaskScheduler
@@ -24,7 +24,7 @@ import kotlinx.coroutines.withContext
  */
 @Singleton
 class AlbumSyncData @Inject constructor(
-    private val database: PhotoDatabase,
+    private val albumDao: AlbumDao,
     private val directoryScanner: DirectoryScanner,
     private val scheduler: FolderTaskScheduler
 ) {
@@ -71,11 +71,11 @@ class AlbumSyncData @Inject constructor(
         if (directories.isEmpty()) return
 
         val onDisk = directories.toHashSet()
-        val stalePaths = database.albumDao()
+        val stalePaths = albumDao
             .queryAlbumPathsUnderPath(root, DirectoryScanner.childPathPrefix(root))
             .filter { it !in onDisk }
         for (path in stalePaths) {
-            database.albumDao().deleteAlbumByPath(path)
+            albumDao.deleteAlbumByPath(path)
         }
     }
 }

@@ -1,12 +1,14 @@
 /** 局域网共享的只读快照：一次性查询，不订阅数据库变化，只暴露给协议层。 */
 package com.giant8east.photomanager.data.album
 
+import com.giant8east.photomanager.data.database.AlbumDao
+import com.giant8east.photomanager.data.database.AlbumEntity
+import com.giant8east.photomanager.data.database.GroupDao
+import com.giant8east.photomanager.data.database.GroupWithAlbumCount
+import com.giant8east.photomanager.data.database.PhotoDao
+import com.giant8east.photomanager.data.database.PhotoEntity
 import com.giant8east.photomanager.model.AlbumQuery
 import com.giant8east.photomanager.model.AlbumSortField
-import com.giant8east.photomanager.data.database.AlbumEntity
-import com.giant8east.photomanager.data.database.GroupWithAlbumCount
-import com.giant8east.photomanager.data.database.PhotoDatabase
-import com.giant8east.photomanager.data.database.PhotoEntity
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -15,7 +17,9 @@ import javax.inject.Singleton
  */
 @Singleton
 class AlbumShareData @Inject constructor(
-    private val database: PhotoDatabase
+    private val albumDao: AlbumDao,
+    private val groupDao: GroupDao,
+    private val photoDao: PhotoDao
 ) {
     /**
      * 共享视图的相册快照：一次取某个分组（[groupId] 为 null 表示未分组）。
@@ -28,7 +32,7 @@ class AlbumShareData @Inject constructor(
         keyword: String,
         groupId: Long?
     ): List<AlbumEntity> =
-        database.albumDao().queryAlbums(
+        albumDao.queryAlbums(
             AlbumQueryBuilder.build(
                 AlbumQuery(
                     groupId = groupId,
@@ -40,18 +44,18 @@ class AlbumShareData @Inject constructor(
         )
 
     suspend fun albumPhotos(albumId: Long): List<PhotoEntity> =
-        database.photoDao().queryPhotosByAlbumId(albumId)
+        photoDao.queryPhotosByAlbumId(albumId)
 
     suspend fun photo(photoId: Long): PhotoEntity? =
-        database.photoDao().queryPhotoById(photoId)
+        photoDao.queryPhotoById(photoId)
 
     /** 封面取文件名排序后的第一张，与本地相册卡片一致。 */
     suspend fun albumCoverPhoto(albumId: Long): PhotoEntity? =
-        database.photoDao().queryAlbumCoverPhoto(albumId)
+        photoDao.queryAlbumCoverPhoto(albumId)
 
     suspend fun groups(): List<GroupWithAlbumCount> =
-        database.groupDao().queryGroupWithAlbumCounts()
+        groupDao.queryGroupWithAlbumCounts()
 
     suspend fun ungroupedAlbumCount(): Int =
-        database.groupDao().queryUngroupedAlbumCount()
+        groupDao.queryUngroupedAlbumCount()
 }
