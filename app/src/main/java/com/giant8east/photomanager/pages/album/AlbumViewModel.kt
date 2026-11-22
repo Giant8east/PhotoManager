@@ -10,8 +10,8 @@ import androidx.lifecycle.viewModelScope
 import com.giant8east.photomanager.R
 import com.giant8east.photomanager.data.album.AlbumData
 import com.giant8east.photomanager.data.settings.AlbumListSettingsData
-import com.giant8east.photomanager.data.album.AlbumQuery
-import com.giant8east.photomanager.data.album.AlbumSortField
+import com.giant8east.photomanager.model.AlbumQuery
+import com.giant8east.photomanager.model.AlbumSortField
 import com.giant8east.photomanager.data.delete.DeleteManager
 import com.giant8east.photomanager.data.group.GroupData
 import com.giant8east.photomanager.data.database.AlbumEntity
