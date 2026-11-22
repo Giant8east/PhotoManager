@@ -12,8 +12,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.first
 
 private val Context.remoteDownloadStore by preferencesDataStore("remote_download")
 
@@ -40,7 +39,11 @@ class RemoteDownloadData @Inject constructor(
     ).absolutePath
 
     /** 选过就用选的，否则用默认目录。 */
-    val path: Flow<String> = context.remoteDownloadStore.data.map { it[KEY_PATH] ?: defaultPath }
+    suspend fun getPath(): String {
+        val preferences = context.remoteDownloadStore.data.first()
+        // 等价于 if (preferences[KEY_PATH] != null) preferences[KEY_PATH]!! else defaultPath
+        return preferences[KEY_PATH] ?: defaultPath
+    }
 
     suspend fun setPath(path: String) {
         context.remoteDownloadStore.edit { it[KEY_PATH] = path }
