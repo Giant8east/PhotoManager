@@ -1,6 +1,7 @@
 /** 相册库主页内容：右侧分组抽屉、顶部搜索、相册列表和批量操作 FAB。 */
 package com.giant8east.photomanager.pages.album
 
+import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement.Absolute.spacedBy
@@ -28,6 +29,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -199,10 +203,13 @@ private fun AlbumList(
     onToggleFavorite: (AlbumEntity) -> Unit,
     onReorderBlocked: () -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
+    val view = LocalView.current
     LaunchedEffect(albums) { dragState.onAlbumsChanged(albums) }
     val displayedAlbums = dragState.displayed(albums)
     val reorderableState = rememberReorderableLazyListState(listState) { from, to ->
         dragState.move(from.index, to.index)
+        view.performHapticFeedback(HapticFeedbackConstants.TEXT_HANDLE_MOVE)
     }
     AppLazyColumnScrollbar(state = listState) {
         LazyColumn(
@@ -230,7 +237,10 @@ private fun AlbumList(
                         onToggleFavorite = onToggleFavorite,
                         dragHandleModifier = Modifier.draggableHandle(
                             // 从上一次拖拽的结果开始，而不是数据库里可能还没回流的旧顺序。
-                            onDragStarted = { dragState.startDrag() },
+                            onDragStarted = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                dragState.startDrag()
+                            },
                             // 松手只留下待保存快照，写入数据库由 FAB 或退出多选时的弹窗触发。
                             onDragStopped = { dragState.stopDrag() }
                         ),

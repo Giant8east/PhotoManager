@@ -1,6 +1,7 @@
 /** 分组管理页：新增、重命名、删除并拖动调整分组顺序。 */
 package com.giant8east.photomanager.pages.groupmanager
 
+import android.view.HapticFeedbackConstants
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -43,6 +44,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -70,6 +74,8 @@ fun GroupManagePage(
     val lazyListState = rememberLazyListState()
     val dialogs = rememberDialogStack()
 
+    val haptic = LocalHapticFeedback.current
+    val view = LocalView.current
     val localGroups = remember {
         mutableStateListOf<GroupEntity>().apply { addAll(viewModel.groups) }
     }
@@ -79,6 +85,7 @@ fun GroupManagePage(
         val target = (to.index - 1).coerceIn(0, localGroups.lastIndex)
         if (source in localGroups.indices && source != target) {
             localGroups.add(target, localGroups.removeAt(source))
+            view.performHapticFeedback(HapticFeedbackConstants.TEXT_HANDLE_MOVE)
         }
     }
 
@@ -167,6 +174,7 @@ fun GroupManagePage(
                                         .size(48.dp)
                                         .draggableHandle(
                                             onDragStarted = {
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                                 draggingOriginalIndex = localGroups.indexOfFirst {
                                                     it.id == group.id
                                                 }

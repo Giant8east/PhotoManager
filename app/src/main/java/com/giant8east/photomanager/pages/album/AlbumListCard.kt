@@ -32,8 +32,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
@@ -80,6 +82,7 @@ internal fun AlbumListCard(
 ) {
     val selected = album.id in selection.selectedIds
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     val coverRequest = remember(album.coverPath) {
         ImageRequest.Builder(context).data(album.coverPath).build()
     }
@@ -95,7 +98,12 @@ internal fun AlbumListCard(
                         else -> navigator.pushTo { AlbumDetailPage(navigator, album) }
                     }
                 },
-                onLongClick = { if (selectionEnabled) selection.enter(album.id) }
+                onLongClick = {
+                    if (selectionEnabled) {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        selection.enter(album.id)
+                    }
+                }
             )
     ) {
         Card(
