@@ -78,7 +78,9 @@ class AppNavigator(
         }
 
         val transition = updateTransition(targetState = currentPage, label = "nav")
-        val running = transition.isRunning
+        // 首帧组合时 transition.isRunning 尚未置 true，必须同时检查 currentState != targetState，
+        // 否则新页面首帧会误判为“不在转场中”，导致延后挂载失效。
+        val running = transition.isRunning || transition.currentState != transition.targetState
         isTransitioning = running
         // 唯一收尾监听放在 AnimatedContent 外部，避免转场期间新旧两页并发收集竞态
         LaunchedEffect(running) {
