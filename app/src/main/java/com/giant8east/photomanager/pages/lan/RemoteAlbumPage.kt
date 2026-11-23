@@ -37,7 +37,10 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -63,6 +66,7 @@ import com.giant8east.photomanager.data.lan.RemoteDownloadTask
 import com.giant8east.photomanager.lan.protocol.LanAlbumDto
 import com.giant8east.photomanager.lan.protocol.LanDevice
 import com.giant8east.photomanager.navigation.AppNavigator
+import com.giant8east.photomanager.navigation.LocalIsNavTransitioning
 import com.giant8east.photomanager.pages.album.AlbumGroupDrawer
 import com.giant8east.photomanager.pages.album.AlbumListCard
 import com.giant8east.photomanager.pages.album.AlbumSelectionState
@@ -287,6 +291,13 @@ private fun RemoteAlbumList(
     val context = LocalContext.current
     val refreshState = albums.loadState.refresh
     val appendState = albums.loadState.append
+    val isTransitioning = LocalIsNavTransitioning.current
+    // 仅在首次入场转场期间延后挂载远端相册卡片，避免滑动动画与首屏封面加载争抢主线程；
+    // 从详情页返回时 rememberSaveable 保持为 true，避免滚动位置跳回顶部。
+    var listReady by rememberSaveable { mutableStateOf(!isTransitioning) }
+    LaunchedEffect(isTransitioning) {
+        if (!isTransitioning) listReady = true
+    }
 
     // 已有列表时下拉刷新失败、或底部加载下一页失败：保留现有列表并用 Toast 提示（对齐 EhViewer）
     LaunchedEffect(refreshState) {
@@ -329,19 +340,21 @@ private fun RemoteAlbumList(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    items(count = albums.itemCount, key = { index -> albums.peek(index)?.id ?: index }) { index ->
-                        val album = albums[index]
-                        if (album != null) {
-                            val task = downloadTasks[RemoteAlbumKey.of(device, album.id)]
-                            RemoteAlbumRow(
-                                album = album,
-                                device = device,
-                                selection = selection,
-                                navigator = navigator,
-                                task = task,
-                                isDownloaded = album.id in downloadedAlbumIds,
-                                onToggleDownload = { onToggleDownload(album) }
-                            )
+                    if (listReady) {
+                        items(count = albums.itemCount, key = { index -> albums.peek(index)?.id ?: index }) { index ->
+                            val album = albums[index]
+                            if (album != null) {
+                                val task = downloadTasks[RemoteAlbumKey.of(device, album.id)]
+                                RemoteAlbumRow(
+                                    album = album,
+                                    device = device,
+                                    selection = selection,
+                                    navigator = navigator,
+                                    task = task,
+                                    isDownloaded = album.id in downloadedAlbumIds,
+                                    onToggleDownload = { onToggleDownload(album) }
+                                )
+                            }
                         }
                     }
                 }

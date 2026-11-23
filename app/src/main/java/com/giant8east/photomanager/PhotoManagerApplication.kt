@@ -9,6 +9,7 @@ import coil.ImageLoaderFactory
 import coil.decode.ImageDecoderDecoder
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
+import com.giant8east.photomanager.data.media.LocalAlbumCoverInterceptor
 import com.giant8east.photomanager.lan.client.LanHttp
 import com.giant8east.photomanager.lan.client.MdnsBrowser
 import dagger.hilt.android.HiltAndroidApp
@@ -40,7 +41,10 @@ class PhotoManagerApplication : Application(), ImageLoaderFactory {
 
     @OptIn(ExperimentalCoroutinesApi::class)
     override fun newImageLoader(): ImageLoader = ImageLoader.Builder(this)
-        .components { add(ImageDecoderDecoder.Factory()) }
+        .components {
+            add(LocalAlbumCoverInterceptor())
+            add(ImageDecoderDecoder.Factory())
+        }
         // Coil 2.x 默认就用 OkHttp 取网络图；这里换成同一个 client，token 拦截器才对图片生效。
         .okHttpClient(lanHttp.client)
         // 网格与阅读页共用缓存，限制快速翻页时同时进行的像素解码。

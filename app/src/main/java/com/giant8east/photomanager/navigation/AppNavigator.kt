@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
@@ -21,6 +22,9 @@ import androidx.lifecycle.HasDefaultViewModelProviderFactory
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
+
+/** 指示当前页面是否处于导航入场/退场滑动动画中，供重型列表或缩略图网格延后首帧挂载。 */
+val LocalIsNavTransitioning = compositionLocalOf { false }
 
 class AppNavigator(
     // 构造函数接收一个起始页面
@@ -114,7 +118,10 @@ class AppNavigator(
                         }
                     }
                 }
-                CompositionLocalProvider(LocalViewModelStoreOwner provides owner) {
+                CompositionLocalProvider(
+                    LocalViewModelStoreOwner provides owner,
+                    LocalIsNavTransitioning provides running
+                ) {
                     // 页面离开 composition 时保存 rememberSaveable 状态，
                     // 返回该页面时恢复 LazyListState 的滚动位置。
                     saveableStateHolder.SaveableStateProvider(page.id) {

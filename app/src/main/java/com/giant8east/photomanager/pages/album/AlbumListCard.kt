@@ -47,11 +47,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import coil.size.Precision
 import com.giant8east.photomanager.R
 import com.giant8east.photomanager.data.database.AlbumEntity
-import com.giant8east.photomanager.data.media.ThumbGenerator
+import com.giant8east.photomanager.data.media.LocalAlbumCoverInterceptor
 import com.giant8east.photomanager.navigation.AppNavigator
-import java.io.File
 import com.giant8east.photomanager.pages.albumdetail.AlbumDetailPage
 import com.giant8east.photomanager.ui.format.rememberAlbumModifiedTimeText
 import com.giant8east.photomanager.ui.theme.FavoriteRed
@@ -66,6 +66,9 @@ private val CardTitleStyle = TextStyle(
     platformStyle = PlatformTextStyle(includeFontPadding = true)
 )
 private val CardMessageStyle = CardTitleStyle.copy(fontSize = 14.sp)
+// 列表卡片封面区域为 80dp × 120dp，按 3x 密度封顶解码尺寸，配合 INEXACT 触发快速降采样
+private const val COVER_DECODE_WIDTH_PX = 240
+private const val COVER_DECODE_HEIGHT_PX = 360
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -91,19 +94,14 @@ internal fun AlbumListCard(
     val selected = album.id in selection.selectedIds
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
-    // 本地相册优先使用 .thumb 压缩图并带 lastModified 作缓存键，避免换首图后 Coil 命中旧图
+    // 本地相册封面由 LocalAlbumCoverInterceptor 在 IO 线程解析 .thumb，主线程不做文件系统访问
     val coverRequest = remember(album.albumPath, album.coverPath, album.modifiedAt) {
-        val localThumb = if (album.albumPath.isNotEmpty()) {
-            File(album.albumPath, ThumbGenerator.THUMB_FILE_NAME).takeIf { it.isFile }
-        } else {
-            null
-        }
         val builder = ImageRequest.Builder(context)
-        if (localThumb != null) {
-            builder.data(localThumb)
-                .memoryCacheKey("${localThumb.path}|${localThumb.lastModified()}")
-        } else {
-            builder.data(album.coverPath)
+            .data(album.coverPath)
+            .size(COVER_DECODE_WIDTH_PX, COVER_DECODE_HEIGHT_PX)
+            .precision(Precision.INEXACT)
+        if (album.albumPath.isNotEmpty()) {
+            builder.setParameter(LocalAlbumCoverInterceptor.ALBUM_PATH_PARAM, album.albumPath)
         }
         builder.build()
     }
