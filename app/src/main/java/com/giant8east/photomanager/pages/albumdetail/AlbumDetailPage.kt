@@ -3,7 +3,6 @@ package com.giant8east.photomanager.pages.albumdetail
 
 import android.annotation.SuppressLint
 import com.giant8east.photomanager.ui.state.PageContent
-import com.giant8east.photomanager.ui.state.PageState
 import android.text.format.Formatter
 import com.giant8east.photomanager.R
 import androidx.activity.compose.BackHandler
@@ -30,19 +29,35 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil.imageLoader
+import coil.memory.MemoryCache
 import com.giant8east.photomanager.data.database.AlbumEntity
 import com.giant8east.photomanager.data.database.PhotoEntity
 import com.giant8east.photomanager.data.media.PhotoFormat
 import com.giant8east.photomanager.navigation.AppNavigator
+import com.giant8east.photomanager.navigation.LocalIsNavTransitioning
 import com.giant8east.photomanager.pages.common.AppLazyColumnScrollbar
 import com.giant8east.photomanager.pages.common.HeroCoverImage
 import com.giant8east.photomanager.pages.common.ThumbnailImage
 import com.giant8east.photomanager.ui.format.rememberAlbumModifiedTimeText
 import com.giant8east.photomanager.ui.theme.appColors
 import com.giant8east.photomanager.pages.photoviewer.PhotoViewerPage
+import kotlinx.coroutines.delay
 
 private const val THUMBNAIL_DECODE_WIDTH_PX = 360
 private const val THUMBNAIL_DECODE_HEIGHT_PX = 540
+// 未命中内存缓存的详情页分阶段错峰加载：300ms 转场结束后等 1s 展示头部，再等 1s 加载网格图片
+private const val HERO_REVEAL_DELAY_MILLIS = 1_000L
+private const val GRID_REVEAL_DELAY_MILLIS = 1_000L
+
+private enum class DetailRevealStage {
+    LOADING,
+    HERO_ONLY,
+    GRID_READY
+}
+
+private fun photoThumbnailCacheKey(thumbnailUri: String, modifiedAt: String?): String =
+    "$thumbnailUri|$modifiedAt|gallery-static"
 
 @Composable
 fun AlbumDetailPage(
@@ -53,28 +68,21 @@ fun AlbumDetailPage(
     )
 ) {
     BackHandler { navigator.pop() }
-    // 对齐 EhViewer bindViewFirst：Room 尚未返回照片列表时先用入参 album 立刻渲染头部，
-    // 避免转场期间先闪一下全屏转圈再出页面。
-    when (val state = viewModel.state) {
-        is PageState.Message -> PageContent(state, onRetry = viewModel::retryLoad) {}
-        is PageState.Loading,
-        is PageState.Content -> {
-            val content = if (state is PageState.Content) state.value else AlbumDetailUiState(album, emptyList())
-            AlbumDetailContent(
-                navigator = navigator,
-                content = content,
-                // 局域网下载来的相册显示来源设备名，本机相册显示"本地"
-                sourceLabel = content.album.sourceName.ifEmpty { stringResource(R.string.album_detail_local) },
-                onRefreshDirectory = viewModel::refreshDirectory,
-                onToggleFavorite = viewModel::toggleFavorite,
-                onToggleHidden = viewModel::toggleHidden,
-                onOpenViewer = { index ->
-                    navigator.pushTo(useSafeArea = false) {
-                        PhotoViewerPage(navigator, content.album.id, index)
-                    }
+    PageContent(viewModel.state, onRetry = viewModel::retryLoad) { content ->
+        AlbumDetailContent(
+            navigator = navigator,
+            content = content,
+            // 局域网下载来的相册显示来源设备名，本机相册显示"本地"
+            sourceLabel = content.album.sourceName.ifEmpty { stringResource(R.string.album_detail_local) },
+            onRefreshDirectory = viewModel::refreshDirectory,
+            onToggleFavorite = viewModel::toggleFavorite,
+            onToggleHidden = viewModel::toggleHidden,
+            onOpenViewer = { index ->
+                navigator.pushTo(useSafeArea = false) {
+                    PhotoViewerPage(navigator, content.album.id, index)
                 }
-            )
-        }
+            }
+        )
     }
 }
 
@@ -123,42 +131,78 @@ internal fun AlbumDetailContent(
                 )
             }
 
-            val listState = rememberLazyListState()
-            AppLazyColumnScrollbar(state = listState) {
-                LazyColumn(Modifier.fillMaxSize(), state = listState) {
-                    item(key = "header") {
-                        AlbumDetailHeader(
-                            album = currentAlbum,
-                            sourceLabel = sourceLabel,
-                            navigator = navigator,
-                            onRefreshDirectory = onRefreshDirectory,
-                            onToggleFavorite = onToggleFavorite,
-                            onToggleHidden = onToggleHidden,
-                            primaryActionLabel = primaryActionLabel,
-                            primaryActionEnabled = primaryActionEnabled,
-                            onPrimaryAction = onPrimaryAction,
-                            onOpenViewer = onOpenViewer,
-                            actionsEnabled = actionsEnabled
+            val context = LocalContext.current
+            val isTransitioning = LocalIsNavTransitioning.current
+            // 检查首张网格缩略图是否已命中 Coil 内存缓存：
+            // 已缓存则直接带图入场；未缓存则在 300ms 转场结束后先等 1s 显示 Hero 区域，再等 1s 加载网格图片。
+            var revealStage by remember {
+                val firstPhoto = photos.firstOrNull()
+                val hasMemoryCache = firstPhoto != null &&
+                    context.imageLoader.memoryCache?.get(
+                        MemoryCache.Key(
+                            photoThumbnailCacheKey(thumbnailUriFor(firstPhoto), firstPhoto.modifiedAt)
                         )
-                    }
+                    ) != null
+                mutableStateOf(
+                    if (hasMemoryCache) DetailRevealStage.GRID_READY else DetailRevealStage.LOADING
+                )
+            }
+            LaunchedEffect(isTransitioning) {
+                if (isTransitioning) return@LaunchedEffect
+                if (revealStage == DetailRevealStage.LOADING) {
+                    delay(HERO_REVEAL_DELAY_MILLIS)
+                    revealStage = DetailRevealStage.HERO_ONLY
+                }
+                if (revealStage == DetailRevealStage.HERO_ONLY) {
+                    delay(GRID_REVEAL_DELAY_MILLIS)
+                    revealStage = DetailRevealStage.GRID_READY
+                }
+            }
 
-                    photoGridRows(
-                        items = photos,
-                        columns = columns,
-                        itemKey = { it.id }
-                    ) { index, photo ->
-                        Column(
-                            Modifier.clickable { onOpenViewer(index) },
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            PhotoThumbnail(
-                                photo = photo,
-                                thumbnailUri = thumbnailUriFor(photo)
+            if (revealStage == DetailRevealStage.LOADING) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            } else {
+                val listState = rememberLazyListState()
+                AppLazyColumnScrollbar(state = listState) {
+                    LazyColumn(Modifier.fillMaxSize(), state = listState) {
+                        item(key = "header") {
+                            AlbumDetailHeader(
+                                album = currentAlbum,
+                                sourceLabel = sourceLabel,
+                                navigator = navigator,
+                                onRefreshDirectory = onRefreshDirectory,
+                                onToggleFavorite = onToggleFavorite,
+                                onToggleHidden = onToggleHidden,
+                                primaryActionLabel = primaryActionLabel,
+                                primaryActionEnabled = primaryActionEnabled,
+                                onPrimaryAction = onPrimaryAction,
+                                onOpenViewer = onOpenViewer,
+                                actionsEnabled = actionsEnabled
                             )
-                            Text(
-                                stringResource(R.string.album_detail_photo_index, index + 1),
-                                color = colors.onBackground, fontSize = 14.sp, lineHeight = 20.sp
-                            )
+                        }
+
+                        if (revealStage == DetailRevealStage.GRID_READY) {
+                            photoGridRows(
+                                items = photos,
+                                columns = columns,
+                                itemKey = { it.id }
+                            ) { index, photo ->
+                                Column(
+                                    Modifier.clickable { onOpenViewer(index) },
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    PhotoThumbnail(
+                                        photo = photo,
+                                        thumbnailUri = thumbnailUriFor(photo)
+                                    )
+                                    Text(
+                                        stringResource(R.string.album_detail_photo_index, index + 1),
+                                        color = colors.onBackground, fontSize = 14.sp, lineHeight = 20.sp
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -190,7 +234,7 @@ private fun PhotoThumbnail(
             decodeWidthPx = THUMBNAIL_DECODE_WIDTH_PX,
             decodeHeightPx = THUMBNAIL_DECODE_HEIGHT_PX,
             cacheVersionKey = photo.modifiedAt,
-            memoryCacheKey = "$thumbnailUri|${photo.modifiedAt}|gallery-static",
+            memoryCacheKey = photoThumbnailCacheKey(thumbnailUri, photo.modifiedAt),
             // 等价于 { w, h -> galleryThumbnailScale(w, h) }
             contentScaleFor = ::galleryThumbnailScale,
             modifier = Modifier.fillMaxSize()
