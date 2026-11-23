@@ -61,8 +61,6 @@ class PhotoViewerSystemController(private val activity: Activity?) {
         ?: WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE // 原始系统亮度
     private val originalOrientation = activity?.requestedOrientation
         ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED // 原始屏幕方向
-    private val originalCutoutMode = window?.attributes?.layoutInDisplayCutoutMode
-        ?: WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT  // 原始布局
     private var onNextPage: (() -> Unit)? = null
     private var onPreviousPage: (() -> Unit)? = null
     private var volumeKeyPagingEnabled = false  // 是否启用音量键翻页
@@ -73,13 +71,12 @@ class PhotoViewerSystemController(private val activity: Activity?) {
         this.onPreviousPage = onPreviousPage
     }
 
-    /** 统一应用阅读页的窗口和按键设置；[allowFullScreen] 为 false 时暂不触发全屏窗口重排。 */
+    /** 统一应用阅读页的窗口和按键设置；[allowFullScreen] 为 false 时暂不触发全屏系统栏隐藏。 */
     fun apply(settings: PhotoViewerSettings, allowFullScreen: Boolean = true) {
         volumeKeyPagingEnabled = settings.volumeKeyPaging
         applyKeepScreenOn(settings.keepScreenOn)
         applyBrightness(settings.customBrightnessEnabled, settings.customBrightness)
         if (allowFullScreen) {
-            applyCutoutMode(settings.fullScreen)
             applySystemBars(settings.fullScreen)
         }
         applyOrientation(settings.screenOrientation)
@@ -98,16 +95,6 @@ class PhotoViewerSystemController(private val activity: Activity?) {
         w.attributes = w.attributes.apply {
             screenBrightness = if (customEnabled) brightness
             else WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
-        }
-    }
-
-    /** 全屏时允许内容绘制到刘海区域，非全屏恢复进入页面前的模式。 */
-    private fun applyCutoutMode(fullScreen: Boolean) {
-        val w = window ?: return
-        w.attributes = w.attributes.apply {
-            layoutInDisplayCutoutMode =
-                if (fullScreen) WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
-                else originalCutoutMode
         }
     }
 
@@ -160,7 +147,6 @@ class PhotoViewerSystemController(private val activity: Activity?) {
         w.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         w.attributes = w.attributes.apply {
             screenBrightness = originalBrightness
-            layoutInDisplayCutoutMode = originalCutoutMode
         }
         // 退出后不再需要阅读页的临时系统栏行为，恢复应用默认值。
         WindowCompat.getInsetsController(w, w.decorView).systemBarsBehavior =
