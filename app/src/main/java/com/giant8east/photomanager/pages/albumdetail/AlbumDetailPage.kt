@@ -43,11 +43,12 @@ import com.giant8east.photomanager.ui.format.rememberAlbumModifiedTimeText
 import com.giant8east.photomanager.ui.theme.appColors
 import com.giant8east.photomanager.pages.photoviewer.PhotoViewerPage
 import kotlinx.coroutines.delay
+import kotlin.time.Duration.Companion.milliseconds
 
 private const val THUMBNAIL_DECODE_WIDTH_PX = 360
 private const val THUMBNAIL_DECODE_HEIGHT_PX = 540
 // 详情页分阶段错峰加载：网格固定在 Hero 显示后再延后 1s 加载；Hero 延后时长由调用方按本地/远端分别指定
-private const val GRID_REVEAL_DELAY_MILLIS = 1_000L
+private const val GRID_REVEAL_DELAY_MILLIS = 500L
 
 private enum class DetailRevealStage {
     LOADING,
@@ -162,11 +163,11 @@ internal fun AlbumDetailContent(
             LaunchedEffect(isTransitioning) {
                 if (isTransitioning) return@LaunchedEffect
                 if (revealStage == DetailRevealStage.LOADING) {
-                    if (heroRevealDelayMillis > 0L) delay(heroRevealDelayMillis)
+                    if (heroRevealDelayMillis > 0L) delay(heroRevealDelayMillis.milliseconds)
                     revealStage = DetailRevealStage.HERO_ONLY
                 }
                 if (revealStage == DetailRevealStage.HERO_ONLY) {
-                    delay(GRID_REVEAL_DELAY_MILLIS)
+                    delay(GRID_REVEAL_DELAY_MILLIS.milliseconds)
                     revealStage = DetailRevealStage.GRID_READY
                 }
             }
