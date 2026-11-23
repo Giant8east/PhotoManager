@@ -1,8 +1,9 @@
-/** 通用图片展示组件：统一占位底色、加载/失败兜底与 200ms 淡入，并组合出缩略图与头图两种语义样式。 */
+/** 通用图片展示组件：统一占位/失败兜底与 200ms 透明淡入，并组合出缩略图与头图两种语义样式。 */
 package com.giant8east.photomanager.pages.common
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,24 +14,28 @@ import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImagePainter
 import coil.compose.rememberAsyncImagePainter
 import coil.decode.BitmapFactoryDecoder
+import coil.decode.DataSource
 import coil.request.ImageRequest
 import coil.size.Precision
 import com.giant8east.photomanager.data.media.LocalAlbumCoverInterceptor
 
-private const val CROSSFADE_DURATION_MILLIS = 200
+private const val FADE_IN_DURATION_MILLIS = 200
 
 /**
- * 图片底座：统一提供占位底色、加载中/失败（含空路径）兜底插槽与淡入效果。
- * 在 Success 同一帧同步计算 [contentScaleFor]，避免先 Fit 再切 Crop 导致的“从小到大缩放跳变”。
+ * 图片底座：透明背景 + 加载中/失败（含空路径）兜底插槽 + 纯 GPU 透明淡入。
+ * 在 Success 同一帧同步计算 [contentScaleFor]，且不用 Coil CrossfadePainter，
+ * 避免“先 Fit 后 Crop 缩放跳变”或“非 2:3 图淡入瞬间被 Scale.FILL 拉伸”。
  */
 @Composable
 fun AppMediaImage(
@@ -42,7 +47,7 @@ fun AppMediaImage(
     errorPlaceholder: @Composable BoxScope.() -> Unit = { DefaultErrorPlaceholder() }
 ) {
     Box(
-        modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant),
+        modifier = modifier,
         contentAlignment = Alignment.Center
     ) {
         if (request == null) {
@@ -59,10 +64,28 @@ fun AppMediaImage(
             ContentScale.Fit
         }
 
+        // 命中内存缓存当帧直接 1f（不闪）；从磁盘/网络新加载时做 200ms 纯 alpha 淡入
+        val isMemCacheHit = state is AsyncImagePainter.State.Success &&
+            state.result.dataSource == DataSource.MEMORY_CACHE
+        val alphaAnim = remember(request) { Animatable(0f) }
+        LaunchedEffect(request, state) {
+            if (state is AsyncImagePainter.State.Success) {
+                if (state.result.dataSource == DataSource.MEMORY_CACHE) {
+                    alphaAnim.snapTo(1f)
+                } else if (alphaAnim.value < 1f) {
+                    alphaAnim.animateTo(1f, tween(FADE_IN_DURATION_MILLIS))
+                }
+            }
+        }
+
         Image(
             painter = painter,
             contentDescription = contentDescription,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    alpha = if (isMemCacheHit) 1f else alphaAnim.value
+                },
             contentScale = resolvedScale
         )
 
@@ -77,7 +100,7 @@ fun AppMediaImage(
 
 /**
  * 缩略图组合组件（用于相册列表封面与详情画廊网格）：
- * 强制静态首帧解码 + 封顶尺寸 + INEXACT 快速降采样 + 200ms 淡入。
+ * 强制静态首帧解码 + 封顶尺寸 + INEXACT 快速降采样 + 200ms 透明淡入。
  */
 @Composable
 fun ThumbnailImage(
@@ -107,7 +130,6 @@ fun ThumbnailImage(
                 .decoderFactory(BitmapFactoryDecoder.Factory()) // 强制按静态 Bitmap 解码，只取第一帧
                 .size(decodeWidthPx, decodeHeightPx)
                 .precision(Precision.INEXACT)
-                .crossfade(CROSSFADE_DURATION_MILLIS)
             if (localAlbumPath.isNotEmpty()) {
                 builder.setParameter(LocalAlbumCoverInterceptor.ALBUM_PATH_PARAM, localAlbumPath)
             }
@@ -126,7 +148,7 @@ fun ThumbnailImage(
 
 /**
  * 头图组合组件（用于详情页顶部 Hero 封面）：
- * 走全局 ImageDecoderDecoder 支持动图播放，保留完整比例 Fit，同样具备占位底色、兜底图标与 200ms 淡入。
+ * 走全局 ImageDecoderDecoder 支持动图播放，保留完整比例 Fit，同样具备兜底图标与 200ms 透明淡入。
  */
 @Composable
 fun HeroCoverImage(
@@ -141,7 +163,6 @@ fun HeroCoverImage(
             ImageRequest.Builder(context)
                 .data(uri)
                 .memoryCacheKey("$uri|detail-cover-animated")
-                .crossfade(CROSSFADE_DURATION_MILLIS)
                 .build()
         }
     }

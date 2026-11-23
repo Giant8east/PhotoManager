@@ -1,11 +1,8 @@
-/** 应用轻量导航器，维护 Composable 页面栈并提供统一跳转入口。 */
+/** 应用轻量导航器，维护保活 Composable 页面栈并提供统一滑动转场。 */
 package com.giant8east.photomanager.navigation
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.updateTransition
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -13,11 +10,17 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.lifecycle.HasDefaultViewModelProviderFactory
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
@@ -39,10 +42,13 @@ class AppNavigator(
         val viewModelStore = ViewModelStore()
     }
 
-    private val pages = mutableStateListOf<PageEntry>() // 页面栈，类型是 Compose 能观察到变化的可变列表
+    private enum class TransitionKind { PUSH, POP }
+
+    private val pages = mutableStateListOf<PageEntry>() // 保活页面栈：被覆盖的底页留在组合树中，返回时不重建
     private var nextPageId = 0L
-    // 是否正在执行页面转场：入栈/出栈时先标记，由外部唯一 transition.isRunning 同步复位（无动画 0x 时不会死锁）
-    private var isTransitioning = false
+    private var exitingPage by mutableStateOf<PageEntry?>(null)
+    private var transitionKind by mutableStateOf<TransitionKind?>(null)
+    private var transitionToken by mutableIntStateOf(0)
     private var pendingPop = false
 
     init {
@@ -53,86 +59,121 @@ class AppNavigator(
         useSafeArea: Boolean = true,
         page: @Composable () -> Unit
     ) {
-        if (isTransitioning) return
-        isTransitioning = true
+        if (transitionKind != null) return
         pages += PageEntry(nextPageId++, useSafeArea, page)
+        transitionKind = TransitionKind.PUSH
+        transitionToken++
     }
 
     fun pop() {
-        if (isTransitioning) {
+        if (transitionKind != null) {
             if (pages.size > 1) pendingPop = true
             return
         }
         if (pages.size <= 1) return
-        isTransitioning = true
-        pages.removeAt(pages.lastIndex)
+        exitingPage = pages.removeAt(pages.lastIndex)
+        transitionKind = TransitionKind.POP
+        transitionToken++
     }
 
     @Composable
     fun render() {
-        val currentPage = pages.last()
         val parentOwner = checkNotNull(LocalViewModelStoreOwner.current)
-        val saveableStateHolder = rememberSaveableStateHolder()
+        var containerWidthPx by remember { mutableIntStateOf(0) }
+        val progress = remember { Animatable(1f) }
+        val activeKind = transitionKind
+        val running = activeKind != null
+
         DisposableEffect(this) {
-            onDispose { pages.forEach { it.viewModelStore.clear() } }
+            onDispose {
+                pages.forEach { it.viewModelStore.clear() }
+                exitingPage?.viewModelStore?.clear()
+            }
         }
 
-        val transition = updateTransition(targetState = currentPage, label = "nav")
-        // 首帧组合时 transition.isRunning 尚未置 true，必须同时检查 currentState != targetState，
-        // 否则新页面首帧会误判为“不在转场中”，导致延后挂载失效。
-        val running = transition.isRunning || transition.currentState != transition.targetState
-        isTransitioning = running
-        // 唯一收尾监听放在 AnimatedContent 外部，避免转场期间新旧两页并发收集竞态
-        LaunchedEffect(running) {
-            if (!running && pendingPop) {
+        // 唯一转场驱动协程：入栈/出栈共用 300ms 滑动进度，收尾统一清理已出栈页面的 ViewModelStore
+        LaunchedEffect(transitionToken) {
+            if (transitionKind == null) return@LaunchedEffect
+            progress.snapTo(0f)
+            progress.animateTo(1f, tween(TRANSITION_DURATION_MILLIS))
+            val popped = exitingPage
+            exitingPage = null
+            transitionKind = null
+            popped?.viewModelStore?.clear()
+            if (pendingPop) {
                 pendingPop = false
                 pop()
             }
         }
 
-        Box(Modifier.fillMaxSize()) {
-            transition.AnimatedContent(
-                modifier = Modifier.fillMaxSize(),
-                contentKey = { it.id },
-                transitionSpec = {
-                    val isPush = targetState.id > initialState.id
-                    val direction = if (isPush) AnimatedContentTransitionScope.SlideDirection.Left
-                    else AnimatedContentTransitionScope.SlideDirection.Right
-                    slideIntoContainer(direction, tween(TRANSITION_DURATION_MILLIS)) togetherWith
-                        slideOutOfContainer(direction, tween(TRANSITION_DURATION_MILLIS))
-                }
-            ) { page ->
-                val owner = remember(page, parentOwner) {
-                    object : ViewModelStoreOwner, HasDefaultViewModelProviderFactory {
-                        override val viewModelStore = page.viewModelStore
-                        override val defaultViewModelProviderFactory =
-                            (parentOwner as HasDefaultViewModelProviderFactory).defaultViewModelProviderFactory
-                        override val defaultViewModelCreationExtras =
-                            (parentOwner as HasDefaultViewModelProviderFactory).defaultViewModelCreationExtras
-                    }
-                }
-                DisposableEffect(page) {
-                    // 入栈覆盖时保留实例，出栈转场结束后才清理任务。
-                    onDispose {
-                        if (page !in pages) {
-                            page.viewModelStore.clear()
-                            saveableStateHolder.removeState(page.id)
-                        }
-                    }
-                }
-                CompositionLocalProvider(
-                    LocalViewModelStoreOwner provides owner,
-                    LocalIsNavTransitioning provides running
-                ) {
-                    // 页面离开 composition 时保存 rememberSaveable 状态，
-                    // 返回该页面时恢复 LazyListState 的滚动位置。
-                    saveableStateHolder.SaveableStateProvider(page.id) {
-                        PageContainer(useSafeArea = page.useSafeArea) { page.content() }
-                    }
+        Box(
+            Modifier
+                .fillMaxSize()
+                .onSizeChanged { containerWidthPx = it.width }
+        ) {
+            val topIndex = pages.lastIndex
+            // 按栈底到栈顶顺序渲染，保证顶页的 BackHandler 与绘制层级始终在最上层
+            pages.forEachIndexed { index, page ->
+                key(page.id) {
+                    val isTop = index == topIndex
+                    val isUnderneath = index == topIndex - 1
+                    PageSlot(
+                        page = page,
+                        parentOwner = parentOwner,
+                        isTransitioning = running,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                val w = containerWidthPx.toFloat()
+                                when {
+                                    activeKind == TransitionKind.PUSH && isTop -> {
+                                        translationX = (1f - progress.value) * w
+                                        alpha = 1f
+                                    }
+                                    activeKind == TransitionKind.PUSH && isUnderneath -> {
+                                        translationX = -progress.value * w
+                                        alpha = 1f
+                                    }
+                                    activeKind == TransitionKind.POP && isTop -> {
+                                        translationX = -(1f - progress.value) * w
+                                        alpha = 1f
+                                    }
+                                    isTop -> {
+                                        translationX = 0f
+                                        alpha = 1f
+                                    }
+                                    else -> {
+                                        // 被覆盖的底页移出视口并置透明：保持组合树存活（返回零重建），
+                                        // 同时避免底层 AndroidView（如 DrawerLayout）拦截顶页触摸手势。
+                                        translationX = -w
+                                        alpha = 0f
+                                    }
+                                }
+                            }
+                    )
                 }
             }
+
+            // 正在出栈的页面叠在最顶层向右滑出，动画结束即移除并销毁 ViewModelStore
+            val popped = exitingPage
+            if (popped != null) {
+                key(popped.id) {
+                    PageSlot(
+                        page = popped,
+                        parentOwner = parentOwner,
+                        isTransitioning = running,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                translationX = progress.value * containerWidthPx.toFloat()
+                                alpha = 1f
+                            }
+                    )
+                }
+            }
+
             if (running) {
-                // 放在 AnimatedContent 之后的唯一顶层事件遮罩，只消费指针事件、不出水波纹。
+                // 转场期间唯一顶层事件遮罩，只消费指针事件、不出水波纹。
                 Box(
                     Modifier
                         .fillMaxSize()
@@ -144,6 +185,32 @@ class AppNavigator(
                             }
                         }
                 )
+            }
+        }
+    }
+
+    @Composable
+    private fun PageSlot(
+        page: PageEntry,
+        parentOwner: ViewModelStoreOwner,
+        isTransitioning: Boolean,
+        modifier: Modifier
+    ) {
+        val owner = remember(page, parentOwner) {
+            object : ViewModelStoreOwner, HasDefaultViewModelProviderFactory {
+                override val viewModelStore = page.viewModelStore
+                override val defaultViewModelProviderFactory =
+                    (parentOwner as HasDefaultViewModelProviderFactory).defaultViewModelProviderFactory
+                override val defaultViewModelCreationExtras =
+                    (parentOwner as HasDefaultViewModelProviderFactory).defaultViewModelCreationExtras
+            }
+        }
+        Box(modifier) {
+            CompositionLocalProvider(
+                LocalViewModelStoreOwner provides owner,
+                LocalIsNavTransitioning provides isTransitioning
+            ) {
+                PageContainer(useSafeArea = page.useSafeArea) { page.content() }
             }
         }
     }

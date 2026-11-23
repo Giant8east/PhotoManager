@@ -28,6 +28,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.giant8east.photomanager.data.database.PhotoEntity
 import com.giant8east.photomanager.data.settings.PhotoViewerSettings
 import com.giant8east.photomanager.navigation.AppNavigator
+import com.giant8east.photomanager.navigation.LocalIsNavTransitioning
 import com.giant8east.photomanager.ui.theme.PhotoViewerBackground
 import com.giant8east.photomanager.ui.theme.PhotoManagerTheme
 import kotlinx.coroutines.launch
@@ -108,14 +109,23 @@ private fun PhotoViewerReader(
         isPlaying = false
     }
 
+    val isTransitioning = LocalIsNavTransitioning.current
+    // 等进场 300ms 滑动动画完全结束后再切换刘海区与隐藏系统栏，
+    // 避免转场途中触发窗口重排导致正在退出的 Detail 页面向上跳动一帧。
+    var fullScreenReady by remember { mutableStateOf(!isTransitioning) }
+    LaunchedEffect(isTransitioning) {
+        if (!isTransitioning) fullScreenReady = true
+    }
+
     val systemController = rememberPhotoViewerSystem(
         settings = settings,
+        allowFullScreen = fullScreenReady,
         onNextPage = { pagerScope.launch { viewerPager.nextPage() } },
         onPreviousPage = { pagerScope.launch { viewerPager.previousPage() } }
     )
 
-    LaunchedEffect(areControlsVisible, settings.fullScreen, isMenuVisible) {
-        if (settings.fullScreen) {
+    LaunchedEffect(areControlsVisible, settings.fullScreen, isMenuVisible, fullScreenReady) {
+        if (settings.fullScreen && fullScreenReady) {
             if (areControlsVisible || isMenuVisible) systemController.showSystemBars()
             else systemController.hideSystemBars()
         }
