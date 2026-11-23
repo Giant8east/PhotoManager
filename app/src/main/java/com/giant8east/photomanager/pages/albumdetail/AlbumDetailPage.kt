@@ -46,8 +46,7 @@ import kotlinx.coroutines.delay
 
 private const val THUMBNAIL_DECODE_WIDTH_PX = 360
 private const val THUMBNAIL_DECODE_HEIGHT_PX = 540
-// 未命中内存缓存的详情页分阶段错峰加载：300ms 转场结束后等 1s 展示头部，再等 1s 加载网格图片
-private const val HERO_REVEAL_DELAY_MILLIS = 1_000L
+// 详情页分阶段错峰加载：网格固定在 Hero 显示后再延后 1s 加载；Hero 延后时长由调用方按本地/远端分别指定
 private const val GRID_REVEAL_DELAY_MILLIS = 1_000L
 
 private enum class DetailRevealStage {
@@ -105,6 +104,8 @@ internal fun AlbumDetailContent(
     primaryActionLabel: String? = null,
     primaryActionEnabled: Boolean = actionsEnabled,
     onPrimaryAction: (() -> Unit)? = null,
+    // 未命中缓存时转场结束后展示 Hero 区域的等待时长（本地 0ms，远端 1000ms）
+    heroRevealDelayMillis: Long = 0L,
     // 网格预览图地址：默认直接使用原图路径，远端页通过 ?preview=true 请求降采样缩略图
     thumbnailUriFor: (PhotoEntity) -> String = { it.contentUri }
 ) {
@@ -133,24 +134,35 @@ internal fun AlbumDetailContent(
 
             val context = LocalContext.current
             val isTransitioning = LocalIsNavTransitioning.current
-            // 检查首张网格缩略图是否已命中 Coil 内存缓存：
-            // 已缓存则直接带图入场；未缓存则在 300ms 转场结束后先等 1s 显示 Hero 区域，再等 1s 加载网格图片。
+            // 分级检查 Coil 内存缓存：
+            // 1. 首张网格缩略图已缓存 -> 直接 GRID_READY（Hero + 网格带图入场）；
+            // 2. 网格未缓存但 Hero 封面已缓存（上次只看到 Hero 就退出）-> 直接 HERO_ONLY，不再重新 loading；
+            // 3. 均未缓存 -> LOADING，转场结束后按 heroRevealDelayMillis（本地 0ms / 远端 1s）显 Hero，再过 1s 显网格。
             var revealStage by remember {
+                val memoryCache = context.imageLoader.memoryCache
                 val firstPhoto = photos.firstOrNull()
-                val hasMemoryCache = firstPhoto != null &&
-                    context.imageLoader.memoryCache?.get(
+                val hasGridCache = firstPhoto != null &&
+                    memoryCache?.get(
                         MemoryCache.Key(
                             photoThumbnailCacheKey(thumbnailUriFor(firstPhoto), firstPhoto.modifiedAt)
                         )
                     ) != null
+                val hasHeroCache = currentAlbum.coverPath.isNotEmpty() &&
+                    memoryCache?.get(
+                        MemoryCache.Key("${currentAlbum.coverPath}|detail-cover-animated")
+                    ) != null
                 mutableStateOf(
-                    if (hasMemoryCache) DetailRevealStage.GRID_READY else DetailRevealStage.LOADING
+                    when {
+                        hasGridCache -> DetailRevealStage.GRID_READY
+                        hasHeroCache -> DetailRevealStage.HERO_ONLY
+                        else -> DetailRevealStage.LOADING
+                    }
                 )
             }
             LaunchedEffect(isTransitioning) {
                 if (isTransitioning) return@LaunchedEffect
                 if (revealStage == DetailRevealStage.LOADING) {
-                    delay(HERO_REVEAL_DELAY_MILLIS)
+                    if (heroRevealDelayMillis > 0L) delay(heroRevealDelayMillis)
                     revealStage = DetailRevealStage.HERO_ONLY
                 }
                 if (revealStage == DetailRevealStage.HERO_ONLY) {

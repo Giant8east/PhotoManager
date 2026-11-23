@@ -19,6 +19,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -45,6 +46,9 @@ internal fun LocalAlbumCard(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val formattedSize = remember(album.totalSizeBytes) {
+        Formatter.formatFileSize(context, album.totalSizeBytes)
+    }
     AlbumCardFrame(
         title = album.name,
         coverUri = album.coverPath,
@@ -139,7 +143,7 @@ internal fun LocalAlbumCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = Formatter.formatFileSize(context, album.totalSizeBytes),
+                    text = formattedSize,
                     style = AlbumCardMessageStyle,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1

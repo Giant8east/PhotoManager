@@ -222,12 +222,9 @@ private fun AlbumList(
                     // 位移/淡入淡出统一由这里控制，卡片上不再叠加第二层 animateItem。
                     animateItemModifier = Modifier.animateItem()
                 ) { _ ->
-                    LocalAlbumCard(
-                        album = album,
-                        selection = selection,
-                        navigator = navigator,
-                        onToggleFavorite = onToggleFavorite,
-                        dragHandleModifier = Modifier.draggableHandle(
+                    // 非多选态直接传稳定 Modifier，避免普通浏览滚动时每次新建 draggableHandle 破坏跳过重组
+                    val dragHandleModifier = if (selection.isSelectionMode && reorderEnabled) {
+                        Modifier.draggableHandle(
                             // 从上一次拖拽的结果开始，而不是数据库里可能还没回流的旧顺序。
                             onDragStarted = {
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -235,7 +232,16 @@ private fun AlbumList(
                             },
                             // 松手只留下待保存快照，写入数据库由 FAB 或退出多选时的弹窗触发。
                             onDragStopped = { dragState.stopDrag() }
-                        ),
+                        )
+                    } else {
+                        Modifier
+                    }
+                    LocalAlbumCard(
+                        album = album,
+                        selection = selection,
+                        navigator = navigator,
+                        onToggleFavorite = onToggleFavorite,
+                        dragHandleModifier = dragHandleModifier,
                         reorderEnabled = reorderEnabled,
                         onReorderBlocked = onReorderBlocked
                     )

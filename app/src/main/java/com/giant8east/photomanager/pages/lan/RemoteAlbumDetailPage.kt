@@ -121,6 +121,8 @@ fun RemoteAlbumDetailPage(
                     }
                 },
                 actionsEnabled = false,
+                // 远端详情页未命中缓存时，300ms 转场结束后等 1s 显示 Hero、再等 1s 加载网格
+                heroRevealDelayMillis = 1_000L,
                 // 详情页网格请求降采样预览图，点进阅读器再加载完整原图（对标 EhViewer）
                 thumbnailUriFor = { photo -> "${photo.contentUri}?$PREVIEW_QUERY_PARAM=true" }
             )

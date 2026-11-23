@@ -19,6 +19,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -49,6 +50,9 @@ internal fun RemoteAlbumCard(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val formattedSize = remember(album.sizeBytes) {
+        Formatter.formatFileSize(context, album.sizeBytes)
+    }
     // 等价于 if (album.coverUrl != null) "http://${device.address}${album.coverUrl}" else ""
     val coverUri = album.coverUrl?.let { "http://${device.address}$it" } ?: ""
     val status = task?.status
@@ -128,7 +132,7 @@ internal fun RemoteAlbumCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = Formatter.formatFileSize(context, album.sizeBytes),
+                        text = formattedSize,
                         style = AlbumCardMessageStyle,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1
