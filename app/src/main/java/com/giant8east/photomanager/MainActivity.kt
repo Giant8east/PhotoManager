@@ -27,6 +27,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,6 +40,8 @@ import com.giant8east.photomanager.ui.theme.LocalStatusBarColor
 import com.giant8east.photomanager.ui.theme.PhotoManagerTheme
 import dagger.hilt.android.AndroidEntryPoint
 import androidx.core.net.toUri
+import com.giant8east.photomanager.navigation.AppNavigator
+import com.giant8east.photomanager.pages.album.AlbumPage
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity(), VolumeKeyHost {
@@ -94,13 +97,20 @@ class MainActivity : ComponentActivity(), VolumeKeyHost {
                     BackHandler { moveTaskToBack(true) }
                     // 分组抽屉位于导航宿主外，详情页不会承载抽屉状态。
                     CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
-                        AppRoot()
+                        val navigator = remember { AppNavigator { AlbumPage(it) } }
+                        navigator.render()
                     }
                 } else {
                     Column(
-                        modifier = Modifier.fillMaxSize().background(colors.background)
-                            .safeDrawingPadding().padding(24.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(colors.background)
+                            .safeDrawingPadding()
+                            .padding(24.dp),
+                        verticalArrangement = Arrangement.spacedBy(
+                            16.dp,
+                            Alignment.CenterVertically
+                        ),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(

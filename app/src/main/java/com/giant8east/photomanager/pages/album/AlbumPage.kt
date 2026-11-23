@@ -62,23 +62,14 @@ internal fun AlbumPage(
     // 拖拽顺序由页面持有：列表、FAB 的保存按钮、退出多选的确认弹窗共用同一份快照。
     val dragState = remember { AlbumDragState() }
 
-    // 排序/分组/收藏/搜索条件变化时丢弃未保存的拖拽快照，并在排序变化时回到顶部。
-    // 初始值取当前条件，首次组合与返回页面时不误清快照、不破坏滚动位置恢复。
-    val queryKey = listOf(
-        viewModel.sortField,
-        viewModel.isDescending,
-        viewModel.selectedGroupId,
-        viewModel.favoritesOnly,
-        viewModel.searchInput
-    )
-    val previousQueryKey = remember { mutableStateOf(queryKey) }
-    LaunchedEffect(queryKey) {
-        if (previousQueryKey.value != queryKey) {
-            val sortChanged = previousQueryKey.value[0] != queryKey[0] ||
-                previousQueryKey.value[1] != queryKey[1]
-            previousQueryKey.value = queryKey
-            dragState.discard()
-            if (sortChanged) albumListState.requestScrollToItem(0)
+    // 排序切换后回到顶部：旧滚动索引在新顺序下没有意义。
+    // 初始值取当前排序，首次组合与返回页面时都不滚动，避免破坏滚动位置恢复。
+    val sortKey = viewModel.sortField to viewModel.isDescending
+    val previousSortKey = remember { mutableStateOf(sortKey) }
+    LaunchedEffect(sortKey) {
+        if (previousSortKey.value != sortKey) {
+            previousSortKey.value = sortKey
+            albumListState.requestScrollToItem(0)
         }
     }
 
@@ -215,15 +206,21 @@ private fun AlbumList(
     LaunchedEffect(albums) { dragState.onAlbumsChanged(albums) }
     val displayedAlbums = dragState.displayed(albums)
     val reorderableState = rememberStableReorderableLazyListState(listState) { from, to ->
-        dragState.move(from, to)
+        // 列表第 0 项是固定 key 的不可拖拽锚点，真实相册下标各减 1
+        dragState.move(from - 1, to - 1)
     }
     AppLazyColumnScrollbar(state = listState) {
         LazyColumn(
-            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
+            contentPadding = PaddingValues(horizontal = 6.dp),
             verticalArrangement = spacedBy(8.dp),
             state = listState,
             modifier = Modifier.fillMaxSize()
         ) {
+            // 固定 key 的锚点：LazyList 按"第一个可见项的 key"保持视口，
+            // 有了这一项，交换前两个相册时锚点不会移动，视口就不会整体剧烈抖动。
+            item(key = "reorder-anchor") {
+                Spacer(Modifier.height(1.dp))
+            }
             items(displayedAlbums, key = { it.id }) { album ->
                 ReorderableItem(
                     state = reorderableState,

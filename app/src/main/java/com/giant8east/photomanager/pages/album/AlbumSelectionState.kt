@@ -35,9 +35,10 @@ internal class AlbumSelectionState {
         selectedIds = if (isAllSelected(availableIds)) emptySet() else availableIds
     }
 
-    /** 只裁剪当前列表中已不存在的选中项，不改变多选模式（退出多选统一由 [clear] 负责）。 */
+    /** 只保留当前列表中仍存在的选中项；选中项为空时退出多选模式。 */
     fun retain(availableIds: Set<Long>) {
         selectedIds = selectedIds intersect availableIds
+        if (selectedIds.isEmpty()) isSelectionMode = false
     }
 
     /** 清空选中项并退出多选模式。 */

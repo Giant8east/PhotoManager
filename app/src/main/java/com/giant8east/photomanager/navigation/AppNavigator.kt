@@ -34,9 +34,6 @@ import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 /** 指示当前页面是否处于导航入场/退场滑动动画中，供重型列表或缩略图网格延后首帧挂载。 */
 val LocalIsNavTransitioning = compositionLocalOf { false }
 
-/** 当前导航条目的唯一 ID，供异步回调调用 [AppNavigator.popEntry] 时精准出栈来源页。 */
-val LocalNavPageId = compositionLocalOf { -1L }
-
 class AppNavigator(
     // 构造函数接收一个起始页面
     private val initialPage: @Composable (AppNavigator) -> Unit
@@ -84,24 +81,6 @@ class AppNavigator(
         exitingPage = pages.removeAt(pages.lastIndex)
         transitionKind = TransitionKind.POP
         transitionToken++
-    }
-
-    /**
-     * 按条目 ID 精准出栈来源页，避免异步回调（如目录刷新发现相册已删除）在用户进入下级页面后误弹栈顶：
-     * - 来源页仍在栈顶：执行常规带动画 [pop]；
-     * - 来源页已被覆盖在栈中：静默移除该条目并清理其 ViewModelStore，不影响当前栈顶；
-     * - 来源页已不在栈中或已是根页：直接忽略。
-     */
-    fun popEntry(pageId: Long) {
-        if (pages.size <= 1) return
-        val index = pages.indexOfFirst { it.id == pageId }
-        if (index <= 0) return
-        if (index == pages.lastIndex) {
-            pop()
-        } else {
-            val removed = pages.removeAt(index)
-            removed.viewModelStore.clear()
-        }
     }
 
     @Composable
@@ -239,8 +218,7 @@ class AppNavigator(
             CompositionLocalProvider(
                 LocalViewModelStoreOwner provides owner,
                 LocalLifecycleOwner provides pageLifecycleOwner,
-                LocalIsNavTransitioning provides isTransitioning,
-                LocalNavPageId provides page.id
+                LocalIsNavTransitioning provides isTransitioning
             ) {
                 PageContainer(useSafeArea = page.useSafeArea) { page.content() }
             }

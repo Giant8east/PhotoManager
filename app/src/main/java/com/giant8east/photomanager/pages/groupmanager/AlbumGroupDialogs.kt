@@ -31,8 +31,9 @@ internal fun GroupCreateDialog(
     GroupNameDialog(
         title = stringResource(R.string.album_group_add),
         initialName = "",
-        isNameAvailable = { name -> viewModel.isNameAvailable(name, excludeGroupId = null) },
-        onSubmit = viewModel::createGroup
+        excludeGroupId = null,
+        onSubmit = viewModel::createGroup,
+        viewModel = viewModel
     )
 }
 
@@ -44,8 +45,9 @@ internal fun GroupRenameDialog(
     GroupNameDialog(
         title = stringResource(R.string.album_group_rename),
         initialName = group.name,
-        isNameAvailable = { name -> viewModel.isNameAvailable(name, excludeGroupId = group.id) },
-        onSubmit = { name -> viewModel.renameGroup(group, name) }
+        excludeGroupId = group.id,
+        onSubmit = { name -> viewModel.renameGroup(group, name) },
+        viewModel = viewModel
     )
 }
 
@@ -53,8 +55,9 @@ internal fun GroupRenameDialog(
 private fun GroupNameDialog(
     title: String,
     initialName: String,
-    isNameAvailable: (String) -> Boolean,
-    onSubmit: (String) -> Unit
+    excludeGroupId: Long?,
+    onSubmit: (String) -> Unit,
+    viewModel: GroupManageViewModel
 ) {
     var name by remember { mutableStateOf(initialName) }
     var errorRes by remember { mutableStateOf<Int?>(null) }
@@ -65,10 +68,10 @@ private fun GroupNameDialog(
             TextButton(
                 onClick = {
                     when {
-                        name.isBlank() -> {
+                        name.isEmpty() -> {
                             errorRes = R.string.album_group_name_required
                         }
-                        !isNameAvailable(name) -> {
+                        !viewModel.isNameAvailable(name, excludeGroupId) -> {
                             errorRes = R.string.album_group_name_duplicate
                         }
                         else -> {
