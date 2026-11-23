@@ -1,4 +1,4 @@
-/** 应用轻量导航器，维护保活 Composable 页面栈并提供统一滑动转场。 */
+/** 应用轻量导航器，维护保活 Composable 页面栈（类似 Flutter Overlay + Offstage）并提供统一滑动转场。 */
 package com.giant8east.photomanager.navigation
 
 import androidx.compose.animation.core.Animatable
@@ -22,8 +22,13 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.lifecycle.HasDefaultViewModelProviderFactory
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 
 /** 指示当前页面是否处于导航入场/退场滑动动画中，供重型列表或缩略图网格延后首帧挂载。 */
@@ -35,8 +40,8 @@ class AppNavigator(
 ) {
     // 一个页面栈条目
     private class PageEntry(
-        val id: Long,   // 导航条目的唯一身份
-        val useSafeArea: Boolean,   // 为 false 时绘制到完整窗口，不使用普通页面的安全区 padding
+        val id: Long, // 导航条目的唯一身份
+        val useSafeArea: Boolean, // 为 false 时绘制到完整窗口，不使用普通页面的安全区 padding
         val content: @Composable () -> Unit
     ) {
         val viewModelStore = ViewModelStore()
@@ -44,8 +49,10 @@ class AppNavigator(
 
     private enum class TransitionKind { PUSH, POP }
 
-    private val pages = mutableStateListOf<PageEntry>() // 保活页面栈：被覆盖的底页留在组合树中，返回时不重建
+    // 保活页面栈：被覆盖的底页保留在组合树中不销毁，返回时无需重建整页 UI
+    private val pages = mutableStateListOf<PageEntry>()
     private var nextPageId = 0L
+    // 出栈退场期间临时托住正在滑出的页面，动画结束后才从组合树移除并清理 ViewModelStore
     private var exitingPage by mutableStateOf<PageEntry?>(null)
     private var transitionKind by mutableStateOf<TransitionKind?>(null)
     private var transitionToken by mutableIntStateOf(0)
@@ -81,8 +88,9 @@ class AppNavigator(
         val parentOwner = checkNotNull(LocalViewModelStoreOwner.current)
         var containerWidthPx by remember { mutableIntStateOf(0) }
         val progress = remember { Animatable(1f) }
-        val activeKind = transitionKind
-        val running = activeKind != null
+        // 同步记录 LaunchedEffect 已完成 snapTo(0f) 的转场序号；
+        // 在 LaunchedEffect 执行前的第 0 帧，appliedToken != transitionToken，直接同步按 0f 计算位移，彻底避免闪一帧旧值。
+        var appliedToken by remember { mutableIntStateOf(0) }
 
         DisposableEffect(this) {
             onDispose {
@@ -91,51 +99,60 @@ class AppNavigator(
             }
         }
 
-        // 唯一转场驱动协程：入栈/出栈共用 300ms 滑动进度，收尾统一清理已出栈页面的 ViewModelStore
         LaunchedEffect(transitionToken) {
-            if (transitionKind == null) return@LaunchedEffect
+            val kind = transitionKind ?: return@LaunchedEffect
             progress.snapTo(0f)
+            appliedToken = transitionToken
             progress.animateTo(1f, tween(TRANSITION_DURATION_MILLIS))
-            val popped = exitingPage
-            exitingPage = null
+            if (kind == TransitionKind.POP) {
+                val popped = exitingPage
+                exitingPage = null
+                popped?.viewModelStore?.clear()
+            }
             transitionKind = null
-            popped?.viewModelStore?.clear()
             if (pendingPop) {
                 pendingPop = false
                 pop()
             }
         }
 
+        val kind = transitionKind
+        val running = kind != null
+        val topIndex = pages.lastIndex
+        val token = transitionToken
+
         Box(
             Modifier
                 .fillMaxSize()
                 .onSizeChanged { containerWidthPx = it.width }
         ) {
-            val topIndex = pages.lastIndex
-            // 按栈底到栈顶顺序渲染，保证顶页的 BackHandler 与绘制层级始终在最上层
             pages.forEachIndexed { index, page ->
                 key(page.id) {
                     val isTop = index == topIndex
-                    val isUnderneath = index == topIndex - 1
+                    val isPreviousDuringPush = kind == TransitionKind.PUSH && index == topIndex - 1
+                    val isVisible = isTop || isPreviousDuringPush
+
                     PageSlot(
                         page = page,
                         parentOwner = parentOwner,
-                        isTransitioning = running,
+                        isVisible = isVisible,
+                        isTransitioning = running && isVisible,
                         modifier = Modifier
                             .fillMaxSize()
                             .graphicsLayer {
-                                val w = containerWidthPx.toFloat()
+                                val width = containerWidthPx.toFloat()
+                                val p = if (appliedToken == token) progress.value else 0f
                                 when {
-                                    activeKind == TransitionKind.PUSH && isTop -> {
-                                        translationX = (1f - progress.value) * w
+                                    isTop && kind == TransitionKind.PUSH -> {
+                                        translationX = (1f - p) * width
                                         alpha = 1f
                                     }
-                                    activeKind == TransitionKind.PUSH && isUnderneath -> {
-                                        translationX = -progress.value * w
+                                    isPreviousDuringPush -> {
+                                        translationX = -p * width
                                         alpha = 1f
                                     }
-                                    activeKind == TransitionKind.POP && isTop -> {
-                                        translationX = -(1f - progress.value) * w
+                                    isTop && kind == TransitionKind.POP -> {
+                                        translationX = -(1f - p) * width
                                         alpha = 1f
                                     }
                                     isTop -> {
@@ -143,9 +160,8 @@ class AppNavigator(
                                         alpha = 1f
                                     }
                                     else -> {
-                                        // 被覆盖的底页移出视口并置透明：保持组合树存活（返回零重建），
-                                        // 同时避免底层 AndroidView（如 DrawerLayout）拦截顶页触摸手势。
-                                        translationX = -w
+                                        // 被完全遮住的底页移出视口并隐藏绘制：既保活 UI 树，又防止底层 AndroidView 拦截边缘手势
+                                        translationX = -width
                                         alpha = 0f
                                     }
                                 }
@@ -154,18 +170,20 @@ class AppNavigator(
                 }
             }
 
-            // 正在出栈的页面叠在最顶层向右滑出，动画结束即移除并销毁 ViewModelStore
+            // 出栈退场页叠在栈顶之上，从 0 向右滑出到 +width
             val popped = exitingPage
             if (popped != null) {
                 key(popped.id) {
                     PageSlot(
                         page = popped,
                         parentOwner = parentOwner,
-                        isTransitioning = running,
+                        isVisible = true,
+                        isTransitioning = true,
                         modifier = Modifier
                             .fillMaxSize()
                             .graphicsLayer {
-                                translationX = progress.value * containerWidthPx.toFloat()
+                                val p = if (appliedToken == token) progress.value else 0f
+                                translationX = p * containerWidthPx.toFloat()
                                 alpha = 1f
                             }
                     )
@@ -193,6 +211,7 @@ class AppNavigator(
     private fun PageSlot(
         page: PageEntry,
         parentOwner: ViewModelStoreOwner,
+        isVisible: Boolean,
         isTransitioning: Boolean,
         modifier: Modifier
     ) {
@@ -205,9 +224,11 @@ class AppNavigator(
                     (parentOwner as HasDefaultViewModelProviderFactory).defaultViewModelCreationExtras
             }
         }
+        val pageLifecycleOwner = rememberPageLifecycleOwner(isVisible = isVisible)
         Box(modifier) {
             CompositionLocalProvider(
                 LocalViewModelStoreOwner provides owner,
+                LocalLifecycleOwner provides pageLifecycleOwner,
                 LocalIsNavTransitioning provides isTransitioning
             ) {
                 PageContainer(useSafeArea = page.useSafeArea) { page.content() }
@@ -217,5 +238,53 @@ class AppNavigator(
 
     private companion object {
         const val TRANSITION_DURATION_MILLIS = 300
+    }
+}
+
+/**
+ * 为保活栈中的每一页提供独立生命周期：
+ * 页面可见时跟随宿主 Activity 生命周期；被覆盖时自动降级到 CREATED，避免底页继续维持前台订阅（如 SSE 心跳）。
+ */
+@Composable
+private fun rememberPageLifecycleOwner(isVisible: Boolean): LifecycleOwner {
+    val parentLifecycle = LocalLifecycleOwner.current.lifecycle
+    val pageOwner = remember { PageLifecycleOwner() }
+
+    DisposableEffect(parentLifecycle, isVisible) {
+        fun syncState() {
+            val parentState = parentLifecycle.currentState
+            val targetState = if (isVisible) {
+                parentState
+            } else {
+                minOf(parentState, Lifecycle.State.CREATED)
+            }
+            if (targetState != Lifecycle.State.DESTROYED) {
+                pageOwner.moveTo(targetState)
+            }
+        }
+
+        val observer = LifecycleEventObserver { _, _ -> syncState() }
+        parentLifecycle.addObserver(observer)
+        syncState()
+        onDispose {
+            parentLifecycle.removeObserver(observer)
+        }
+    }
+
+    DisposableEffect(pageOwner) {
+        onDispose { pageOwner.moveTo(Lifecycle.State.DESTROYED) }
+    }
+
+    return pageOwner
+}
+
+private class PageLifecycleOwner : LifecycleOwner {
+    private val registry = LifecycleRegistry(this)
+    override val lifecycle: Lifecycle get() = registry
+
+    fun moveTo(state: Lifecycle.State) {
+        if (registry.currentState != Lifecycle.State.DESTROYED) {
+            registry.currentState = state
+        }
     }
 }

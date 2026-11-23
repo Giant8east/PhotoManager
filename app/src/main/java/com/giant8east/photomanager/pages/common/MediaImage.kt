@@ -1,4 +1,4 @@
-/** 通用图片展示组件：统一占位/失败兜底与 200ms 透明淡入，并组合出缩略图与头图两种语义样式。 */
+/** 通用图片展示组件：透明背景 + 加载/失败兜底与 200ms 纯 GPU 淡入，并组合出缩略图与头图两种语义样式。 */
 package com.giant8east.photomanager.pages.common
 
 import androidx.compose.animation.core.Animatable
