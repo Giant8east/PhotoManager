@@ -4,6 +4,7 @@ package com.giant8east.photomanager.data.media
 import coil.intercept.Interceptor
 import coil.request.ImageResult
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -21,18 +22,24 @@ class LocalAlbumCoverInterceptor : Interceptor {
             if (candidate.isFile) Pair(candidate, candidate.lastModified()) else null
         }
         if (thumbInfo == null) {
+            resolvedCacheKeys.remove(albumPath)
             return chain.proceed(request)
         }
         val (thumb, modifiedAt) = thumbInfo
+        val cacheKey = "${thumb.path}|$modifiedAt"
+        resolvedCacheKeys[albumPath] = cacheKey
         val updated = request.newBuilder()
             .data(thumb)
-            .memoryCacheKey("${thumb.path}|$modifiedAt")
+            .memoryCacheKey(cacheKey)
             .build()
         return chain.proceed(updated)
     }
 
-    // 等价于静态常量容器，统一请求参数键名
+    // 等价于静态常量容器，统一请求参数键名并记录最近解析的 .thumb 内存缓存键供详情头图复用
     companion object {
         const val ALBUM_PATH_PARAM = "local_album_path"
+        private val resolvedCacheKeys = ConcurrentHashMap<String, String>()
+
+        fun cachedCoverKey(albumPath: String): String? = resolvedCacheKeys[albumPath]
     }
 }

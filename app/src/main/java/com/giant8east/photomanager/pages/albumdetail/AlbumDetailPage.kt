@@ -3,6 +3,7 @@ package com.giant8east.photomanager.pages.albumdetail
 
 import android.annotation.SuppressLint
 import com.giant8east.photomanager.ui.state.PageContent
+import com.giant8east.photomanager.ui.state.PageState
 import android.text.format.Formatter
 import com.giant8east.photomanager.R
 import androidx.activity.compose.BackHandler
@@ -18,7 +19,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,7 +34,6 @@ import com.giant8east.photomanager.data.database.AlbumEntity
 import com.giant8east.photomanager.data.database.PhotoEntity
 import com.giant8east.photomanager.data.media.PhotoFormat
 import com.giant8east.photomanager.navigation.AppNavigator
-import com.giant8east.photomanager.navigation.LocalIsNavTransitioning
 import com.giant8east.photomanager.pages.common.AppLazyColumnScrollbar
 import com.giant8east.photomanager.pages.common.HeroCoverImage
 import com.giant8east.photomanager.pages.common.ThumbnailImage
@@ -54,21 +53,28 @@ fun AlbumDetailPage(
     )
 ) {
     BackHandler { navigator.pop() }
-    PageContent(viewModel.state, onRetry = viewModel::retryLoad) { content ->
-        AlbumDetailContent(
-            navigator = navigator,
-            content = content,
-            // 局域网下载来的相册显示来源设备名，本机相册显示"本地"
-            sourceLabel = content.album.sourceName.ifEmpty { stringResource(R.string.album_detail_local) },
-            onRefreshDirectory = viewModel::refreshDirectory,
-            onToggleFavorite = viewModel::toggleFavorite,
-            onToggleHidden = viewModel::toggleHidden,
-            onOpenViewer = { index ->
-                navigator.pushTo(useSafeArea = false) {
-                    PhotoViewerPage(navigator, content.album.id, index)
+    // 对齐 EhViewer bindViewFirst：Room 尚未返回照片列表时先用入参 album 立刻渲染头部，
+    // 避免转场期间先闪一下全屏转圈再出页面。
+    when (val state = viewModel.state) {
+        is PageState.Message -> PageContent(state, onRetry = viewModel::retryLoad) {}
+        is PageState.Loading,
+        is PageState.Content -> {
+            val content = if (state is PageState.Content) state.value else AlbumDetailUiState(album, emptyList())
+            AlbumDetailContent(
+                navigator = navigator,
+                content = content,
+                // 局域网下载来的相册显示来源设备名，本机相册显示"本地"
+                sourceLabel = content.album.sourceName.ifEmpty { stringResource(R.string.album_detail_local) },
+                onRefreshDirectory = viewModel::refreshDirectory,
+                onToggleFavorite = viewModel::toggleFavorite,
+                onToggleHidden = viewModel::toggleHidden,
+                onOpenViewer = { index ->
+                    navigator.pushTo(useSafeArea = false) {
+                        PhotoViewerPage(navigator, content.album.id, index)
+                    }
                 }
-            }
-        )
+            )
+        }
     }
 }
 
@@ -118,13 +124,6 @@ internal fun AlbumDetailContent(
             }
 
             val listState = rememberLazyListState()
-            val isTransitioning = LocalIsNavTransitioning.current
-            // 仅在首次入场转场期间延后挂载缩略图网格，避免 300ms 滑动动画与首屏多张图片解码争抢主线程；
-            // 使用 rememberSaveable 锁存：从阅读页返回时直接恢复已挂载状态，保留滚动位置且不闪烁。
-            var gridReady by rememberSaveable { mutableStateOf(!isTransitioning) }
-            LaunchedEffect(isTransitioning) {
-                if (!isTransitioning) gridReady = true
-            }
             AppLazyColumnScrollbar(state = listState) {
                 LazyColumn(Modifier.fillMaxSize(), state = listState) {
                     item(key = "header") {
@@ -143,25 +142,23 @@ internal fun AlbumDetailContent(
                         )
                     }
 
-                    if (gridReady) {
-                        photoGridRows(
-                            items = photos,
-                            columns = columns,
-                            itemKey = { it.id }
-                        ) { index, photo ->
-                            Column(
-                                Modifier.clickable { onOpenViewer(index) },
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                PhotoThumbnail(
-                                    photo = photo,
-                                    thumbnailUri = thumbnailUriFor(photo)
-                                )
-                                Text(
-                                    stringResource(R.string.album_detail_photo_index, index + 1),
-                                    color = colors.onBackground, fontSize = 14.sp, lineHeight = 20.sp
-                                )
-                            }
+                    photoGridRows(
+                        items = photos,
+                        columns = columns,
+                        itemKey = { it.id }
+                    ) { index, photo ->
+                        Column(
+                            Modifier.clickable { onOpenViewer(index) },
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            PhotoThumbnail(
+                                photo = photo,
+                                thumbnailUri = thumbnailUriFor(photo)
+                            )
+                            Text(
+                                stringResource(R.string.album_detail_photo_index, index + 1),
+                                color = colors.onBackground, fontSize = 14.sp, lineHeight = 20.sp
+                            )
                         }
                     }
                 }
@@ -241,6 +238,8 @@ private fun AlbumDetailHeader(
                 ) {
                     HeroCoverImage(
                         uri = album.coverPath,
+                        localAlbumPath = album.albumPath,
+                        coverVersionKey = album.modifiedAt,
                         modifier = Modifier.size(width = 128.dp, height = 192.dp)
                     )
                     Column(Modifier.weight(1f).padding(start = 16.dp)

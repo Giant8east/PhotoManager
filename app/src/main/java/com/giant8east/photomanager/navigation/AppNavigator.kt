@@ -120,17 +120,22 @@ class AppNavigator(
         val running = kind != null
         val topIndex = pages.lastIndex
         val token = transitionToken
+        val popped = exitingPage
+        // 将活跃栈与退场页合并到同一个循环渲染：pop() 时退场页仍留在同一调用位置和同一 key(page.id) 下，
+        // Compose 不会销毁重建页面，确保滑出期间头图、网格与滚动位置完整保留，等 300ms 动画结束再真正销毁。
+        val renderedPages = if (popped != null) pages + popped else pages
 
         Box(
             Modifier
                 .fillMaxSize()
                 .onSizeChanged { containerWidthPx = it.width }
         ) {
-            pages.forEachIndexed { index, page ->
+            renderedPages.forEachIndexed { index, page ->
                 key(page.id) {
-                    val isTop = index == topIndex
-                    val isPreviousDuringPush = kind == TransitionKind.PUSH && index == topIndex - 1
-                    val isVisible = isTop || isPreviousDuringPush
+                    val isExiting = popped != null && page === popped
+                    val isTop = !isExiting && index == topIndex
+                    val isPreviousDuringPush = !isExiting && kind == TransitionKind.PUSH && index == topIndex - 1
+                    val isVisible = isExiting || isTop || isPreviousDuringPush
 
                     PageSlot(
                         page = page,
@@ -143,6 +148,10 @@ class AppNavigator(
                                 val width = containerWidthPx.toFloat()
                                 val p = if (appliedToken == token) progress.value else 0f
                                 when {
+                                    isExiting -> {
+                                        translationX = p * width
+                                        alpha = 1f
+                                    }
                                     isTop && kind == TransitionKind.PUSH -> {
                                         translationX = (1f - p) * width
                                         alpha = 1f
@@ -165,26 +174,6 @@ class AppNavigator(
                                         alpha = 0f
                                     }
                                 }
-                            }
-                    )
-                }
-            }
-
-            // 出栈退场页叠在栈顶之上，从 0 向右滑出到 +width
-            val popped = exitingPage
-            if (popped != null) {
-                key(popped.id) {
-                    PageSlot(
-                        page = popped,
-                        parentOwner = parentOwner,
-                        isVisible = true,
-                        isTransitioning = true,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .graphicsLayer {
-                                val p = if (appliedToken == token) progress.value else 0f
-                                translationX = p * containerWidthPx.toFloat()
-                                alpha = 1f
                             }
                     )
                 }

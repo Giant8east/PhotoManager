@@ -90,6 +90,7 @@ fun AlbumCardFrame(
                     decodeHeightPx = COVER_DECODE_HEIGHT_PX,
                     localAlbumPath = localAlbumPath,
                     cacheVersionKey = coverVersionKey,
+                    memoryCacheKey = albumCoverCacheKey(coverUri = coverUri, versionKey = coverVersionKey),
                     modifier = Modifier
                         .width(80.dp)
                         .height(120.dp)
