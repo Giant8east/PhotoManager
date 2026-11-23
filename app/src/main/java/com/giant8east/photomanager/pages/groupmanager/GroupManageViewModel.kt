@@ -1,4 +1,4 @@
-/** 分组管理页状态与动作：观察分组并处理新增、重命名、删除和拖动排序。 */
+/** 分组管理页状态与动作：通过 PageState 暴露分组列表，写操作串行排队避免互相取消。 */
 package com.giant8east.photomanager.pages.groupmanager
 
 import android.content.Context
@@ -11,46 +11,57 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.giant8east.photomanager.R
-import com.giant8east.photomanager.data.group.GroupData
 import com.giant8east.photomanager.data.database.GroupEntity
+import com.giant8east.photomanager.data.group.GroupData
+import com.giant8east.photomanager.ui.state.PageState
+import com.giant8east.photomanager.ui.state.asPageStates
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
-import javax.inject.Inject
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 @HiltViewModel
 class GroupManageViewModel @Inject constructor(
     private val groupData: GroupData,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
-    var groups by mutableStateOf<List<GroupEntity>>(emptyList())
+    var state by mutableStateOf<PageState<List<GroupEntity>>>(PageState.Loading)
         private set
 
-    private var operationJob: Job? = null
+    private var observeJob: Job? = null
+    // 写操作（增/改/删/拖拽排序）用 Mutex 串行排队，不取消上一次已发出的数据库事务
+    private val mutationMutex = Mutex()
 
     init {
-        viewModelScope.launch {
+        observeGroups()
+    }
+
+    fun retry() = observeGroups()
+
+    private fun observeGroups() {
+        observeJob?.cancel()
+        state = PageState.Loading
+        observeJob = viewModelScope.launch {
             groupData.groups
-                .catch { error ->
-                    if (error is CancellationException) throw error
-                    showError(R.string.page_albums_load_failed)
-                }
-                .collect { groups = it }
+                .asPageStates(R.string.page_albums_load_failed) { PageState.Content(it) }
+                .collect { state = it }
         }
     }
 
     fun createGroup(name: String) {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return
-        perform { groupData.createGroup(trimmed) }
+        performMutation { groupData.createGroup(trimmed) }
     }
 
     fun isNameAvailable(name: String, excludeGroupId: Long?): Boolean {
         val trimmed = name.trim()
-        return groups.none { group ->
+        val currentGroups = (state as? PageState.Content)?.value.orEmpty()
+        return currentGroups.none { group ->
             group.id != excludeGroupId && group.name == trimmed
         }
     }
@@ -58,27 +69,34 @@ class GroupManageViewModel @Inject constructor(
     fun renameGroup(group: GroupEntity, name: String) {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return
-        perform { groupData.renameGroup(group, trimmed) }
+        performMutation { groupData.renameGroup(group, trimmed) }
     }
 
-    fun deleteGroup(group: GroupEntity) = perform {
+    fun deleteGroup(group: GroupEntity) = performMutation {
         groupData.deleteGroup(group.id)
     }
 
-    fun moveGroup(fromIndex: Int, toIndex: Int) = perform {
+    fun moveGroup(fromIndex: Int, toIndex: Int, onFailed: () -> Unit = {}) = performMutation(
+        onFailed = onFailed
+    ) {
         groupData.moveGroup(fromIndex, toIndex)
     }
 
-    private fun perform(action: suspend () -> Unit) {
-        operationJob?.cancel()
-        operationJob = viewModelScope.launch {
-            try {
-                action()
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Exception) {
-                Log.w(TAG, "Group operation failed", error)
-                showError(R.string.album_operation_failed)
+    private fun performMutation(
+        onFailed: () -> Unit = {},
+        action: suspend () -> Unit
+    ) {
+        viewModelScope.launch {
+            mutationMutex.withLock {
+                try {
+                    action()
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    Log.w(TAG, "Group operation failed", error)
+                    showError(R.string.album_operation_failed)
+                    onFailed()
+                }
             }
         }
     }

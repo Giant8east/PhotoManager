@@ -36,6 +36,7 @@ import com.giant8east.photomanager.data.database.PhotoEntity
 import com.giant8east.photomanager.data.media.PhotoFormat
 import com.giant8east.photomanager.navigation.AppNavigator
 import com.giant8east.photomanager.navigation.LocalIsNavTransitioning
+import com.giant8east.photomanager.navigation.LocalNavPageId
 import com.giant8east.photomanager.pages.common.AppLazyColumnScrollbar
 import com.giant8east.photomanager.pages.common.HeroCoverImage
 import com.giant8east.photomanager.pages.common.ThumbnailImage
@@ -277,6 +278,7 @@ private fun AlbumDetailHeader(
     actionsEnabled: Boolean
 ) {
     val lastViewedIndex = album.lastViewedPhotoIndex
+    val pageId = LocalNavPageId.current
 
     Column {
         Box {
@@ -380,7 +382,7 @@ private fun AlbumDetailHeader(
                         text = { Text(stringResource(R.string.album_detail_refresh)) },
                         onClick = { dismiss()
                             onRefreshDirectory { isAlbumAvailable ->
-                                if (!isAlbumAvailable) navigator.pop()
+                                if (!isAlbumAvailable) navigator.popEntry(pageId)
                             }
                         }
                     )
