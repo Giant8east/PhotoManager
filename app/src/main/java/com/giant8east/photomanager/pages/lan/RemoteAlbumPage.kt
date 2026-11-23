@@ -1,7 +1,6 @@
 /** 远端相册页：外观与本地相册页一致（侧边分组抽屉 + 同一张相册卡片 + 多选下载 FAB）。 */
 package com.giant8east.photomanager.pages.lan
 
-import android.text.format.Formatter
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -14,15 +13,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -46,9 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -57,18 +51,15 @@ import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.collectAsLazyPagingItems
 import com.giant8east.photomanager.R
-import com.giant8east.photomanager.data.database.AlbumEntity
 import com.giant8east.photomanager.data.database.GroupEntity
 import com.giant8east.photomanager.data.database.GroupWithAlbumCount
 import com.giant8east.photomanager.data.lan.RemoteAlbumKey
-import com.giant8east.photomanager.data.lan.RemoteDownloadStatus
 import com.giant8east.photomanager.data.lan.RemoteDownloadTask
 import com.giant8east.photomanager.lan.protocol.LanAlbumDto
 import com.giant8east.photomanager.lan.protocol.LanDevice
 import com.giant8east.photomanager.navigation.AppNavigator
 import com.giant8east.photomanager.navigation.LocalIsNavTransitioning
 import com.giant8east.photomanager.pages.album.AlbumGroupDrawer
-import com.giant8east.photomanager.pages.album.AlbumListCard
 import com.giant8east.photomanager.pages.album.AlbumSelectionState
 import com.giant8east.photomanager.pages.album.AlbumSortSheet
 import com.giant8east.photomanager.pages.common.AppLazyColumnScrollbar
@@ -345,7 +336,7 @@ private fun RemoteAlbumList(
                             val album = albums[index]
                             if (album != null) {
                                 val task = downloadTasks[RemoteAlbumKey.of(device, album.id)]
-                                RemoteAlbumRow(
+                                RemoteAlbumCard(
                                     album = album,
                                     device = device,
                                     selection = selection,
@@ -370,153 +361,4 @@ private fun RemoteAlbumList(
             }
         }
     }
-}
-
-@Composable
-private fun RemoteAlbumRow(
-    album: LanAlbumDto,
-    device: LanDevice,
-    selection: AlbumSelectionState,
-    navigator: AppNavigator,
-    task: RemoteDownloadTask?,
-    isDownloaded: Boolean,
-    onToggleDownload: () -> Unit
-) {
-    val context = LocalContext.current
-    val remoteAlbum = remember(album, device.address) {
-        AlbumEntity(
-            id = album.id,
-            name = album.name,
-            modifiedAt = album.modifiedAt,
-            photoCount = album.photoCount,
-            totalSizeBytes = album.sizeBytes,
-            coverPath = album.coverUrl?.let { "http://${device.address}$it" }.orEmpty(),
-            albumPath = ""
-        )
-    }
-    val status = task?.status
-    val isActive = status is RemoteDownloadStatus.Queued || status is RemoteDownloadStatus.Downloading
-    val downloading = status as? RemoteDownloadStatus.Downloading
-
-    AlbumListCard(
-        album = remoteAlbum,
-        selection = selection,
-        navigator = navigator,
-        onToggleFavorite = {},
-        dragHandleModifier = Modifier,
-        reorderEnabled = false,
-        onReorderBlocked = {},
-        onCardClick = {
-            navigator.pushTo {
-                RemoteAlbumDetailPage(navigator = navigator, device = device, album = album)
-            }
-        },
-        showFavorite = false,
-        selectionEnabled = true,
-        showDragHandle = false,
-        // 非下载态的右侧按钮：排队中显示暂停，其余（含已下载）显示播放以开始或增量刷新
-        trailingAction = {
-            IconButton(
-                onClick = onToggleDownload,
-                modifier = Modifier.size(40.dp)
-            ) {
-                Icon(
-                    imageVector = if (isActive) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        },
-        statusBadge = {
-            when (status) {
-                is RemoteDownloadStatus.Queued -> Text(
-                    text = stringResource(R.string.lan_download_queued),
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.primary,
-                    maxLines = 1
-                )
-                is RemoteDownloadStatus.Paused -> Text(
-                    text = stringResource(R.string.lan_download_paused_short, status.finished, status.total),
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1
-                )
-                is RemoteDownloadStatus.Failed -> Text(
-                    text = stringResource(R.string.lan_download_failed),
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.error,
-                    maxLines = 1
-                )
-                is RemoteDownloadStatus.Finished -> Text(
-                    text = stringResource(R.string.lan_download_completed_badge),
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.primary,
-                    maxLines = 1
-                )
-                else -> if (isDownloaded) {
-                    Text(
-                        text = stringResource(R.string.lan_download_completed_badge),
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.primary,
-                        maxLines = 1
-                    )
-                }
-            }
-        },
-        // 对齐 EhViewer item_download.xml：下载中隐藏原先的统计信息，原位替换为 进度/速度 + 内部进度条 + 右下暂停
-        downloadingContent = downloading?.let { dl ->
-            {
-                val speedText = "${Formatter.formatShortFileSize(context, dl.bytesPerSecond)}/s"
-                Column(Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = if (dl.total > 0) "${dl.finished}/${dl.total}" else "",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1
-                        )
-                        Text(
-                            text = speedText,
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    if (dl.total > 0) {
-                        LinearProgressIndicator(
-                            progress = { (dl.finished.toFloat() / dl.total).coerceIn(0f, 1f) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp)
-                                .height(4.dp)
-                        )
-                    } else {
-                        LinearProgressIndicator(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp)
-                                .height(4.dp)
-                        )
-                    }
-                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-                        IconButton(
-                            onClick = onToggleDownload,
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Pause,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    )
 }

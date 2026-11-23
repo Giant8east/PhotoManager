@@ -222,7 +222,7 @@ private fun AlbumList(
                     // 位移/淡入淡出统一由这里控制，卡片上不再叠加第二层 animateItem。
                     animateItemModifier = Modifier.animateItem()
                 ) { _ ->
-                    AlbumListCard(
+                    LocalAlbumCard(
                         album = album,
                         selection = selection,
                         navigator = navigator,

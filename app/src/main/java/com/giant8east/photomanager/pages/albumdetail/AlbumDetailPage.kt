@@ -23,7 +23,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
@@ -31,16 +30,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import coil.compose.AsyncImage
-import coil.decode.BitmapFactoryDecoder
-import coil.request.ImageRequest
-import coil.size.Precision
 import com.giant8east.photomanager.data.database.AlbumEntity
 import com.giant8east.photomanager.data.database.PhotoEntity
 import com.giant8east.photomanager.data.media.PhotoFormat
 import com.giant8east.photomanager.navigation.AppNavigator
 import com.giant8east.photomanager.navigation.LocalIsNavTransitioning
 import com.giant8east.photomanager.pages.common.AppLazyColumnScrollbar
+import com.giant8east.photomanager.pages.common.HeroCoverImage
+import com.giant8east.photomanager.pages.common.ThumbnailImage
 import com.giant8east.photomanager.ui.format.rememberAlbumModifiedTimeText
 import com.giant8east.photomanager.ui.theme.appColors
 import com.giant8east.photomanager.pages.photoviewer.PhotoViewerPage
@@ -182,48 +179,24 @@ private fun DetailDivider() {
 }
 
 @Composable
-private fun AlbumThumbnail(uri: String) {
-    val context = LocalContext.current
-    val request = remember(uri) {
-        ImageRequest.Builder(context).data(uri)
-            .memoryCacheKey("$uri|detail-cover-animated")
-            .build()
-    }
-    AsyncImage(request, null, Modifier.size(width = 128.dp, height = 192.dp),
-        contentScale = ContentScale.Fit
-    )
-}
-
-@Composable
 private fun PhotoThumbnail(
     photo: PhotoEntity,
     thumbnailUri: String
 ) {
-    val context = LocalContext.current
-    val request = remember(thumbnailUri, photo.modifiedAt) {
-        ImageRequest.Builder(context).data(thumbnailUri)
-            .decoderFactory(BitmapFactoryDecoder.Factory()) // 强制按静态 Bitmap 解码，只取第一帧
-            // 单格目标宽约 120dp（2:3），按 3x 密度封顶解码尺寸并允许 INEXACT，触发快速 2 的幂次降采样
-            .size(THUMBNAIL_DECODE_WIDTH_PX, THUMBNAIL_DECODE_HEIGHT_PX)
-            .precision(Precision.INEXACT)
-            .memoryCacheKey("$thumbnailUri|${photo.modifiedAt}|gallery-static")
-            .build()
-    }
-    var contentScale by remember(request) { mutableStateOf(ContentScale.Fit) }
     Box(
         Modifier
             .fillMaxWidth()
             .aspectRatio(2 / 3f)
     ) {
-        AsyncImage(
-            request,
-            null,
-            Modifier.fillMaxSize(),
-            contentScale = contentScale,
-            onSuccess = { result ->
-                val drawable = result.result.drawable
-                contentScale = galleryThumbnailScale(drawable.intrinsicWidth, drawable.intrinsicHeight)
-            }
+        ThumbnailImage(
+            uri = thumbnailUri,
+            decodeWidthPx = THUMBNAIL_DECODE_WIDTH_PX,
+            decodeHeightPx = THUMBNAIL_DECODE_HEIGHT_PX,
+            cacheVersionKey = photo.modifiedAt,
+            memoryCacheKey = "$thumbnailUri|${photo.modifiedAt}|gallery-static",
+            // 等价于 { w, h -> galleryThumbnailScale(w, h) }
+            contentScaleFor = ::galleryThumbnailScale,
+            modifier = Modifier.fillMaxSize()
         )
         PhotoFormatBadge(
             format = photo.format,
@@ -266,7 +239,10 @@ private fun AlbumDetailHeader(
             }
             Column { Row(Modifier.fillMaxWidth().padding(16.dp)
                 ) {
-                    AlbumThumbnail(album.coverPath)
+                    HeroCoverImage(
+                        uri = album.coverPath,
+                        modifier = Modifier.size(width = 128.dp, height = 192.dp)
+                    )
                     Column(Modifier.weight(1f).padding(start = 16.dp)
                     ) {
                         Text(
