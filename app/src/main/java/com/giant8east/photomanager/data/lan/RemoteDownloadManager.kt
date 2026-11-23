@@ -9,6 +9,7 @@ import androidx.core.content.ContextCompat
 import com.giant8east.photomanager.data.album.AlbumIndexer
 import com.giant8east.photomanager.data.database.AlbumDao
 import com.giant8east.photomanager.data.media.PhotoFormat
+import com.giant8east.photomanager.data.scan.ScanRootsData
 import com.giant8east.photomanager.lan.client.LanClient
 import com.giant8east.photomanager.lan.client.LanDownloadService
 import com.giant8east.photomanager.lan.client.LanHttp
@@ -91,7 +92,8 @@ class RemoteDownloadManager @Inject constructor(
     private val lanHttp: LanHttp,
     private val remoteDownloadData: RemoteDownloadData,
     private val albumIndexer: AlbumIndexer,
-    private val albumDao: AlbumDao
+    private val albumDao: AlbumDao,
+    private val scanRootsData: ScanRootsData
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val queueLock = Any()
@@ -260,6 +262,7 @@ class RemoteDownloadManager @Inject constructor(
             }
 
             indexDownloadedAlbum(localDir, request)
+            registerSyncRoot()
 
             synchronized(queueLock) { sessionCompleted++ }
             mutableTasks.update { map ->
@@ -318,6 +321,30 @@ class RemoteDownloadManager @Inject constructor(
             remoteDeviceId = request.key.deviceKey,
             remoteAlbumId = request.album.id
         )
+    }
+
+    /**
+     * 把下载根目录登记成扫描根，让它同时承担"默认同步路径"的角色。
+     *
+     * 登记的是**下载根**而不是这一本相册的目录：一本相册一条根会让设置页的目录列表越下载越长；
+     * [ScanRootsData.addRoot] 本身会吞并已被覆盖的子路径，因此重复登记不会产生重复条目。
+     *
+     * 只在整本下载完成后调用：中途暂停/失败的目录已由 [indexDownloadedAlbum] 直接入库，
+     * 半成品不该开始参与常规同步。
+     */
+    private suspend fun registerSyncRoot() {
+        val rootPath = remoteDownloadData.getPath()
+        try {
+            if (scanRootsData.addRoot(rootPath)) {
+                Log.i(TAG, "registered download root as sync root: $rootPath")
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            // 图片已经落盘并入库，这里失败只影响"以后的常规同步会不会覆盖到这个目录"，
+            // 不能让一本已经下完的相册因此判为下载失败，所以只留排查线索。
+            Log.w(TAG, "failed to register download root as sync root: $rootPath", error)
+        }
     }
 
     /** 原子落盘：先流式写 `.part`，完整写完后重命名为目标文件，避免中途停止留下半截坏图。 */
