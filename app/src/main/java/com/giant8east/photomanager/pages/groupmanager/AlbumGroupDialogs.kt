@@ -68,14 +68,14 @@ private fun GroupNameDialog(
             TextButton(
                 onClick = {
                     when {
-                        name.isEmpty() -> {
+                        name.isBlank() -> {
                             errorRes = R.string.album_group_name_required
                         }
                         !viewModel.isNameAvailable(name, excludeGroupId) -> {
                             errorRes = R.string.album_group_name_duplicate
                         }
                         else -> {
-                            onSubmit(name)
+                            onSubmit(name.trim())
                             close()
                         }
                     }

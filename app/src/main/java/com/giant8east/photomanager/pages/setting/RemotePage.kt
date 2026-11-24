@@ -119,7 +119,9 @@ fun RemotePage(navigator: AppNavigator, viewModel: RemotePageViewModel = hiltVie
             }
         }
     ) {
-        Column(Modifier.fillMaxSize()) {
+        // 整页统一放入单个 LazyColumn，避免横屏或已记住设备过多时把发现设备列表挤成 0 高
+        LazyColumn(Modifier.fillMaxSize()) {
+            item(key = "download_path") {
                 Row(
                     Modifier
                         .fillMaxWidth()
@@ -153,6 +155,8 @@ fun RemotePage(navigator: AppNavigator, viewModel: RemotePageViewModel = hiltVie
                     )
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
+            item(key = "lan_share") {
                 Row(
                     Modifier
                         .fillMaxWidth()
@@ -190,9 +194,11 @@ fun RemotePage(navigator: AppNavigator, viewModel: RemotePageViewModel = hiltVie
                     )
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                // 共享要在后台长期在线；被电量优化限制时系统会把进程压进 background cpuset，
-                // 对端心跳超时后就判定断连。允许过就不再打扰。
-                if (!viewModel.ignoresBatteryOptimizations) {
+            }
+            // 共享要在后台长期在线；被电量优化限制时系统会把进程压进 background cpuset，
+            // 对端心跳超时后就判定断连。允许过就不再打扰。
+            if (!viewModel.ignoresBatteryOptimizations) {
+                item(key = "battery_optimization") {
                     Row(
                         Modifier
                             .fillMaxWidth()
@@ -219,63 +225,70 @@ fun RemotePage(navigator: AppNavigator, viewModel: RemotePageViewModel = hiltVie
                     }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 }
-                if (viewModel.trustedDevices.isNotEmpty()) {
+            }
+            if (viewModel.trustedDevices.isNotEmpty()) {
+                item(key = "trusted_header") {
                     Text(
                         stringResource(R.string.lan_trusted_devices),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp)
                     )
-                    // 已记住的设备：撤销会同时踢掉它正在用的 token 并删掉白名单记录
-                    viewModel.trustedDevices.forEach { device ->
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Text(
-                                    device.name,
-                                    style = MaterialTheme.typography.titleMedium
-                                )
-                                Text(
-                                    device.deviceId.take(8),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            TextButton(onClick = { viewModel.revokeDevice(device.deviceId) }) {
-                                Text(stringResource(R.string.lan_revoke))
-                            }
+                }
+                // 已记住的设备：撤销会同时踢掉它正在用的 token 并删掉白名单记录
+                items(viewModel.trustedDevices, key = { "trusted_${it.deviceId}" }) { device ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                device.name,
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Text(
+                                device.deviceId.take(8),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        TextButton(onClick = { viewModel.revokeDevice(device.deviceId) }) {
+                            Text(stringResource(R.string.lan_revoke))
                         }
                     }
+                }
+                item(key = "trusted_divider") {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 }
+            }
+            item(key = "devices_header") {
                 Text(
                     stringResource(R.string.lan_devices_section),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp)
                 )
-                if (viewModel.devices.isEmpty()) {
+            }
+            if (viewModel.devices.isEmpty()) {
+                item(key = "devices_empty") {
                     Text(
                         stringResource(R.string.lan_no_devices),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
-                } else {
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        items(viewModel.devices, key = { it.address }) { device ->
-                            DeviceRow(device) {
-                                // 先请求配对，对端确认后再跳转
-                                viewModel.requestOpen(device)
-                            }
-                        }
+                }
+            } else {
+                items(viewModel.devices, key = { "device_${it.address}" }) { device ->
+                    DeviceRow(device) {
+                        // 先请求配对，对端确认后再跳转
+                        viewModel.requestOpen(device)
                     }
                 }
             }
         }
+    }
 
     PairingRequestDialog(viewModel)
 

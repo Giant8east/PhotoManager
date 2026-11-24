@@ -62,14 +62,23 @@ internal fun AlbumPage(
     // 拖拽顺序由页面持有：列表、FAB 的保存按钮、退出多选的确认弹窗共用同一份快照。
     val dragState = remember { AlbumDragState() }
 
-    // 排序切换后回到顶部：旧滚动索引在新顺序下没有意义。
-    // 初始值取当前排序，首次组合与返回页面时都不滚动，避免破坏滚动位置恢复。
-    val sortKey = viewModel.sortField to viewModel.isDescending
-    val previousSortKey = remember { mutableStateOf(sortKey) }
-    LaunchedEffect(sortKey) {
-        if (previousSortKey.value != sortKey) {
-            previousSortKey.value = sortKey
-            albumListState.requestScrollToItem(0)
+    // 排序/分组/收藏/搜索条件变化时丢弃未保存的拖拽快照，并在排序变化时回到顶部。
+    // 初始值取当前条件，首次组合与返回页面时不误清快照、不破坏滚动位置恢复。
+    val queryKey = listOf(
+        viewModel.sortField,
+        viewModel.isDescending,
+        viewModel.selectedGroupId,
+        viewModel.favoritesOnly,
+        viewModel.searchInput
+    )
+    val previousQueryKey = remember { mutableStateOf(queryKey) }
+    LaunchedEffect(queryKey) {
+        if (previousQueryKey.value != queryKey) {
+            val sortChanged = previousQueryKey.value[0] != queryKey[0] ||
+                previousQueryKey.value[1] != queryKey[1]
+            previousQueryKey.value = queryKey
+            dragState.discard()
+            if (sortChanged) albumListState.requestScrollToItem(0)
         }
     }
 

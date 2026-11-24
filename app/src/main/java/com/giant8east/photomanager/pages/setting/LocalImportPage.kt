@@ -44,8 +44,11 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.giant8east.photomanager.R
 import com.giant8east.photomanager.navigation.AppNavigator
+import com.giant8east.photomanager.pages.common.AppDialog
 import com.giant8east.photomanager.pages.common.AppLazyColumnScrollbar
 import com.giant8east.photomanager.pages.common.AppPageScaffold
+import com.giant8east.photomanager.pages.common.DialogHost
+import com.giant8east.photomanager.pages.common.rememberDialogStack
 import com.giant8east.photomanager.ui.state.resolve
 import com.giant8east.photomanager.ui.theme.appColors
 
@@ -57,6 +60,7 @@ fun LocalImportPage(
 ) {
     BackHandler { navigator.pop() }
     val listState = rememberLazyListState()
+    val dialogs = rememberDialogStack()
     val launcher =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
             uri ?: return@rememberLauncherForActivityResult
@@ -180,7 +184,32 @@ fun LocalImportPage(
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
-                                        IconButton(onClick = { viewModel.removeDirectory(directory) }) {
+                                        IconButton(
+                                            onClick = {
+                                                dialogs.show {
+                                                    AppDialog(
+                                                        title = stringResource(R.string.setting_remove_directory_title),
+                                                        buttons = { close ->
+                                                            TextButton(
+                                                                onClick = {
+                                                                    viewModel.removeDirectory(directory)
+                                                                    close()
+                                                                }
+                                                            ) {
+                                                                Text(stringResource(R.string.album_action_delete))
+                                                            }
+                                                        }
+                                                    ) {
+                                                        Text(
+                                                            stringResource(
+                                                                R.string.setting_remove_directory_message,
+                                                                directory.name
+                                                            )
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        ) {
                                             Icon(Icons.Default.Delete, contentDescription = null)
                                         }
                                     }
@@ -191,4 +220,5 @@ fun LocalImportPage(
                 }
             }
     }
+    DialogHost(dialogs)
 }

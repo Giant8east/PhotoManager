@@ -210,4 +210,6 @@
     <string name="album_card_uploader_placeholder">Uploader</string>
     <string name="album_card_rating_placeholder">★★★★★</string>
     <string name="album_card_category_placeholder">CATEGORY</string>
+    <string name="setting_remove_directory_title">移除导入目录</string>
+    <string name="setting_remove_directory_message">确定要移除目录「%1$s」吗？本地文件不会被删除，但该目录下相册的分组、收藏与阅读进度记录将被清理。</string>
 </resources>
