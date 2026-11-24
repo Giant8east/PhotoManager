@@ -14,6 +14,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
 
+/** 单相册刷新的结果：区分仍有效、已无图移除、被同路径高优先级任务让位与扫描失败。 */
+sealed interface RefreshAlbumResult {
+    data object Updated : RefreshAlbumResult
+    data object Removed : RefreshAlbumResult
+    data object Cancelled : RefreshAlbumResult
+    data class Failed(val message: String?) : RefreshAlbumResult
+}
+
 /**
  * 同步的唯一入口，分三个阶段，各管一件事：
  * 1. 遍历：只列出目录清单（[DirectoryScanner.collectDirectories]），不写库；
@@ -41,10 +49,15 @@ class AlbumSyncData @Inject constructor(
         unindexVanished(normalizedRoot, directories)
     }
 
-    /** 单相册刷新入口：返回刷新后目录是否仍有图片。 */
-    suspend fun refreshAlbum(path: String): Boolean {
+    /** 单相册刷新入口：把调度器结果翻译成调用方可区分的四态结果。 */
+    suspend fun refreshAlbum(path: String): RefreshAlbumResult {
         val task = FolderTask(LocalPaths.normalize(path), TaskKind.SCAN_REFRESH)
-        return scheduler.enqueue(task).await() is TaskResult.Done
+        return when (val result = scheduler.enqueue(task).await()) {
+            is TaskResult.Done -> RefreshAlbumResult.Updated
+            TaskResult.Skipped -> RefreshAlbumResult.Removed
+            TaskResult.Cancelled -> RefreshAlbumResult.Cancelled
+            is TaskResult.Failed -> RefreshAlbumResult.Failed(result.message)
+        }
     }
 
     /**

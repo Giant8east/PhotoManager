@@ -25,6 +25,7 @@
     <string name="directory_read_failed">Unable to read directory: %1$s</string>
     <string name="album_delete_success">Album deleted</string>
     <string name="album_refresh_success">Album refreshed</string>
+    <string name="album_refresh_busy">This folder is busy with another task. Please try again later.</string>
     <string name="album_record_removed">Album record removed</string>
     <string name="album_detail_refresh">Refresh</string>
     <string name="album_detail_local">Local album</string>

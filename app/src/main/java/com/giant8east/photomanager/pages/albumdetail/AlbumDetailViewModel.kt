@@ -14,6 +14,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.giant8east.photomanager.data.album.AlbumData
 import com.giant8east.photomanager.data.album.AlbumSyncData
+import com.giant8east.photomanager.data.album.RefreshAlbumResult
 import com.giant8east.photomanager.data.database.AlbumEntity
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -70,11 +71,25 @@ class AlbumDetailViewModel @AssistedInject constructor(
         if (refreshJob?.isActive == true) return
         refreshJob = viewModelScope.launch {
             try {
-                val isAlbumAvailable = albumSyncData.refreshAlbum(albumPath)
-                val messageRes = if (isAlbumAvailable) R.string.album_refresh_success
-                else R.string.album_record_removed
-                Toast.makeText(context, messageRes, Toast.LENGTH_SHORT).show()
-                onFinished(isAlbumAvailable)
+                when (val result = albumSyncData.refreshAlbum(albumPath)) {
+                    RefreshAlbumResult.Updated -> {
+                        Toast.makeText(context, R.string.album_refresh_success, Toast.LENGTH_SHORT).show()
+                        onFinished(true)
+                    }
+                    RefreshAlbumResult.Removed -> {
+                        Toast.makeText(context, R.string.album_record_removed, Toast.LENGTH_SHORT).show()
+                        onFinished(false)
+                    }
+                    RefreshAlbumResult.Cancelled -> {
+                        Toast.makeText(context, R.string.album_refresh_busy, Toast.LENGTH_SHORT).show()
+                        onFinished(true)
+                    }
+                    is RefreshAlbumResult.Failed -> {
+                        val message = result.message ?: context.getString(R.string.album_detail_refresh_failed)
+                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                        onFinished(true)
+                    }
+                }
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {

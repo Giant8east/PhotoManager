@@ -6,10 +6,13 @@ import android.content.Intent
 import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
-import com.giant8east.photomanager.data.album.AlbumIndexer
 import com.giant8east.photomanager.data.database.AlbumDao
 import com.giant8east.photomanager.data.media.PhotoFormat
 import com.giant8east.photomanager.data.scan.ScanRootsData
+import com.giant8east.photomanager.data.task.FolderTask
+import com.giant8east.photomanager.data.task.FolderTaskScheduler
+import com.giant8east.photomanager.data.task.TaskKind
+import com.giant8east.photomanager.data.task.TaskResult
 import com.giant8east.photomanager.lan.client.LanClient
 import com.giant8east.photomanager.lan.client.LanDownloadService
 import com.giant8east.photomanager.lan.client.LanHttp
@@ -91,7 +94,7 @@ class RemoteDownloadManager @Inject constructor(
     private val lanClient: LanClient,
     private val lanHttp: LanHttp,
     private val remoteDownloadData: RemoteDownloadData,
-    private val albumIndexer: AlbumIndexer,
+    private val scheduler: FolderTaskScheduler,
     private val albumDao: AlbumDao,
     private val scanRootsData: ScanRootsData
 ) {
@@ -311,10 +314,11 @@ class RemoteDownloadManager @Inject constructor(
         }
     }
 
-    /** 将落地目录扫描入库（同步生成 .thumb），并打上来源设备与远端相册 ID 标记。 */
+    /** 经由调度器把落地目录扫描入库（与同步、删除互斥），再补写来源设备与远端相册 ID 标记。 */
     private suspend fun indexDownloadedAlbum(localDir: File, request: QueuedRequest) {
         val normalizedPath = LocalPaths.normalize(localDir.path)
-        albumIndexer.scanAndWrite(normalizedPath)
+        val result = scheduler.enqueue(FolderTask(normalizedPath, TaskKind.SCAN_REFRESH)).await()
+        if (result !is TaskResult.Done) return
         albumDao.updateAlbumSourceByPath(
             albumPath = normalizedPath,
             sourceName = request.device.name,

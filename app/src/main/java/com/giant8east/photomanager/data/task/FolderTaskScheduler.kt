@@ -6,7 +6,6 @@ import com.giant8east.photomanager.util.LocalPaths
 import java.util.EnumMap
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -70,7 +69,7 @@ class FolderTaskScheduler @Inject constructor(
     val fileProgress: StateFlow<FileProgress> = _fileProgress.asStateFlow()
 
     /**
-     * 排队一个任务并返回句柄；同一路径已有同级或更高优先级的任务时，复用那个任务的句柄。
+     * 排队一个任务并返回句柄；同一路径已有同类型任务时复用它的句柄。
      */
     suspend fun enqueue(task: FolderTask): Deferred<TaskResult> {
         val deferred = CompletableDeferred<TaskResult>()
@@ -85,9 +84,10 @@ class FolderTaskScheduler @Inject constructor(
     /**
      * 把任务放进队列，保证"同一路径只排一个任务"。
      *
-     * 已有同级或更高优先级的任务时直接复用它的句柄——本次这个任务不再执行，
-     * 调用方等到的就是那个已在队列里的任务的结果。
-     * 只有更高优先级的任务能顶掉排队的低优先级任务，被顶掉的那个以 [TaskResult.Cancelled] 结束。
+     * - 已有同类型任务时复用它的句柄，两次请求等同一份结果；
+     * - 已有更高优先级的不同类型任务时，不跨类型复用句柄（避免删除拿到只删库行的 Done，或刷新拿到删除的 Done），
+     *   本次低优先级任务直接以 [TaskResult.Cancelled] 结束；
+     * - 只有更高优先级的任务能顶掉排队的低优先级任务，被顶掉的那个以 [TaskResult.Cancelled] 结束。
      *
      * 调用方必须已经持有 [mutex]：入队与去重必须是一个原子步骤，否则两个并发入队会都通过检查。
      */
@@ -98,8 +98,12 @@ class FolderTaskScheduler @Inject constructor(
         val existingIndex = pending.indexOfFirst { it.task.path == task.path }
         if (existingIndex >= 0) {
             val existing = pending[existingIndex]
-            if (existing.task.kind.priority >= task.kind.priority) {
+            if (existing.task.kind == task.kind) {
                 return existing.deferred
+            }
+            if (existing.task.kind.priority > task.kind.priority) {
+                deferred.complete(TaskResult.Cancelled)
+                return deferred
             }
             pending.removeAt(existingIndex)
             existing.deferred.complete(TaskResult.Cancelled)
@@ -160,10 +164,6 @@ class FolderTaskScheduler @Inject constructor(
         val handler = checkNotNull(handlers[task.kind]) { "没有注册的任务处理器：${task.kind}" }
         val result = try {
             handler.handle(task, SchedulerContext(task))
-        } catch (cancelled: CancellationException) {
-            // 协程取消必须继续抛出，不能让取消被当成普通失败吞掉
-            finish(dispatch, TaskResult.Cancelled)
-            throw cancelled
         } catch (error: Exception) {
             Log.e(TAG, "task ${task.kind} failed on ${task.path}", error)
             TaskResult.Failed(error.message)
