@@ -29,6 +29,7 @@ object TaskModule {
         unindex: UnindexHandler
     ): Map<TaskKind, @JvmSuppressWildcards FolderTaskHandler> = mapOf(
         TaskKind.DELETE_FILES to deleteFiles,
+        TaskKind.SCAN_IMMEDIATE to scanFolder,
         TaskKind.SCAN_REFRESH to scanFolder,
         TaskKind.UNINDEX to unindex
     )

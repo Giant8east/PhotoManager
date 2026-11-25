@@ -126,4 +126,49 @@ class FolderTaskSchedulerTest {
         assertTrue(unindex.await() is TaskResult.Done)
         assertEquals(0, scanRuns.get())
     }
+
+    @Test
+    fun scanImmediateJumpsAheadOfQueuedScanRefresh() = runBlocking {
+        // 用 4 个占满 DATA_WORKERS 的扫描任务挡住队列，验证后入队的 SCAN_IMMEDIATE 优先于先入队的 SCAN_REFRESH 执行
+        val blockerGate = CompletableDeferred<Unit>()
+        val blockersStarted = AtomicInteger(0)
+        val allBlockersRunning = CompletableDeferred<Unit>()
+        val executionOrder = mutableListOf<String>()
+        val orderLock = Any()
+
+        val scheduler = FolderTaskScheduler(
+            mapOf(
+                TaskKind.SCAN_REFRESH to handler { task, _ ->
+                    if (task.path.startsWith("/block/")) {
+                        if (blockersStarted.incrementAndGet() == 4) {
+                            allBlockersRunning.complete(Unit)
+                        }
+                        blockerGate.await()
+                    } else {
+                        synchronized(orderLock) { executionOrder += task.path }
+                    }
+                    TaskResult.Done()
+                },
+                TaskKind.SCAN_IMMEDIATE to handler { task, _ ->
+                    synchronized(orderLock) { executionOrder += task.path }
+                    TaskResult.Done()
+                }
+            )
+        )
+
+        val blockers = (1..4).map { i ->
+            scheduler.enqueue(FolderTask("/block/$i", TaskKind.SCAN_REFRESH))
+        }
+        allBlockersRunning.await()
+
+        val queuedBackground = scheduler.enqueue(FolderTask("/bg/1", TaskKind.SCAN_REFRESH))
+        val queuedImmediate = scheduler.enqueue(FolderTask("/immediate/1", TaskKind.SCAN_IMMEDIATE))
+
+        blockerGate.complete(Unit)
+        blockers.forEach { it.await() }
+        queuedBackground.await()
+        queuedImmediate.await()
+
+        assertEquals("/immediate/1", executionOrder.first())
+    }
 }

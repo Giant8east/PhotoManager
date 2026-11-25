@@ -20,13 +20,13 @@ class DeleteFilesHandler @Inject constructor(
             context.reportFileProgress(deletedFiles, failedFiles)
         }
 
-        // 文件删完就移交扫描：记录该不该消失由扫描判断（扫描是唯一写数据库的任务）。
-        // 必须先移交占用再等待，否则扫描会因为"路径被当前任务占着"永远轮不到。
-        val scan = context.handOff(FolderTask(task.path, TaskKind.SCAN_REFRESH))
+        // 文件删完就移交高优扫描：记录该不该消失由扫描判断（扫描是唯一写数据库的任务）。
+        // 必须先移交占用再等待，且用 SCAN_IMMEDIATE 插队到全盘同步前面，避免删除弹窗被堵几分钟。
+        val scan = context.handOff(FolderTask(task.path, TaskKind.SCAN_IMMEDIATE))
         val scanResult = scan.await()
 
         if (local.hasBlockingFileFailure) {
-            return TaskResult.Failed(null, local.deletedFiles, local.failedFiles)
+            return TaskResult.Failed(local.firstFailureMessage, local.deletedFiles, local.failedFiles)
         }
 
         // 扫描里 Skipped 表示"本层已无图片、数据库记录已删"，这才是删除成功的唯一判据；

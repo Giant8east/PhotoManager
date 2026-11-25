@@ -314,10 +314,10 @@ class RemoteDownloadManager @Inject constructor(
         }
     }
 
-    /** 经由调度器把落地目录扫描入库（与同步、删除互斥），再补写来源设备与远端相册 ID 标记。 */
+    /** 经由调度器高优扫描把落地目录入库（与同步、删除互斥且不被全盘扫描堵在队尾），再补写来源标记。 */
     private suspend fun indexDownloadedAlbum(localDir: File, request: QueuedRequest) {
         val normalizedPath = LocalPaths.normalize(localDir.path)
-        val result = scheduler.enqueue(FolderTask(normalizedPath, TaskKind.SCAN_REFRESH)).await()
+        val result = scheduler.enqueue(FolderTask(normalizedPath, TaskKind.SCAN_IMMEDIATE)).await()
         if (result !is TaskResult.Done) return
         albumDao.updateAlbumSourceByPath(
             albumPath = normalizedPath,

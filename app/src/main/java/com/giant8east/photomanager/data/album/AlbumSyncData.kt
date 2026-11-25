@@ -49,9 +49,9 @@ class AlbumSyncData @Inject constructor(
         unindexVanished(normalizedRoot, directories)
     }
 
-    /** 单相册刷新入口：把调度器结果翻译成调用方可区分的四态结果。 */
+    /** 单相册刷新入口：走高优即时扫描，把调度器结果翻译成调用方可区分的四态结果。 */
     suspend fun refreshAlbum(path: String): RefreshAlbumResult {
-        val task = FolderTask(LocalPaths.normalize(path), TaskKind.SCAN_REFRESH)
+        val task = FolderTask(LocalPaths.normalize(path), TaskKind.SCAN_IMMEDIATE)
         return when (val result = scheduler.enqueue(task).await()) {
             is TaskResult.Done -> RefreshAlbumResult.Updated
             TaskResult.Skipped -> RefreshAlbumResult.Removed

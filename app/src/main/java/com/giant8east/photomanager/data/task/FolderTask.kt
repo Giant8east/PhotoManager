@@ -32,7 +32,10 @@ enum class TaskKind(val lane: TaskLane, val priority: Int, val claimScope: Claim
     /** 只删除这个文件夹本层的图片与点文件，不进入子目录，也不写数据库。 */
     DELETE_FILES(TaskLane.FILES, 20, ClaimScope.SELF),
 
-    /** 扫描单个文件夹并把结果写进数据库；删除完成后链式触发。 */
+    /** 删除后核验、手动刷新与下载完即时入库；优先级高于全盘同步，避免排在几百个目录队尾。 */
+    SCAN_IMMEDIATE(TaskLane.DATA, 18, ClaimScope.SELF),
+
+    /** 后台全盘同步的单目录扫描任务。 */
     SCAN_REFRESH(TaskLane.DATA, 15, ClaimScope.SELF)
 }
 

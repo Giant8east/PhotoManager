@@ -1,8 +1,12 @@
 /** 单层文件删除器：只删这个文件夹本层的图片与点文件，不进入子目录。 */
 package com.giant8east.photomanager.data.delete
 
+import android.util.Log
 import com.giant8east.photomanager.data.media.PhotoFormat
 import java.io.File
+import java.io.IOException
+import java.nio.file.Files
+import java.nio.file.NoSuchFileException
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.currentCoroutineContext
@@ -15,7 +19,8 @@ import kotlinx.coroutines.ensureActive
  */
 data class LocalDeleteResult(
     val deletedFiles: Long,
-    val failedFiles: Int
+    val failedFiles: Int,
+    val firstFailureMessage: String? = null
 ) {
     /** 有图片删不掉时，记录必须保留。 */
     val hasBlockingFileFailure: Boolean get() = failedFiles > 0
@@ -45,10 +50,15 @@ class FolderFileDeleter @Inject constructor() {
             return LocalDeleteResult(0, 0)
         }
         // 读不到目录内容属于权限问题：按一个失败上报，不能当成"删干净了"
-        val entries = root.listFiles() ?: return LocalDeleteResult(0, 1)
+        val entries = root.listFiles() ?: run {
+            val message = "无法读取目录内容：${root.name}"
+            Log.e(TAG, "listFiles returned null for ${root.path}")
+            return LocalDeleteResult(0, 1, message)
+        }
 
         var deletedFiles = 0L
         var failedFiles = 0
+        var firstFailureMessage: String? = null
 
         for (entry in entries) {
             context.ensureActive()
@@ -56,10 +66,18 @@ class FolderFileDeleter @Inject constructor() {
             if (entry.isDirectory) continue
             if (!isDeletableFileName(entry.name)) continue
 
-            if (entry.delete()) {
+            // 使用 Files.delete 拿到精确 IOException 原因，避免 File.delete 只给布尔值吞掉错误码
+            try {
+                Files.delete(entry.toPath())
                 deletedFiles++
-            } else {
+            } catch (_: NoSuchFileException) {
+                // 文件已被外部移走，视作删除成功
+                deletedFiles++
+            } catch (error: IOException) {
                 failedFiles++
+                val reason = "${entry.name}: ${error.javaClass.simpleName}(${error.message ?: "unknown"})"
+                if (firstFailureMessage == null) firstFailureMessage = reason
+                Log.e(TAG, "Failed to delete file ${entry.path}", error)
             }
             // 每删一个都回报：调用方是 StateFlow，重复写入会被合并，界面最多每帧刷新一次
             onProgress(deletedFiles, failedFiles)
@@ -67,13 +85,21 @@ class FolderFileDeleter @Inject constructor() {
 
         // 本层删空且没有子目录，才把这个空壳目录也删掉
         if (failedFiles == 0 && root.listFiles()?.isEmpty() == true) {
-            root.delete()
+            try {
+                Files.deleteIfExists(root.toPath())
+            } catch (error: IOException) {
+                Log.w(TAG, "Failed to delete empty directory ${root.path}", error)
+            }
         }
 
-        return LocalDeleteResult(deletedFiles, failedFiles)
+        return LocalDeleteResult(deletedFiles, failedFiles, firstFailureMessage)
     }
 
     /** 图片按扩展名判断（与相册扫描的判据一致），另外所有点文件也算可删（含 .nomedia / .thumb）。 */
     private fun isDeletableFileName(name: String): Boolean =
         name.startsWith(".") || PhotoFormat.fromFileName(name) != PhotoFormat.OTHER
+
+    private companion object {
+        const val TAG = "FolderFileDeleter"
+    }
 }
