@@ -47,6 +47,7 @@ fun RemoteAlbumDetailPage(
     val downloadStatus = downloadTasks[RemoteAlbumKey.of(device, album.id)]?.status
     val isDownloaded = viewModel.downloadedAlbum != null
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showPausedActions by remember { mutableStateOf(false) }
 
     val downloadButtonLabel = when (downloadStatus) {
         is RemoteDownloadStatus.Queued -> stringResource(R.string.lan_download_queued)
@@ -108,11 +109,12 @@ fun RemoteAlbumDetailPage(
                 onPrimaryAction = {
                     val isActive = downloadStatus is RemoteDownloadStatus.Queued ||
                         downloadStatus is RemoteDownloadStatus.Downloading
-                    val isPaused = downloadStatus is RemoteDownloadStatus.Paused
-                    if (!isActive && !isPaused && isDownloaded) {
-                        showDeleteConfirm = true
-                    } else {
-                        viewModel.toggleDownload()
+                    val isPausedOrFailed = downloadStatus is RemoteDownloadStatus.Paused ||
+                        downloadStatus is RemoteDownloadStatus.Failed
+                    when {
+                        isPausedOrFailed -> showPausedActions = true
+                        !isActive && isDownloaded -> showDeleteConfirm = true
+                        else -> viewModel.toggleDownload()
                     }
                 },
                 onOpenViewer = { index ->
@@ -147,6 +149,34 @@ fun RemoteAlbumDetailPage(
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirm = false }) {
                     Text(stringResource(R.string.viewer_cancel))
+                }
+            }
+        )
+    }
+
+    if (showPausedActions) {
+        AlertDialog(
+            onDismissRequest = { showPausedActions = false },
+            title = { Text(stringResource(R.string.lan_download_paused_dialog_title)) },
+            text = { Text(stringResource(R.string.lan_download_paused_dialog_message, album.name)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showPausedActions = false
+                        viewModel.toggleDownload()
+                    }
+                ) {
+                    Text(stringResource(R.string.lan_download_resume))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showPausedActions = false
+                        viewModel.cancelAndCleanUp()
+                    }
+                ) {
+                    Text(stringResource(R.string.lan_download_cancel_and_clean))
                 }
             }
         )

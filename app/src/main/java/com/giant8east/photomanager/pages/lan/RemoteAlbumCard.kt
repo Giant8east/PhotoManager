@@ -232,12 +232,6 @@ private fun RemoteDownloadStatusBadge(
             color = MaterialTheme.colorScheme.error,
             maxLines = 1
         )
-        is RemoteDownloadStatus.Finished -> Text(
-            text = stringResource(R.string.lan_download_completed_badge),
-            fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.primary,
-            maxLines = 1
-        )
         else -> if (isDownloaded) {
             Text(
                 text = stringResource(R.string.lan_download_completed_badge),

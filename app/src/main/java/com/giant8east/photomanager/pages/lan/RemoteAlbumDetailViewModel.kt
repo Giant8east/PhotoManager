@@ -103,12 +103,27 @@ class RemoteAlbumDetailViewModel @Inject constructor(
         val local = downloadedAlbum ?: return
         val target = device
         val currentAlbum = album
-        if (target != null && currentAlbum != null) {
-            downloadManager.cancelOne(RemoteAlbumKey.of(target, currentAlbum.id))
-        }
-        deleteManager.prepare(listOf(local))
         viewModelScope.launch {
+            if (target != null && currentAlbum != null) {
+                downloadManager.cancelAndDiscard(RemoteAlbumKey.of(target, currentAlbum.id), local.albumPath)
+            }
+            deleteManager.prepare(listOf(local))
             deleteManager.delete(listOf(local))
+        }
+    }
+
+    /** 取消暂停/失败/进行中的下载并清退已落盘文件与本地相册记录。 */
+    fun cancelAndCleanUp() {
+        val target = device ?: return
+        val currentAlbum = album ?: return
+        val key = RemoteAlbumKey.of(target, currentAlbum.id)
+        val local = downloadedAlbum
+        viewModelScope.launch {
+            downloadManager.cancelAndDiscard(key, local?.albumPath)
+            if (local != null) {
+                deleteManager.prepare(listOf(local))
+                deleteManager.delete(listOf(local))
+            }
         }
     }
 

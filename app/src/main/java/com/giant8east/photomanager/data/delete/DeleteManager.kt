@@ -3,6 +3,8 @@ package com.giant8east.photomanager.data.delete
 
 import android.util.Log
 import com.giant8east.photomanager.data.database.AlbumEntity
+import com.giant8east.photomanager.data.lan.RemoteAlbumKey
+import com.giant8east.photomanager.data.lan.RemoteDownloadManager
 import com.giant8east.photomanager.data.task.FolderTask
 import com.giant8east.photomanager.data.task.FolderTaskScheduler
 import com.giant8east.photomanager.data.task.TaskKind
@@ -74,7 +76,8 @@ sealed interface DeleteResult {
  */
 @Singleton
 class DeleteManager @Inject constructor(
-    private val scheduler: FolderTaskScheduler
+    private val scheduler: FolderTaskScheduler,
+    private val remoteDownloadManager: RemoteDownloadManager
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val operationMutex = Mutex()
@@ -144,6 +147,13 @@ class DeleteManager @Inject constructor(
                 // 取消检查：被取消时直接抛 CancellationException，跳进下面的 catch
                 currentCoroutineContext().ensureActive()
                 val path = LocalPaths.normalize(album.albumPath)
+                // 删除前先取消并等待同一相册在途的局域网下载，防止下载协程边删边写或事后回写 Paused
+                val remoteKey = if (album.remoteDeviceId != null && album.remoteAlbumId != null) {
+                    RemoteAlbumKey(album.remoteDeviceId, album.remoteAlbumId)
+                } else {
+                    null
+                }
+                remoteDownloadManager.cancelAndDiscard(remoteKey, path)
                 _state.update {
                     it.copy(
                         currentAlbumName = album.name,

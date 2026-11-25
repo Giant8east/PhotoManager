@@ -30,7 +30,6 @@ class LanDownloadService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var lastNotifyAt = 0L
-    private var hasSeenActive = false
 
     override fun onCreate() {
         super.onCreate()
@@ -39,9 +38,8 @@ class LanDownloadService : Service() {
         scope.launch {
             downloadManager.summary.collect { summary ->
                 if (summary.isActive) {
-                    hasSeenActive = true
                     updateForeground(summary, force = false)
-                } else if (hasSeenActive) {
+                } else if (!downloadManager.hasActiveWork()) {
                     postCompletionSummary(summary)
                     stopSelf()
                 }

@@ -61,7 +61,6 @@ sealed interface RemoteDownloadStatus {
     /** 中途暂停/停止：已落盘的图片保留并入库，再次点击播放从断点续传。 */
     data class Paused(val finished: Int, val total: Int) : RemoteDownloadStatus
     data class Failed(val reason: String) : RemoteDownloadStatus
-    data object Finished : RemoteDownloadStatus
 }
 
 data class RemoteDownloadTask(
@@ -104,7 +103,9 @@ class RemoteDownloadManager @Inject constructor(
 
     private var workerJob: Job? = null
     private var activeKey: RemoteAlbumKey? = null
+    private var activeLocalPath: String? = null
     private var activeItemJob: Job? = null
+    private val discardOnCancel = mutableSetOf<RemoteAlbumKey>()
     private var sessionCompleted = 0
     private var sessionFailed = 0
 
@@ -141,6 +142,11 @@ class RemoteDownloadManager @Inject constructor(
         }
     }
 
+    /** 当前是否仍有正在执行或排队的下载任务；供前台服务判断是否可立即停止。 */
+    fun hasActiveWork(): Boolean = synchronized(queueLock) {
+        workerJob?.isActive == true || pendingQueue.isNotEmpty()
+    }
+
     /** 取消单个相册任务（排队中直接移出；下载中取消当前协程，已下好的图片保留并切为已暂停）。 */
     fun cancelOne(key: RemoteAlbumKey) {
         synchronized(queueLock) {
@@ -153,6 +159,33 @@ class RemoteDownloadManager @Inject constructor(
         }
     }
 
+    /**
+     * 取消并彻底丢弃指定相册的下载任务（不写回 Paused 也不再入库），等待在途下载协程退出。
+     *
+     * 供本地删除与「取消并清除已下文件」调用：确保写文件的协程已彻底停下，避免边删边写。
+     */
+    suspend fun cancelAndDiscard(key: RemoteAlbumKey?, localPath: String? = null) {
+        val normalizedPath = localPath?.let(LocalPaths::normalize)
+        val runningJob = synchronized(queueLock) {
+            if (key != null) {
+                pendingQueue.removeAll { it.key == key }
+                mutableTasks.update { map -> map - key }
+            }
+            val matchesActive = (key != null && activeKey == key) ||
+                (normalizedPath != null && activeLocalPath == normalizedPath)
+            if (matchesActive) {
+                activeKey?.let { active ->
+                    discardOnCancel.add(active)
+                    mutableTasks.update { map -> map - active }
+                }
+                activeItemJob?.also { it.cancel() }
+            } else {
+                null
+            }
+        }
+        runningJob?.join()
+    }
+
     /** 全部停止：取消当前下载、清空队列并复位通知栏状态（正在下载的那本保留已下好图片并切为已暂停）。 */
     fun stopAll() {
         synchronized(queueLock) {
@@ -161,14 +194,17 @@ class RemoteDownloadManager @Inject constructor(
             workerJob?.cancel()
             workerJob = null
             activeItemJob = null
+            activeLocalPath = null
             mutableTasks.update { map ->
                 map.filterValues { task -> task.status !is RemoteDownloadStatus.Queued }
             }
             mutableSummary.value = DownloadServiceSummary(isActive = false)
         }
+        context.stopService(Intent(context, LanDownloadService::class.java))
     }
 
     private suspend fun runQueueLoop() {
+        val currentLoopJob = currentCoroutineContext()[Job]
         while (true) {
             val next = synchronized(queueLock) {
                 if (pendingQueue.isEmpty()) {
@@ -187,11 +223,15 @@ class RemoteDownloadManager @Inject constructor(
             synchronized(queueLock) {
                 activeItemJob = null
                 activeKey = null
+                activeLocalPath = null
             }
         }
 
         val (completed, failed) = synchronized(queueLock) {
-            workerJob = null
+            if (workerJob == currentLoopJob) {
+                workerJob = null
+            }
+            activeLocalPath = null
             sessionCompleted to sessionFailed
         }
         mutableSummary.value = DownloadServiceSummary(
@@ -212,6 +252,7 @@ class RemoteDownloadManager @Inject constructor(
             val remotePhotos = lanClient.photos(request.device, request.album.id)
             val localDir = resolveTargetDirectory(request.device, request.album)
             localDirRef = localDir
+            synchronized(queueLock) { activeLocalPath = LocalPaths.normalize(localDir.path) }
             if (!localDir.exists() && !localDir.mkdirs()) {
                 error("Cannot create directory: ${localDir.path}")
             }
@@ -268,14 +309,16 @@ class RemoteDownloadManager @Inject constructor(
             registerSyncRoot()
 
             synchronized(queueLock) { sessionCompleted++ }
-            mutableTasks.update { map ->
-                map + (key to RemoteDownloadTask(key, request.album.name, RemoteDownloadStatus.Finished))
-            }
+            // 入库完成后移除内存任务，由 Room 作为「已下载」的唯一事实来源，本地删除后远端立刻同步消失
+            mutableTasks.update { map -> map - key }
         } catch (cancelled: CancellationException) {
-            // 只删未写完的 .part 临时文件；已经完整落盘的图片原样保留并立即入库，状态切为 Paused 方便续传
+            // 只删未写完的 .part 临时文件；若是本地删除/清退触发的取消则直接丢弃，不再入库或置为 Paused
             currentPartFile?.delete()
+            val shouldDiscard = synchronized(queueLock) { discardOnCancel.remove(key) }
             val dir = localDirRef
-            if (finished > 0 && dir != null) {
+            if (shouldDiscard) {
+                mutableTasks.update { map -> map - key }
+            } else if (finished > 0 && dir != null) {
                 withContext(NonCancellable) {
                     runCatching { indexDownloadedAlbum(dir, request) }
                         .onFailure { Log.w(TAG, "Failed to index partial album ${dir.path}", it) }
