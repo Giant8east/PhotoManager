@@ -180,6 +180,9 @@
     <string name="lan_download_paused_dialog_message">是否继续下载“%1$s”，或取消下载并清除已下载文件？</string>
     <string name="lan_download_resume">继续下载</string>
     <string name="lan_download_cancel_and_clean">取消并清除</string>
+    <string name="lan_download_remove_title">移除下载项</string>
+    <string name="lan_download_remove_message">从下载列表移除“%1$s”？</string>
+    <string name="lan_download_remove_delete_files">删除图片文件</string>
     <string name="remote_download_path">下载路径</string>
     <string name="remote_download_path_unset">未配置</string>
     <string name="lan_devices_section">同一局域网内的设备</string>

@@ -56,6 +56,14 @@ internal fun AlbumDeleteDialog(
             title = stringResource(R.string.album_delete_title),
             buttons = { close ->
                 TextButton(
+                    onClick = close,
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                ) {
+                    Text(stringResource(R.string.album_cancel))
+                }
+                TextButton(
                     onClick = {
                         started = true
                         viewModel.delete(selection.selectedIds)
@@ -64,9 +72,6 @@ internal fun AlbumDeleteDialog(
                         contentColor = appColors.actionText
                     )
                 ) { Text(stringResource(R.string.album_action_delete)) }
-                TextButton(onClick = close) {
-                    Text(stringResource(R.string.album_cancel))
-                }
             }
         ) {
             Text(
@@ -87,19 +92,27 @@ internal fun AlbumDeleteDialog(
             dismissible = !deleteState.isRunning,
             buttons = if (!deleteState.isRunning && deleteState.result != null) {
                 { _ ->
-                    if (deleteState.result is DeleteResult.Partial ||
-                        deleteState.result is DeleteResult.Failure
-                    ) {
-                        TextButton(onClick = { viewModel.delete(selection.selectedIds) }) {
-                            Text(stringResource(R.string.page_retry))
-                        }
-                    }
                     TextButton(
                         onClick = {
                             selection.clear()
                             dialogs.pop()
-                        }
+                        },
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     ) { Text(stringResource(R.string.album_cancel)) }
+                    if (deleteState.result is DeleteResult.Partial ||
+                        deleteState.result is DeleteResult.Failure
+                    ) {
+                        TextButton(
+                            onClick = { viewModel.delete(selection.selectedIds) },
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = appColors.actionText
+                            )
+                        ) {
+                            Text(stringResource(R.string.page_retry))
+                        }
+                    }
                 }
             } else {
                 null
@@ -235,6 +248,16 @@ internal fun AlbumSaveOrderDialog(
         buttons = { close ->
             TextButton(
                 onClick = {
+                    dragState.discard()
+                    selection.clear()
+                    close()
+                },
+                colors = ButtonDefaults.textButtonColors(
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            ) { Text(stringResource(R.string.album_save_order_discard)) }
+            TextButton(
+                onClick = {
                     // 只提交顺序，不在这里丢弃快照：数据库回流且顺序一致后会自动清空。
                     dragState.pendingOrder()?.let(viewModel::reorderAlbums)
                     selection.clear()
@@ -242,13 +265,6 @@ internal fun AlbumSaveOrderDialog(
                 },
                 colors = ButtonDefaults.textButtonColors(contentColor = appColors.actionText)
             ) { Text(stringResource(R.string.album_save_order_confirm)) }
-            TextButton(
-                onClick = {
-                    dragState.discard()
-                    selection.clear()
-                    close()
-                }
-            ) { Text(stringResource(R.string.album_save_order_discard)) }
         }
     ) {
         Text(

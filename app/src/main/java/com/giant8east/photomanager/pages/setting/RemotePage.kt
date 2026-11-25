@@ -32,6 +32,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -43,6 +44,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import com.giant8east.photomanager.ui.theme.appColors
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -341,16 +343,27 @@ private fun PairingRequestDialog(viewModel: RemotePageViewModel) {
         title = { Text(stringResource(R.string.lan_pair_request_title)) },
         text = { Text(stringResource(R.string.lan_pair_request_message, request.name)) },
         dismissButton = {
-            TextButton(onClick = { viewModel.rejectPairing(request) }) {
+            TextButton(
+                onClick = { viewModel.rejectPairing(request) },
+                colors = ButtonDefaults.textButtonColors(
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            ) {
                 Text(stringResource(R.string.lan_pair_reject))
             }
         },
         confirmButton = {
             Row {
-                TextButton(onClick = { viewModel.approvePairing(request, remember = true) }) {
+                TextButton(
+                    onClick = { viewModel.approvePairing(request, remember = true) },
+                    colors = ButtonDefaults.textButtonColors(contentColor = appColors.actionText)
+                ) {
                     Text(stringResource(R.string.lan_pair_allow_remember))
                 }
-                TextButton(onClick = { viewModel.approvePairing(request, remember = false) }) {
+                TextButton(
+                    onClick = { viewModel.approvePairing(request, remember = false) },
+                    colors = ButtonDefaults.textButtonColors(contentColor = appColors.actionText)
+                ) {
                     Text(stringResource(R.string.lan_pair_allow))
                 }
             }

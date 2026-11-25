@@ -21,6 +21,7 @@ import com.giant8east.photomanager.data.settings.PhotoViewerSettings
 import com.giant8east.photomanager.data.settings.ReadingDirection
 import com.giant8east.photomanager.data.settings.ScreenOrientation
 import com.giant8east.photomanager.data.settings.ViewerSettingOption
+import com.giant8east.photomanager.ui.theme.appColors
 import kotlin.math.roundToInt
 
 /** Slider 的 thumb 与 track 槽统一高度，两个槽的内容都在槽内垂直居中，避免圆点相对轨道偏移。 */
@@ -151,8 +152,20 @@ fun PhotoViewerMenu(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { onConfirm(editingSettings) }) { Text(stringResource(R.string.viewer_confirm)) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.viewer_cancel)) } }
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(editingSettings) },
+                colors = ButtonDefaults.textButtonColors(contentColor = appColors.actionText)
+            ) { Text(stringResource(R.string.viewer_confirm)) }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                colors = ButtonDefaults.textButtonColors(
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            ) { Text(stringResource(R.string.viewer_cancel)) }
+        }
     )
 }
 

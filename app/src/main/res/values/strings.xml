@@ -180,6 +180,9 @@
     <string name="lan_download_paused_dialog_message">Resume downloading “%1$s”, or cancel and delete partial files?</string>
     <string name="lan_download_resume">Resume</string>
     <string name="lan_download_cancel_and_clean">Cancel &amp; clean up</string>
+    <string name="lan_download_remove_title">Remove Download Item</string>
+    <string name="lan_download_remove_message">Remove “%1$s” from download list?</string>
+    <string name="lan_download_remove_delete_files">Delete image files</string>
     <string name="album_action_move_group">Move to group</string>
     <string name="album_group_default_short">Default</string>
     <string name="album_action_delete">Confirm</string>
